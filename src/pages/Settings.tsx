@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,6 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { useGemini } from "@/hooks/useGemini";
-import GoogleApiSettings from "@/components/GoogleApiSettings";
 
 const LOCAL_STORAGE_API_KEY = "gemini-api-key";
 const LOCAL_STORAGE_MODEL = "gemini-selected-model";
@@ -29,12 +29,14 @@ const Settings = () => {
   const { availableModels, selectedModel, setSelectedModel, error } = useGemini();
   const [currentModel, setCurrentModel] = useState("");
 
+  // Load API key and model from localStorage on component mount
   useEffect(() => {
     const storedApiKey = localStorage.getItem(LOCAL_STORAGE_API_KEY);
     if (storedApiKey) {
       setApiKey(storedApiKey);
     }
     
+    // Initialize current model with the selected one from hook or localStorage
     if (selectedModel) {
       setCurrentModel(selectedModel);
     } else {
@@ -55,6 +57,7 @@ const Settings = () => {
       return;
     }
 
+    // Save API key to localStorage
     localStorage.setItem(LOCAL_STORAGE_API_KEY, apiKey);
     
     toast({
@@ -62,6 +65,7 @@ const Settings = () => {
       description: "API key saved successfully",
     });
     
+    // Close the sheet if open
     if (isSheetOpen) {
       setIsSheetOpen(false);
     }
@@ -88,13 +92,16 @@ const Settings = () => {
   const handleRefreshModels = async () => {
     setIsLoading(true);
     
+    // Force a refresh of available models by clearing the saved model
     localStorage.removeItem(LOCAL_STORAGE_MODEL);
     
+    // Wait a moment before redirecting to refresh the page
     setTimeout(() => {
       window.location.reload();
     }, 500);
   };
 
+  // Extract just the model name for display
   const getDisplayModelName = (fullModelName: string) => {
     return fullModelName.split("/").pop() || fullModelName;
   };
@@ -160,6 +167,7 @@ const Settings = () => {
             </Button>
           </div>
           
+          {/* Model Selection Dropdown */}
           <div className="space-y-4 p-4 rounded-lg border border-white/10 bg-white/5">
             <div className="space-y-2">
               <div className="flex justify-between items-center">
@@ -209,15 +217,6 @@ const Settings = () => {
             </div>
           </div>
           
-          <div className="space-y-1 mt-8">
-            <h2 className="text-xl font-medium">Google Integration</h2>
-            <p className="text-sm text-gray-400">
-              Connect to Google services for email, calendar and other features
-            </p>
-          </div>
-          
-          <GoogleApiSettings />
-          
           <div className="space-y-2">
             <h3 className="text-md font-medium">How to get a Gemini API Key</h3>
             <ol className="list-decimal pl-5 space-y-2 text-sm">
@@ -229,6 +228,7 @@ const Settings = () => {
             </ol>
           </div>
           
+          {/* Conversation Memory Info */}
           <div className="space-y-2 p-4 rounded-lg border border-white/10 bg-white/5">
             <h3 className="text-md font-medium">Conversation Memory</h3>
             <p className="text-sm text-gray-400">
@@ -241,17 +241,11 @@ const Settings = () => {
             </p>
           </div>
           
+          {/* Changelog Section */}
           <div className="space-y-2 p-4 rounded-lg border border-white/10 bg-white/5">
             <h3 className="text-md font-medium">Changelog</h3>
             <div className="text-xs text-gray-300">
-              <p className="font-semibold">Version 1.4.0 (2025-04-13)</p>
-              <ul className="list-disc pl-5 space-y-1 mt-1">
-                <li>Added Google API integration for email, calendar, and other Google services</li>
-                <li>Added account and calendar selection for Google services</li>
-                <li>Improved mobile navigation experience</li>
-              </ul>
-              
-              <p className="font-semibold mt-2">Version 1.3.0 (2025-04-13)</p>
+              <p className="font-semibold">Version 1.3.0 (2025-04-13)</p>
               <ul className="list-disc pl-5 space-y-1 mt-1">
                 <li>Added conversation history to maintain context between messages</li>
                 <li>Added ability to clear conversation history</li>
@@ -276,6 +270,7 @@ const Settings = () => {
         </div>
       </div>
 
+      {/* API Key Sheet */}
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
         <SheetContent>
           <SheetHeader>
