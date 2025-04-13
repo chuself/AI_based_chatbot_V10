@@ -14,16 +14,16 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 263 81% 75%;
+    --primary: 340 100% 70%;
     --primary-foreground: 210 40% 98%;
 
-    --secondary: 260 29% 54%;
+    --secondary: 262 83% 65%;
     --secondary-foreground: 210 40% 98%;
 
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 251 100% 97%;
+    --accent: 31 100% 71%;
     --accent-foreground: 222.2 47.4% 11.2%;
 
     --destructive: 0 84.2% 60.2%;
@@ -31,7 +31,7 @@
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 263 81% 75%;
+    --ring: 340 100% 70%;
 
     --radius: 0.5rem;
   }
@@ -41,17 +41,30 @@
   }
 
   body {
-    @apply bg-gemini-background text-gemini-dark;
+    @apply bg-gradient-to-b from-pink-50 to-purple-50 text-gemini-dark;
     -webkit-tap-highlight-color: transparent;
   }
 }
 
 @layer components {
   .message-bubble-user {
-    @apply bg-gemini-light text-gemini-dark px-4 py-2 rounded-t-2xl rounded-bl-2xl rounded-br-sm max-w-[85%] break-words;
+    @apply bg-gradient-to-r from-pink-100 to-pink-200 text-gemini-dark px-4 py-2 rounded-t-2xl rounded-bl-2xl rounded-br-sm max-w-[85%] break-words shadow-sm;
   }
   
   .message-bubble-ai {
-    @apply bg-white text-gemini-dark px-4 py-2 rounded-t-2xl rounded-br-2xl rounded-bl-sm max-w-[85%] shadow-sm break-words;
+    @apply bg-gradient-to-r from-purple-100 to-indigo-100 text-gemini-dark px-4 py-2 rounded-t-2xl rounded-br-2xl rounded-bl-sm max-w-[85%] shadow-sm break-words;
+  }
+
+  .animation-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
   }
 }

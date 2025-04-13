@@ -63,15 +63,19 @@ export default {
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
 				},
-				// Custom colors for our chat app
+				// Updated custom colors with a more colorful yet tasteful palette
 				gemini: {
-					primary: '#9b87f5',
-					secondary: '#7E69AB',
-					tertiary: '#6E59A5',
-					dark: '#1A1F2C',
-					light: '#E5DEFF',
-					background: '#F1F0FB',
+					primary: '#FF6B95',     // Pink
+					secondary: '#9562F9',   // Purple
+					tertiary: '#6E59A5',    // Dark Purple
+					dark: '#1A1F2C',        // Dark Shade
+					light: '#F5EEFF',       // Light Purple
+					background: '#FFF5F8',  // Very Light Pink
 				}
+			},
+			backgroundImage: {
+				'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+				'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
 			},
 			borderRadius: {
 				lg: 'var(--radius)',
