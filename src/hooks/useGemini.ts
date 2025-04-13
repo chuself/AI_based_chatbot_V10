@@ -1,14 +1,17 @@
-
 import { useState, useEffect } from "react";
 
 // The API key can come from localStorage or fallback to the hardcoded one
 const LOCAL_STORAGE_API_KEY = "gemini-api-key";
+const LOCAL_STORAGE_MODEL = "gemini-selected-model";
 
 export const useGemini = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("");
+  
+  // This will be used for chat memory in a future update
+  const [chatHistory, setChatHistory] = useState<Array<{role: string, content: string}>>([]);
 
   // Get API key from localStorage or use the fallback
   const getApiKey = (): string => {
@@ -18,10 +21,18 @@ export const useGemini = () => {
   };
 
   useEffect(() => {
-    // Fetch available models on component load
-    fetchAvailableModels();
+    // Load preferred model from localStorage if available
+    const storedModel = localStorage.getItem(LOCAL_STORAGE_MODEL);
+    if (storedModel) {
+      console.log("Using stored model preference:", storedModel);
+      setSelectedModel(storedModel);
+    } else {
+      // Otherwise fetch available models
+      fetchAvailableModels();
+    }
   }, []);
 
+  // If we don't have a stored model preference, fetch available models
   const fetchAvailableModels = async () => {
     try {
       const response = await fetch(
@@ -56,9 +67,11 @@ export const useGemini = () => {
         
         if (foundModel) {
           setSelectedModel(foundModel);
+          localStorage.setItem(LOCAL_STORAGE_MODEL, foundModel);
           console.log("Selected model:", foundModel);
         } else if (modelNames.length > 0) {
           setSelectedModel(modelNames[0]);
+          localStorage.setItem(LOCAL_STORAGE_MODEL, modelNames[0]);
           console.log("Using first available model:", modelNames[0]);
         }
       }
@@ -86,6 +99,12 @@ export const useGemini = () => {
 
       console.log(`Using model: ${modelId}`);
 
+      // Add user message to chat history
+      setChatHistory(prev => [...prev, { role: "user", content: message }]);
+
+      // NOTE: This is a placeholder for future chat memory feature
+      // For now we just send the current message without history context
+      
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/${modelId}:generateContent?key=${getApiKey()}`,
         {
@@ -116,6 +135,9 @@ export const useGemini = () => {
       // Extract the response text from the Gemini API response
       const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || "No response from AI";
       
+      // Add AI response to chat history
+      setChatHistory(prev => [...prev, { role: "model", content: responseText }]);
+      
       return responseText;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error occurred";
@@ -132,6 +154,7 @@ export const useGemini = () => {
     isLoading,
     error,
     availableModels,
-    selectedModel
+    selectedModel,
+    chatHistory
   };
 };

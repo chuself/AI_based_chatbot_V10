@@ -7,22 +7,44 @@ import { Label } from "@/components/ui/label";
 import { ArrowLeft, Save, Key } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
+import { useGemini } from "@/hooks/useGemini";
 
 const LOCAL_STORAGE_API_KEY = "gemini-api-key";
+const LOCAL_STORAGE_MODEL = "gemini-selected-model";
 
 const Settings = () => {
   const [apiKey, setApiKey] = useState("");
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+  
+  const { availableModels, selectedModel } = useGemini();
+  const [currentModel, setCurrentModel] = useState("");
 
-  // Load API key from localStorage on component mount
+  // Load API key and model from localStorage on component mount
   useEffect(() => {
     const storedApiKey = localStorage.getItem(LOCAL_STORAGE_API_KEY);
     if (storedApiKey) {
       setApiKey(storedApiKey);
     }
-  }, []);
+    
+    // Initialize current model with the selected one from hook or localStorage
+    if (selectedModel) {
+      setCurrentModel(selectedModel);
+    } else {
+      const storedModel = localStorage.getItem(LOCAL_STORAGE_MODEL);
+      if (storedModel) {
+        setCurrentModel(storedModel);
+      }
+    }
+  }, [selectedModel]);
 
   const handleSaveApiKey = () => {
     if (!apiKey.trim()) {
@@ -43,12 +65,27 @@ const Settings = () => {
     });
   };
 
+  const handleSaveModel = (modelName: string) => {
+    setCurrentModel(modelName);
+    localStorage.setItem(LOCAL_STORAGE_MODEL, modelName);
+    
+    toast({
+      title: "Model Updated",
+      description: `Now using model: ${modelName.split("/").pop()}`,
+    });
+  };
+
   const handleGoBack = () => {
     navigate("/");
   };
 
   const handleShowApiKey = () => {
     setIsSheetOpen(true);
+  };
+
+  // Extract just the model name for display
+  const getDisplayModelName = (fullModelName: string) => {
+    return fullModelName.split("/").pop() || fullModelName;
   };
 
   return (
@@ -112,6 +149,33 @@ const Settings = () => {
             </Button>
           </div>
           
+          {/* Model Selection Dropdown */}
+          <div className="space-y-4 p-4 rounded-lg border border-white/10 bg-white/5">
+            <div className="space-y-2">
+              <Label htmlFor="modelSelect">Gemini Model</Label>
+              <Select 
+                value={currentModel} 
+                onValueChange={handleSaveModel}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select a model" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableModels.map((model) => (
+                    <SelectItem key={model} value={model}>
+                      {getDisplayModelName(model)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              <p className="text-xs text-gray-400">
+                Choose which Gemini model to use for generating responses.
+                Some models have different capabilities and performance characteristics.
+              </p>
+            </div>
+          </div>
+          
           <div className="space-y-2">
             <h3 className="text-md font-medium">How to get a Gemini API Key</h3>
             <ol className="list-decimal pl-5 space-y-2 text-sm">
@@ -121,6 +185,32 @@ const Settings = () => {
               <li>Create a new API key and copy it</li>
               <li>Paste the API key in the field above and click "Save Settings"</li>
             </ol>
+          </div>
+          
+          {/* Changelog Section */}
+          <div className="space-y-2 p-4 rounded-lg border border-white/10 bg-white/5">
+            <h3 className="text-md font-medium">Changelog</h3>
+            <div className="text-xs text-gray-300">
+              <p className="font-semibold">Version 1.2.0 (2025-04-13)</p>
+              <ul className="list-disc pl-5 space-y-1 mt-1">
+                <li>Added model selection dropdown</li>
+                <li>Added scroll navigation for message history</li>
+                <li>Improved settings page with API key management</li>
+              </ul>
+              
+              <p className="font-semibold mt-2">Version 1.1.0</p>
+              <ul className="list-disc pl-5 space-y-1 mt-1">
+                <li>Added API key management</li>
+                <li>Implemented settings page</li>
+              </ul>
+              
+              <p className="font-semibold mt-2">Version 1.0.0</p>
+              <ul className="list-disc pl-5 space-y-1 mt-1">
+                <li>Initial release with basic chat functionality</li>
+                <li>Integration with Gemini API</li>
+                <li>Message display and user input</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
