@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
@@ -5,6 +6,8 @@ import MessageInput from "@/components/MessageInput";
 import { Message } from "@/components/MessageItem";
 import { useGemini } from "@/hooks/useGemini";
 import { useToast } from "@/components/ui/use-toast";
+
+const LOCAL_STORAGE_API_KEY = "gemini-api-key";
 
 const Index = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -21,6 +24,11 @@ const Index = () => {
     };
     
     setMessages([welcomeMessage]);
+
+    // Initialize API key in localStorage if not present
+    if (!localStorage.getItem(LOCAL_STORAGE_API_KEY)) {
+      localStorage.setItem(LOCAL_STORAGE_API_KEY, "AIzaSyDApo1EqSX0Mq3ZePA9OM_yD0hnmoz_s-Q");
+    }
   }, []);
 
   // Show error toast when API error occurs

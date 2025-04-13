@@ -1,14 +1,21 @@
 
 import { useState, useEffect } from "react";
 
-// The API key is hardcoded as specified by the user
-const API_KEY = "AIzaSyDApo1EqSX0Mq3ZePA9OM_yD0hnmoz_s-Q";
+// The API key can come from localStorage or fallback to the hardcoded one
+const LOCAL_STORAGE_API_KEY = "gemini-api-key";
 
 export const useGemini = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("");
+
+  // Get API key from localStorage or use the fallback
+  const getApiKey = (): string => {
+    const storedApiKey = localStorage.getItem(LOCAL_STORAGE_API_KEY);
+    // Fallback to hardcoded API key if not found in localStorage
+    return storedApiKey || "AIzaSyDApo1EqSX0Mq3ZePA9OM_yD0hnmoz_s-Q";
+  };
 
   useEffect(() => {
     // Fetch available models on component load
@@ -18,7 +25,7 @@ export const useGemini = () => {
   const fetchAvailableModels = async () => {
     try {
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}`
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${getApiKey()}`
       );
       const data = await response.json();
       
@@ -80,7 +87,7 @@ export const useGemini = () => {
       console.log(`Using model: ${modelId}`);
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/${modelId}:generateContent?key=${API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/${modelId}:generateContent?key=${getApiKey()}`,
         {
           method: "POST",
           headers: {
