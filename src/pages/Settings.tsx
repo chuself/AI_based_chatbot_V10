@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Save, Key } from "lucide-react";
+import { ArrowLeft, Save, Key, RefreshCw } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { 
@@ -22,10 +22,11 @@ const LOCAL_STORAGE_MODEL = "gemini-selected-model";
 const Settings = () => {
   const [apiKey, setApiKey] = useState("");
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
   
-  const { availableModels, selectedModel } = useGemini();
+  const { availableModels, selectedModel, setSelectedModel, error } = useGemini();
   const [currentModel, setCurrentModel] = useState("");
 
   // Load API key and model from localStorage on component mount
@@ -63,11 +64,16 @@ const Settings = () => {
       title: "Success",
       description: "API key saved successfully",
     });
+    
+    // Close the sheet if open
+    if (isSheetOpen) {
+      setIsSheetOpen(false);
+    }
   };
 
   const handleSaveModel = (modelName: string) => {
     setCurrentModel(modelName);
-    localStorage.setItem(LOCAL_STORAGE_MODEL, modelName);
+    setSelectedModel(modelName);
     
     toast({
       title: "Model Updated",
@@ -81,6 +87,18 @@ const Settings = () => {
 
   const handleShowApiKey = () => {
     setIsSheetOpen(true);
+  };
+
+  const handleRefreshModels = async () => {
+    setIsLoading(true);
+    
+    // Force a refresh of available models by clearing the saved model
+    localStorage.removeItem(LOCAL_STORAGE_MODEL);
+    
+    // Wait a moment before redirecting to refresh the page
+    setTimeout(() => {
+      window.location.reload();
+    }, 500);
   };
 
   // Extract just the model name for display
@@ -152,26 +170,49 @@ const Settings = () => {
           {/* Model Selection Dropdown */}
           <div className="space-y-4 p-4 rounded-lg border border-white/10 bg-white/5">
             <div className="space-y-2">
-              <Label htmlFor="modelSelect">Gemini Model</Label>
-              <Select 
-                value={currentModel} 
-                onValueChange={handleSaveModel}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a model" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableModels.map((model) => (
-                    <SelectItem key={model} value={model}>
-                      {getDisplayModelName(model)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex justify-between items-center">
+                <Label htmlFor="modelSelect">Gemini Model</Label>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleRefreshModels}
+                  disabled={isLoading}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                  Refresh Models
+                </Button>
+              </div>
+              
+              {availableModels.length > 0 ? (
+                <Select 
+                  value={currentModel} 
+                  onValueChange={handleSaveModel}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableModels.map((model) => (
+                      <SelectItem key={model} value={model}>
+                        {getDisplayModelName(model)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="text-sm text-gray-400 bg-gray-100 p-3 rounded border border-gray-200">
+                  {error ? (
+                    <p>Error loading models: {error}</p>
+                  ) : (
+                    <p>No models available. Try refreshing.</p>
+                  )}
+                </div>
+              )}
               
               <p className="text-xs text-gray-400">
                 Choose which Gemini model to use for generating responses.
                 Some models have different capabilities and performance characteristics.
+                If the dropdown is empty, click "Refresh Models".
               </p>
             </div>
           </div>
@@ -187,11 +228,32 @@ const Settings = () => {
             </ol>
           </div>
           
+          {/* Conversation Memory Info */}
+          <div className="space-y-2 p-4 rounded-lg border border-white/10 bg-white/5">
+            <h3 className="text-md font-medium">Conversation Memory</h3>
+            <p className="text-sm text-gray-400">
+              The app now maintains conversation history to provide context between messages. Your 
+              chat history is stored locally in your browser and sent with each request to help the 
+              AI remember previous parts of your conversation.
+            </p>
+            <p className="text-sm text-gray-400">
+              To clear your conversation history, use the trash icon in the chat interface.
+            </p>
+          </div>
+          
           {/* Changelog Section */}
           <div className="space-y-2 p-4 rounded-lg border border-white/10 bg-white/5">
             <h3 className="text-md font-medium">Changelog</h3>
             <div className="text-xs text-gray-300">
-              <p className="font-semibold">Version 1.2.0 (2025-04-13)</p>
+              <p className="font-semibold">Version 1.3.0 (2025-04-13)</p>
+              <ul className="list-disc pl-5 space-y-1 mt-1">
+                <li>Added conversation history to maintain context between messages</li>
+                <li>Added ability to clear conversation history</li>
+                <li>Fixed model selection issues</li>
+                <li>Added model refresh button to settings</li>
+              </ul>
+              
+              <p className="font-semibold mt-2">Version 1.2.0</p>
               <ul className="list-disc pl-5 space-y-1 mt-1">
                 <li>Added model selection dropdown</li>
                 <li>Added scroll navigation for message history</li>
@@ -202,13 +264,6 @@ const Settings = () => {
               <ul className="list-disc pl-5 space-y-1 mt-1">
                 <li>Added API key management</li>
                 <li>Implemented settings page</li>
-              </ul>
-              
-              <p className="font-semibold mt-2">Version 1.0.0</p>
-              <ul className="list-disc pl-5 space-y-1 mt-1">
-                <li>Initial release with basic chat functionality</li>
-                <li>Integration with Gemini API</li>
-                <li>Message display and user input</li>
               </ul>
             </div>
           </div>

@@ -1,17 +1,27 @@
+
 import { useState, useEffect } from "react";
 
-// The API key can come from localStorage or fallback to the hardcoded one
+// Local storage keys
 const LOCAL_STORAGE_API_KEY = "gemini-api-key";
 const LOCAL_STORAGE_MODEL = "gemini-selected-model";
+const LOCAL_STORAGE_CHAT_HISTORY = "gemini-chat-history";
+
+// Maximum number of chat history messages to maintain (to avoid token limits)
+const MAX_HISTORY_LENGTH = 10;
+
+// Type definitions for better type safety
+export interface ChatMessage {
+  role: "user" | "model";
+  content: string;
+  timestamp: number;
+}
 
 export const useGemini = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("");
-  
-  // This will be used for chat memory in a future update
-  const [chatHistory, setChatHistory] = useState<Array<{role: string, content: string}>>([]);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
 
   // Get API key from localStorage or use the fallback
   const getApiKey = (): string => {
@@ -20,6 +30,26 @@ export const useGemini = () => {
     return storedApiKey || "AIzaSyDApo1EqSX0Mq3ZePA9OM_yD0hnmoz_s-Q";
   };
 
+  // Load chat history from localStorage on initialization
+  useEffect(() => {
+    const loadChatHistory = () => {
+      const storedHistory = localStorage.getItem(LOCAL_STORAGE_CHAT_HISTORY);
+      if (storedHistory) {
+        try {
+          const parsedHistory = JSON.parse(storedHistory) as ChatMessage[];
+          setChatHistory(parsedHistory);
+          console.log("Loaded chat history from localStorage:", parsedHistory.length, "messages");
+        } catch (e) {
+          console.error("Failed to parse chat history:", e);
+          localStorage.removeItem(LOCAL_STORAGE_CHAT_HISTORY);
+        }
+      }
+    };
+
+    loadChatHistory();
+  }, []);
+
+  // Load or fetch model information
   useEffect(() => {
     // Load preferred model from localStorage if available
     const storedModel = localStorage.getItem(LOCAL_STORAGE_MODEL);
@@ -32,20 +62,31 @@ export const useGemini = () => {
     }
   }, []);
 
+  // Save chat history to localStorage whenever it changes
+  useEffect(() => {
+    if (chatHistory.length > 0) {
+      localStorage.setItem(LOCAL_STORAGE_CHAT_HISTORY, JSON.stringify(chatHistory));
+    }
+  }, [chatHistory]);
+
   // If we don't have a stored model preference, fetch available models
   const fetchAvailableModels = async () => {
     try {
+      console.log("Fetching available models...");
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models?key=${getApiKey()}`
       );
-      const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error?.message || "Failed to fetch models");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || "Network response was not ok");
       }
-
+      
+      const data = await response.json();
+      
       if (data.models && Array.isArray(data.models)) {
         const modelNames = data.models.map((model: any) => model.name);
+        console.log("Available models:", modelNames);
         setAvailableModels(modelNames);
         
         // Find a suitable model (prefer gemini-1.5-flash or similar)
@@ -74,12 +115,29 @@ export const useGemini = () => {
           localStorage.setItem(LOCAL_STORAGE_MODEL, modelNames[0]);
           console.log("Using first available model:", modelNames[0]);
         }
+      } else {
+        throw new Error("Invalid response format: models array not found");
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to fetch available models";
       console.error("Error fetching models:", errorMessage);
+      
+      // If we couldn't fetch models, set a default one
+      if (!selectedModel) {
+        const defaultModel = "models/gemini-1.5-flash-latest";
+        setSelectedModel(defaultModel);
+        setAvailableModels([defaultModel]);
+        localStorage.setItem(LOCAL_STORAGE_MODEL, defaultModel);
+        console.log("Using default model:", defaultModel);
+      }
+      
       setError(errorMessage);
     }
+  };
+
+  const clearChatHistory = () => {
+    setChatHistory([]);
+    localStorage.removeItem(LOCAL_STORAGE_CHAT_HISTORY);
   };
 
   const sendMessage = async (message: string) => {
@@ -92,7 +150,7 @@ export const useGemini = () => {
     setError(null);
 
     try {
-      // Extract just the model name part if it's a full path
+      // Format model ID properly
       const modelId = selectedModel.includes("/") 
         ? selectedModel 
         : `models/${selectedModel}`;
@@ -100,11 +158,26 @@ export const useGemini = () => {
       console.log(`Using model: ${modelId}`);
 
       // Add user message to chat history
-      setChatHistory(prev => [...prev, { role: "user", content: message }]);
-
-      // NOTE: This is a placeholder for future chat memory feature
-      // For now we just send the current message without history context
+      const userMessage: ChatMessage = {
+        role: "user",
+        content: message,
+        timestamp: Date.now()
+      };
       
+      const updatedHistory = [...chatHistory, userMessage];
+      setChatHistory(updatedHistory);
+
+      // Prepare the conversation history for the API request
+      // Only include the most recent messages to avoid token limits
+      const recentHistory = updatedHistory.slice(-MAX_HISTORY_LENGTH);
+      
+      // Format conversation history for Gemini API
+      const formattedHistory = recentHistory.map(msg => ({
+        role: msg.role === "user" ? "user" : "model",
+        parts: [{ text: msg.content }]
+      }));
+
+      // Send the request with conversation history
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/${modelId}:generateContent?key=${getApiKey()}`,
         {
@@ -113,15 +186,7 @@ export const useGemini = () => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    text: message,
-                  },
-                ],
-              },
-            ],
+            contents: formattedHistory,
           }),
         }
       );
@@ -136,13 +201,56 @@ export const useGemini = () => {
       const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || "No response from AI";
       
       // Add AI response to chat history
-      setChatHistory(prev => [...prev, { role: "model", content: responseText }]);
+      const aiMessage: ChatMessage = {
+        role: "model",
+        content: responseText,
+        timestamp: Date.now()
+      };
+      
+      setChatHistory(prevHistory => [...prevHistory, aiMessage]);
       
       return responseText;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error occurred";
       setError(errorMessage);
       console.error("Error calling Gemini API:", errorMessage);
+      
+      // If the error is related to conversation format, try again with just the current message
+      if (errorMessage.includes("conversation") || errorMessage.includes("contents")) {
+        console.log("Retrying with just the current message...");
+        try {
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/${selectedModel.includes("/") ? selectedModel : `models/${selectedModel}`}:generateContent?key=${getApiKey()}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    role: "user",
+                    parts: [{ text: message }]
+                  }
+                ],
+              }),
+            }
+          );
+          
+          const data = await response.json();
+          
+          if (!response.ok) {
+            throw new Error(data.error?.message || "Failed on retry");
+          }
+          
+          const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || "No response from AI";
+          return responseText;
+        } catch (retryErr) {
+          console.error("Retry also failed:", retryErr);
+          return "Sorry, I encountered an error processing your request with conversation history.";
+        }
+      }
+      
       return "Sorry, I encountered an error processing your request.";
     } finally {
       setIsLoading(false);
@@ -155,6 +263,11 @@ export const useGemini = () => {
     error,
     availableModels,
     selectedModel,
-    chatHistory
+    setSelectedModel: (model: string) => {
+      setSelectedModel(model);
+      localStorage.setItem(LOCAL_STORAGE_MODEL, model);
+    },
+    chatHistory,
+    clearChatHistory
   };
 };
