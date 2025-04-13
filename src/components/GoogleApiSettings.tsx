@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { RefreshCw, LogOut, Check } from "lucide-react";
+import { RefreshCw, LogOut, Check, Mail } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -13,11 +13,22 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Form, FormField, FormItem, FormLabel, FormControl, FormDescription, FormMessage } from "@/components/ui/form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
 
 // Local storage keys
 const GOOGLE_AUTH_TOKEN = "google-auth-token";
 const GOOGLE_SELECTED_ACCOUNT = "google-selected-account";
 const GOOGLE_SELECTED_CALENDAR = "google-selected-calendar";
+
+// Validation schema for email input
+const emailSchema = z.object({
+  email: z.string().email({ message: "Please enter a valid email address" })
+});
 
 interface GoogleAccount {
   email: string;
@@ -38,7 +49,16 @@ const GoogleApiSettings = () => {
   const [calendars, setCalendars] = useState<GoogleCalendar[]>([]);
   const [selectedAccount, setSelectedAccount] = useState("");
   const [selectedCalendar, setSelectedCalendar] = useState("");
+  const [useCustomEmail, setUseCustomEmail] = useState(false);
   const { toast } = useToast();
+
+  // Initialize form with Zod validation
+  const form = useForm<z.infer<typeof emailSchema>>({
+    resolver: zodResolver(emailSchema),
+    defaultValues: {
+      email: ""
+    }
+  });
 
   // Check if user is authenticated on component mount
   useEffect(() => {
@@ -50,6 +70,13 @@ const GoogleApiSettings = () => {
         try {
           const account = JSON.parse(savedAccount);
           setSelectedAccount(account.email);
+          
+          // If the email doesn't match any predefined account, it's custom
+          if (account.email && !accounts.some(acc => acc.email === account.email)) {
+            setUseCustomEmail(true);
+            form.setValue("email", account.email);
+          }
+          
           fetchUserAccounts();
         } catch (e) {
           console.error("Error parsing saved Google account:", e);
@@ -97,6 +124,8 @@ const GoogleApiSettings = () => {
     setCalendars([]);
     setSelectedAccount("");
     setSelectedCalendar("");
+    setUseCustomEmail(false);
+    form.reset();
     
     toast({
       title: "Logged Out",
@@ -117,8 +146,8 @@ const GoogleApiSettings = () => {
       setAccounts(mockAccounts);
       setIsLoading(false);
       
-      // If no account is selected, select the first one
-      if (!selectedAccount && mockAccounts.length > 0) {
+      // If no account is selected, select the first one (unless using custom email)
+      if (!selectedAccount && mockAccounts.length > 0 && !useCustomEmail) {
         handleSelectAccount(mockAccounts[0].email);
       }
     }, 1000);
@@ -152,6 +181,8 @@ const GoogleApiSettings = () => {
 
   const handleSelectAccount = (email: string) => {
     setSelectedAccount(email);
+    setUseCustomEmail(false); // When selecting from dropdown, disable custom email
+    
     const account = accounts.find(acc => acc.email === email);
     
     if (account) {
@@ -165,6 +196,27 @@ const GoogleApiSettings = () => {
       // When a new account is selected, fetch its calendars
       fetchCalendars(email);
     }
+  };
+
+  const handleCustomEmailSubmit = (values: z.infer<typeof emailSchema>) => {
+    const email = values.email;
+    setSelectedAccount(email);
+    
+    // Create a custom account object
+    const customAccount = {
+      email: email,
+      name: "Custom Account"
+    };
+    
+    localStorage.setItem(GOOGLE_SELECTED_ACCOUNT, JSON.stringify(customAccount));
+    
+    toast({
+      title: "Custom Email Set",
+      description: `Now using custom email: ${email}`,
+    });
+    
+    // Fetch calendars for this email
+    fetchCalendars(email);
   };
 
   const handleSelectCalendar = (calendarId: string) => {
@@ -262,41 +314,83 @@ const GoogleApiSettings = () => {
           </div>
           
           <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <label className="text-sm font-medium">Google Account</label>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleRefreshAccounts}
-                disabled={isLoading}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                Refresh Accounts
-              </Button>
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Google Account</Label>
+              <div className="flex items-center space-x-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setUseCustomEmail(!useCustomEmail)}
+                >
+                  {useCustomEmail ? "Use Predefined" : "Use Custom Email"}
+                </Button>
+                {!useCustomEmail && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleRefreshAccounts}
+                    disabled={isLoading}
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
+                )}
+              </div>
             </div>
             
-            {accounts.length > 0 ? (
-              <Select 
-                value={selectedAccount} 
-                onValueChange={handleSelectAccount}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a Google account" />
-                </SelectTrigger>
-                <SelectContent>
-                  {accounts.map((account) => (
-                    <SelectItem key={account.email} value={account.email}>
-                      {account.email} {account.name ? `(${account.name})` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {useCustomEmail ? (
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(handleCustomEmailSubmit)} className="space-y-3">
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <div className="flex items-center space-x-2">
+                            <Input 
+                              placeholder="Enter your email address" 
+                              {...field} 
+                              className="flex-1"
+                            />
+                            <Button type="submit" size="sm">
+                              <Check className="h-4 w-4 mr-2" />
+                              Set
+                            </Button>
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </form>
+              </Form>
             ) : (
-              <Alert variant="default">
-                <AlertDescription>
-                  No Google accounts found. Refresh to try again.
-                </AlertDescription>
-              </Alert>
+              <>
+                {accounts.length > 0 ? (
+                  <Select 
+                    value={selectedAccount} 
+                    onValueChange={handleSelectAccount}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select a Google account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accounts.map((account) => (
+                        <SelectItem key={account.email} value={account.email}>
+                          {account.email} {account.name ? `(${account.name})` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Alert variant="default">
+                    <AlertDescription>
+                      No Google accounts found. Refresh to try again.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </>
             )}
           </div>
           
@@ -364,3 +458,4 @@ const GoogleApiSettings = () => {
 };
 
 export default GoogleApiSettings;
+
