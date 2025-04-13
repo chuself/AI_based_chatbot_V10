@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
@@ -17,10 +16,8 @@ const Index = () => {
   const { sendMessage, isLoading, error, selectedModel, chatHistory, clearChatHistory } = useGemini();
   const { toast } = useToast();
   
-  // Register back button handler for Android
   useEffect(() => {
     const backButtonHandler = App.addListener('backButton', (data) => {
-      // If on main screen, exit the app (Android behavior)
       if (window.location.pathname === '/') {
         App.exitApp();
       }
@@ -31,7 +28,6 @@ const Index = () => {
     };
   }, []);
   
-  // Convert chat history from the hook to the message format used by components
   useEffect(() => {
     if (chatHistory.length > 0) {
       const convertedMessages = chatHistory.map((msg: ChatMessage) => ({
@@ -43,7 +39,6 @@ const Index = () => {
       
       setMessages(convertedMessages);
     } else if (messages.length === 0) {
-      // Display welcome message only if there's no chat history
       const welcomeMessage: Message = {
         id: Date.now().toString(),
         text: "👋 Hi! I'm your Gemini AI assistant. How can I help you today?",
@@ -54,8 +49,7 @@ const Index = () => {
       setMessages([welcomeMessage]);
     }
   }, [chatHistory]);
-
-  // Show error toast when API error occurs
+  
   useEffect(() => {
     if (error) {
       toast({
@@ -65,8 +59,7 @@ const Index = () => {
       });
     }
   }, [error, toast]);
-
-  // Show toast when model is selected
+  
   useEffect(() => {
     if (selectedModel) {
       const modelName = selectedModel.split("/").pop();
@@ -76,16 +69,14 @@ const Index = () => {
       });
     }
   }, [selectedModel, toast]);
-
-  // Initialize API key in localStorage if not present
+  
   useEffect(() => {
     if (!localStorage.getItem(LOCAL_STORAGE_API_KEY)) {
       localStorage.setItem(LOCAL_STORAGE_API_KEY, "AIzaSyDApo1EqSX0Mq3ZePA9OM_yD0hnmoz_s-Q");
     }
   }, []);
-
+  
   const handleSendMessage = async (text: string) => {
-    // Add user message to the chat immediately for UI feedback
     const userMessage: Message = {
       id: Date.now().toString(),
       text,
@@ -95,10 +86,8 @@ const Index = () => {
     
     setMessages((prevMessages) => [...prevMessages, userMessage]);
 
-    // Get response from Gemini API - this will also update chatHistory in the hook
     const response = await sendMessage(text);
     
-    // Add AI response to the chat
     const aiMessage: Message = {
       id: (Date.now() + 1).toString(),
       text: response,
@@ -112,7 +101,6 @@ const Index = () => {
   const handleClearChat = () => {
     clearChatHistory();
     
-    // Add a new welcome message
     const welcomeMessage: Message = {
       id: Date.now().toString(),
       text: "Chat history cleared. How can I help you today?",
