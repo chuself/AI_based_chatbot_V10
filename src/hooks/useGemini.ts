@@ -1,10 +1,12 @@
-
 import { useState, useEffect } from "react";
 
 // Local storage keys
 const LOCAL_STORAGE_API_KEY = "gemini-api-key";
 const LOCAL_STORAGE_MODEL = "gemini-selected-model";
 const LOCAL_STORAGE_CHAT_HISTORY = "gemini-chat-history";
+const GOOGLE_AUTH_TOKEN = "google-auth-token";
+const GOOGLE_SELECTED_ACCOUNT = "google-selected-account";
+const GOOGLE_SELECTED_CALENDAR = "google-selected-calendar";
 
 // Maximum number of chat history messages to maintain (to avoid token limits)
 const MAX_HISTORY_LENGTH = 10;
@@ -16,12 +18,23 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+export interface GoogleServiceInfo {
+  isConnected: boolean;
+  selectedAccount: string | null;
+  selectedCalendar: string | null;
+}
+
 export const useGemini = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [googleServices, setGoogleServices] = useState<GoogleServiceInfo>({
+    isConnected: false,
+    selectedAccount: null,
+    selectedCalendar: null
+  });
 
   // Get API key from localStorage or use the fallback
   const getApiKey = (): string => {
@@ -47,6 +60,63 @@ export const useGemini = () => {
     };
 
     loadChatHistory();
+  }, []);
+
+  // Check for Google services connection
+  useEffect(() => {
+    const checkGoogleConnection = () => {
+      const token = localStorage.getItem(GOOGLE_AUTH_TOKEN);
+      if (token) {
+        let account = null;
+        let calendar = null;
+        
+        const savedAccount = localStorage.getItem(GOOGLE_SELECTED_ACCOUNT);
+        if (savedAccount) {
+          try {
+            account = JSON.parse(savedAccount).email;
+          } catch (e) {
+            console.error("Failed to parse Google account info:", e);
+          }
+        }
+        
+        const savedCalendar = localStorage.getItem(GOOGLE_SELECTED_CALENDAR);
+        if (savedCalendar) {
+          try {
+            calendar = JSON.parse(savedCalendar).summary;
+          } catch (e) {
+            console.error("Failed to parse Google calendar info:", e);
+          }
+        }
+        
+        setGoogleServices({
+          isConnected: true,
+          selectedAccount: account,
+          selectedCalendar: calendar
+        });
+        
+        console.log("Google services connected:", { account, calendar });
+      } else {
+        setGoogleServices({
+          isConnected: false,
+          selectedAccount: null,
+          selectedCalendar: null
+        });
+      }
+    };
+    
+    checkGoogleConnection();
+    
+    // Add event listener for storage changes
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === GOOGLE_AUTH_TOKEN || e.key === GOOGLE_SELECTED_ACCOUNT || e.key === GOOGLE_SELECTED_CALENDAR) {
+        checkGoogleConnection();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
 
   // Load or fetch model information
@@ -140,6 +210,7 @@ export const useGemini = () => {
     localStorage.removeItem(LOCAL_STORAGE_CHAT_HISTORY);
   };
 
+  // Enhanced to include Google service context in messages
   const sendMessage = async (message: string) => {
     if (!selectedModel) {
       setError("No AI model available. Please try again later.");
@@ -157,10 +228,25 @@ export const useGemini = () => {
 
       console.log(`Using model: ${modelId}`);
 
+      // Add Google services context if connected
+      let enhancedMessage = message;
+      if (googleServices.isConnected) {
+        const googleContext = `[Google services connected: ${googleServices.selectedAccount || "No account selected"}${
+          googleServices.selectedCalendar ? `, Calendar: ${googleServices.selectedCalendar}` : ""
+        }]`;
+        
+        // Only add context if message seems to be requesting Google services
+        const googleRelated = /google|gmail|email|calendar|drive|docs|sheets|events|schedule|meeting/i.test(message);
+        if (googleRelated) {
+          enhancedMessage = `${googleContext}\n${message}`;
+          console.log("Enhanced message with Google context");
+        }
+      }
+
       // Add user message to chat history
       const userMessage: ChatMessage = {
         role: "user",
-        content: message,
+        content: message, // Store original message without context
         timestamp: Date.now()
       };
       
@@ -172,10 +258,17 @@ export const useGemini = () => {
       const recentHistory = updatedHistory.slice(-MAX_HISTORY_LENGTH);
       
       // Format conversation history for Gemini API
-      const formattedHistory = recentHistory.map(msg => ({
-        role: msg.role === "user" ? "user" : "model",
-        parts: [{ text: msg.content }]
-      }));
+      const formattedHistory = recentHistory.map((msg, index) => {
+        // For the last message (current user message), use enhanced version if applicable
+        const content = index === recentHistory.length - 1 && msg.role === "user" && googleServices.isConnected
+          ? enhancedMessage
+          : msg.content;
+        
+        return {
+          role: msg.role === "user" ? "user" : "model",
+          parts: [{ text: content }]
+        };
+      });
 
       // Send the request with conversation history
       const response = await fetch(
@@ -268,6 +361,7 @@ export const useGemini = () => {
       localStorage.setItem(LOCAL_STORAGE_MODEL, model);
     },
     chatHistory,
-    clearChatHistory
+    clearChatHistory,
+    googleServices
   };
 };
