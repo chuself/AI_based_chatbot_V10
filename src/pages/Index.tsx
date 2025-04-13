@@ -9,7 +9,7 @@ import { useToast } from "@/components/ui/use-toast";
 
 const Index = () => {
   const [messages, setMessages] = useState<Message[]>([]);
-  const { sendMessage, isLoading, error } = useGemini();
+  const { sendMessage, isLoading, error, selectedModel } = useGemini();
   const { toast } = useToast();
   
   // Display a welcome message when the app first loads
@@ -34,6 +34,17 @@ const Index = () => {
       });
     }
   }, [error, toast]);
+
+  // Show toast when model is selected
+  useEffect(() => {
+    if (selectedModel) {
+      const modelName = selectedModel.split("/").pop();
+      toast({
+        title: "Model Selected",
+        description: `Using model: ${modelName}`,
+      });
+    }
+  }, [selectedModel, toast]);
 
   const handleSendMessage = async (text: string) => {
     // Add user message to the chat
@@ -62,7 +73,7 @@ const Index = () => {
 
   return (
     <div className="flex flex-col h-screen bg-gemini-background">
-      <Header />
+      <Header modelName={selectedModel} />
       <div className="flex-1 overflow-hidden pt-16 pb-16">
         <MessageList messages={messages} />
       </div>

@@ -20,20 +20,29 @@ const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
     hour12: true,
   }).format(message.timestamp);
 
+  // Split text by newlines and render each line
+  const textLines = message.text.split("\n");
+
   return (
     <div
       className={cn(
-        "mb-2 flex",
+        "mb-3 flex",
         message.isUser ? "justify-end" : "justify-start"
       )}
     >
-      <div className="flex flex-col">
+      <div className="flex flex-col max-w-[85%]">
         <div
           className={cn(
-            message.isUser ? "message-bubble-user" : "message-bubble-ai"
+            "rounded-lg px-3 py-2",
+            message.isUser ? "bg-gemini-primary text-white" : "bg-white shadow-sm"
           )}
         >
-          <p className="text-base">{message.text}</p>
+          {textLines.map((line, index) => (
+            <React.Fragment key={index}>
+              {line}
+              {index < textLines.length - 1 && <br />}
+            </React.Fragment>
+          ))}
         </div>
         <span
           className={cn(
