@@ -8,6 +8,7 @@ import { useGemini, ChatMessage } from "@/hooks/useGemini";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
+import { App } from '@capacitor/app';
 
 const LOCAL_STORAGE_API_KEY = "gemini-api-key";
 
@@ -15,6 +16,20 @@ const Index = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const { sendMessage, isLoading, error, selectedModel, chatHistory, clearChatHistory } = useGemini();
   const { toast } = useToast();
+  
+  // Register back button handler for Android
+  useEffect(() => {
+    const backButtonHandler = App.addListener('backButton', (data) => {
+      // If on main screen, exit the app (Android behavior)
+      if (window.location.pathname === '/') {
+        App.exitApp();
+      }
+    });
+
+    return () => {
+      backButtonHandler.remove();
+    };
+  }, []);
   
   // Convert chat history from the hook to the message format used by components
   useEffect(() => {
@@ -114,7 +129,7 @@ const Index = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gemini-background">
+    <div className="flex flex-col h-screen bg-gemini-background overscroll-none">
       <Header modelName={selectedModel} />
       
       <div className="fixed top-16 right-4 z-10">
@@ -133,7 +148,7 @@ const Index = () => {
         <MessageList messages={messages} />
       </div>
       
-      <div className="fixed bottom-0 left-0 right-0">
+      <div className="fixed bottom-0 left-0 right-0 w-full">
         <MessageInput onSendMessage={handleSendMessage} isLoading={isLoading} />
       </div>
     </div>
