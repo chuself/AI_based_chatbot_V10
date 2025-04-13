@@ -17,6 +17,15 @@ const config: CapacitorConfig = {
       keystoreAliasPassword: null,
       releaseType: null,
     }
+  },
+  plugins: {
+    SplashScreen: {
+      launchAutoHide: false,
+      showSpinner: true,
+      androidSpinnerStyle: 'large',
+      spinnerColor: '#9b87f5',
+      backgroundColor: '#FFFFFF',
+    },
   }
 };
 

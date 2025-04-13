@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
@@ -24,7 +25,11 @@ const Index = () => {
     });
 
     return () => {
-      backButtonHandler.remove();
+      backButtonHandler.then(listener => {
+        listener.remove();
+      }).catch(error => {
+        console.error('Error with back button handler:', error);
+      });
     };
   }, []);
   
