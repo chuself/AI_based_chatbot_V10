@@ -31,6 +31,7 @@ const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
       <div className="flex flex-col max-w-[85%]">
         <div
           className={cn(
+            "whitespace-pre-wrap",
             message.isUser 
               ? "message-bubble-user" 
               : "message-bubble-ai"
@@ -43,9 +44,7 @@ const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
               <div className="h-3 w-3 rounded-full bg-gemini-primary/60 animation-pulse delay-400"></div>
             </div>
           ) : (
-            <div className="whitespace-pre-wrap">
-              {message.text}
-            </div>
+            message.text
           )}
         </div>
         <span

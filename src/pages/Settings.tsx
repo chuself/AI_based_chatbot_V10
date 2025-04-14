@@ -1,54 +1,31 @@
-
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Save, Key, RefreshCw } from "lucide-react";
+import { ArrowLeft, Save, Key } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGemini } from "@/hooks/useGemini";
 import ModelSettings from "@/components/ModelSettings";
 import GoogleIntegration from "@/components/GoogleIntegration";
 
 const LOCAL_STORAGE_API_KEY = "gemini-api-key";
-const LOCAL_STORAGE_MODEL = "gemini-selected-model";
 
 const Settings = () => {
   const [apiKey, setApiKey] = useState("");
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
   
-  const { availableModels, selectedModel, setSelectedModel, error } = useGemini();
-  const [currentModel, setCurrentModel] = useState("");
-
-  // Load API key and model from localStorage on component mount
+  // Load API key from localStorage on component mount
   useEffect(() => {
     const storedApiKey = localStorage.getItem(LOCAL_STORAGE_API_KEY);
     if (storedApiKey) {
       setApiKey(storedApiKey);
     }
-    
-    // Initialize current model with the selected one from hook or localStorage
-    if (selectedModel) {
-      setCurrentModel(selectedModel);
-    } else {
-      const storedModel = localStorage.getItem(LOCAL_STORAGE_MODEL);
-      if (storedModel) {
-        setCurrentModel(storedModel);
-      }
-    }
-  }, [selectedModel]);
+  }, []);
 
   const handleSaveApiKey = () => {
     if (!apiKey.trim()) {
@@ -74,39 +51,12 @@ const Settings = () => {
     }
   };
 
-  const handleSaveModel = (modelName: string) => {
-    setCurrentModel(modelName);
-    setSelectedModel(modelName);
-    
-    toast({
-      title: "Model Updated",
-      description: `Now using model: ${modelName.split("/").pop()}`,
-    });
-  };
-
   const handleGoBack = () => {
     navigate("/");
   };
 
   const handleShowApiKey = () => {
     setIsSheetOpen(true);
-  };
-
-  const handleRefreshModels = async () => {
-    setIsLoading(true);
-    
-    // Force a refresh of available models by clearing the saved model
-    localStorage.removeItem(LOCAL_STORAGE_MODEL);
-    
-    // Wait a moment before redirecting to refresh the page
-    setTimeout(() => {
-      window.location.reload();
-    }, 500);
-  };
-
-  // Extract just the model name for display
-  const getDisplayModelName = (fullModelName: string) => {
-    return fullModelName.split("/").pop() || fullModelName;
   };
 
   return (
@@ -176,56 +126,6 @@ const Settings = () => {
                   <Save className="h-4 w-4 mr-2" />
                   Save Settings
                 </Button>
-              </div>
-              
-              {/* Model Selection Dropdown */}
-              <div className="space-y-4 p-4 rounded-lg border border-white/10 bg-white/5">
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <Label htmlFor="modelSelect">Gemini Model</Label>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={handleRefreshModels}
-                      disabled={isLoading}
-                    >
-                      <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                      Refresh Models
-                    </Button>
-                  </div>
-                  
-                  {availableModels.length > 0 ? (
-                    <Select 
-                      value={currentModel} 
-                      onValueChange={handleSaveModel}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select a model" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableModels.map((model) => (
-                          <SelectItem key={model} value={model}>
-                            {getDisplayModelName(model)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <div className="text-sm text-gray-400 bg-gray-100 p-3 rounded border border-gray-200">
-                      {error ? (
-                        <p>Error loading models: {error}</p>
-                      ) : (
-                        <p>No models available. Try refreshing.</p>
-                      )}
-                    </div>
-                  )}
-                  
-                  <p className="text-xs text-gray-400">
-                    Choose which Gemini model to use for generating responses.
-                    Some models have different capabilities and performance characteristics.
-                    If the dropdown is empty, click "Refresh Models".
-                  </p>
-                </div>
               </div>
               
               {/* Conversation Memory Info */}
