@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
@@ -11,7 +10,6 @@ import { Trash2 } from "lucide-react";
 import { App } from '@capacitor/app';
 import { checkGoogleConnection, getEmails, getCalendarEvents, getDriveFiles, createCalendarEvent } from "@/utils/googleService";
 
-const LOCAL_STORAGE_API_KEY = "gemini-api-key";
 const LOCAL_STORAGE_MODEL_CONFIG = "ai-model-config";
 
 const Index = () => {
@@ -74,22 +72,6 @@ const Index = () => {
     }
   }, [error, toast]);
   
-  useEffect(() => {
-    if (selectedModel) {
-      const modelName = selectedModel.split("/").pop();
-      toast({
-        title: "Model Selected",
-        description: `Using model: ${modelName}`,
-      });
-    }
-  }, [selectedModel, toast]);
-  
-  useEffect(() => {
-    if (!localStorage.getItem(LOCAL_STORAGE_API_KEY)) {
-      localStorage.setItem(LOCAL_STORAGE_API_KEY, "AIzaSyDApo1EqSX0Mq3ZePA9OM_yD0hnmoz_s-Q");
-    }
-  }, []);
-
   // Helper function to detect Google service requests
   const detectServiceRequest = (text: string) => {
     const lowerText = text.toLowerCase();

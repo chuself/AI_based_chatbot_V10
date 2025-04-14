@@ -162,8 +162,11 @@ const ModelSettings: React.FC = () => {
     
     toast({
       title: "Success",
-      description: "Model configuration saved successfully",
+      description: "Model configuration saved successfully. Changes will take effect immediately.",
     });
+    
+    // Force reload to apply changes
+    window.location.reload();
   };
 
   // Provider specific endpoint placeholders
