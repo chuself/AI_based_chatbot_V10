@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
@@ -8,13 +9,22 @@ import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
 import { App } from '@capacitor/app';
+import { checkGoogleConnection, getEmails, getCalendarEvents, getDriveFiles, createCalendarEvent } from "@/utils/googleService";
 
 const LOCAL_STORAGE_API_KEY = "gemini-api-key";
+const LOCAL_STORAGE_MODEL_CONFIG = "ai-model-config";
 
 const Index = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const { sendMessage, isLoading, error, selectedModel, chatHistory, clearChatHistory } = useGemini();
   const { toast } = useToast();
+  const [googleConnected, setGoogleConnected] = useState(false);
+  
+  // Check if Google services are connected
+  useEffect(() => {
+    const googleStatus = checkGoogleConnection();
+    setGoogleConnected(googleStatus.gmail || googleStatus.calendar || googleStatus.drive);
+  }, []);
   
   useEffect(() => {
     const backButtonHandler = App.addListener('backButton', (data) => {
@@ -79,6 +89,64 @@ const Index = () => {
       localStorage.setItem(LOCAL_STORAGE_API_KEY, "AIzaSyDApo1EqSX0Mq3ZePA9OM_yD0hnmoz_s-Q");
     }
   }, []);
+
+  // Helper function to detect Google service requests
+  const detectServiceRequest = (text: string) => {
+    const lowerText = text.toLowerCase();
+    
+    if (lowerText.includes("email") || lowerText.includes("gmail") || lowerText.includes("inbox") || 
+        lowerText.includes("message") || lowerText.includes("mail")) {
+      return "gmail";
+    }
+    
+    if (lowerText.includes("calendar") || lowerText.includes("schedule") || lowerText.includes("meeting") || 
+        lowerText.includes("event") || lowerText.includes("appointment")) {
+      return "calendar";
+    }
+    
+    if (lowerText.includes("drive") || lowerText.includes("file") || lowerText.includes("document") || 
+        lowerText.includes("upload") || lowerText.includes("folder")) {
+      return "drive";
+    }
+    
+    return null;
+  };
+  
+  // Handler for Gmail requests
+  const handleEmailRequest = async (query: string) => {
+    try {
+      const emails = await getEmails(5);
+      return `Here are your recent emails:\n\n${emails.map(email => 
+        `From: ${email.sender}\nSubject: ${email.subject}\nDate: ${new Date(email.date).toLocaleString()}\n${email.snippet}\n\n`
+      ).join('---\n\n')}`;
+    } catch (e) {
+      return `Error: ${e instanceof Error ? e.message : 'Could not access your emails'}. Please connect your Gmail account in Settings.`;
+    }
+  };
+  
+  // Handler for Calendar requests
+  const handleCalendarRequest = async (query: string) => {
+    try {
+      const events = await getCalendarEvents(7);
+      return `Here are your upcoming events:\n\n${events.map(event => 
+        `${event.title}\nWhen: ${new Date(event.start).toLocaleString()} to ${new Date(event.end).toLocaleString()}\nWhere: ${event.location}\n\n`
+      ).join('---\n\n')}`;
+    } catch (e) {
+      return `Error: ${e instanceof Error ? e.message : 'Could not access your calendar'}. Please connect your Google Calendar in Settings.`;
+    }
+  };
+  
+  // Handler for Drive requests
+  const handleDriveRequest = async (query: string) => {
+    try {
+      const files = await getDriveFiles(query);
+      return `Here are your files:\n\n${files.map(file => 
+        `${file.name}\nType: ${file.mimeType}\nLast modified: ${new Date(file.lastModified).toLocaleString()}\n\n`
+      ).join('---\n\n')}`;
+    } catch (e) {
+      return `Error: ${e instanceof Error ? e.message : 'Could not access your files'}. Please connect your Google Drive in Settings.`;
+    }
+  };
   
   const handleSendMessage = async (text: string) => {
     const userMessage: Message = {
@@ -101,7 +169,29 @@ const Index = () => {
     
     setMessages((prevMessages) => [...prevMessages, loadingMessage]);
 
-    const response = await sendMessage(text);
+    // Check if this is a request for a Google service
+    const serviceType = detectServiceRequest(text);
+    let response;
+    
+    if (googleConnected && serviceType) {
+      // Handle service-specific requests
+      switch(serviceType) {
+        case "gmail":
+          response = await handleEmailRequest(text);
+          break;
+        case "calendar":
+          response = await handleCalendarRequest(text);
+          break;
+        case "drive":
+          response = await handleDriveRequest(text);
+          break;
+        default:
+          response = await sendMessage(text);
+      }
+    } else {
+      // Use the regular AI model for responses
+      response = await sendMessage(text);
+    }
     
     setMessages((prevMessages) => 
       prevMessages
