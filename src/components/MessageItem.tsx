@@ -21,9 +21,6 @@ const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
     hour12: true,
   }).format(message.timestamp);
 
-  // Split text by newlines and render each line
-  const textLines = message.text.split("\n");
-
   return (
     <div
       className={cn(
@@ -34,7 +31,6 @@ const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
       <div className="flex flex-col max-w-[85%]">
         <div
           className={cn(
-            "message-bubble-user message-bubble-ai",
             message.isUser 
               ? "message-bubble-user" 
               : "message-bubble-ai"
