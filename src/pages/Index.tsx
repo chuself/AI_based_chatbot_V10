@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
@@ -46,7 +45,7 @@ const Index = () => {
     } else if (messages.length === 0) {
       const welcomeMessage: Message = {
         id: Date.now().toString(),
-        text: "👋 Hi! I'm your Gemini AI assistant. How can I help you today?",
+        text: "👋 Hi! I'm your Chuself AI assistant. How can I help you today?",
         isUser: false,
         timestamp: new Date(),
       };
@@ -90,17 +89,30 @@ const Index = () => {
     };
     
     setMessages((prevMessages) => [...prevMessages, userMessage]);
+    
+    const loadingMessageId = (Date.now() + 1).toString();
+    const loadingMessage: Message = {
+      id: loadingMessageId,
+      text: "",
+      isUser: false,
+      timestamp: new Date(),
+      isLoading: true,
+    };
+    
+    setMessages((prevMessages) => [...prevMessages, loadingMessage]);
 
     const response = await sendMessage(text);
     
-    const aiMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      text: response,
-      isUser: false,
-      timestamp: new Date(),
-    };
-    
-    setMessages((prevMessages) => [...prevMessages, aiMessage]);
+    setMessages((prevMessages) => 
+      prevMessages
+        .filter(msg => msg.id !== loadingMessageId)
+        .concat({
+          id: (Date.now() + 2).toString(),
+          text: response,
+          isUser: false,
+          timestamp: new Date(),
+        })
+    );
   };
 
   const handleClearChat = () => {
@@ -122,7 +134,7 @@ const Index = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gemini-background overscroll-none">
+    <div className="flex flex-col h-screen bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50 overscroll-none">
       <Header modelName={selectedModel} />
       
       <div className="fixed top-16 right-4 z-10">

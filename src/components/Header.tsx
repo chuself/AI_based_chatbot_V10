@@ -1,7 +1,7 @@
 
 import React from "react";
 import { Link } from "react-router-dom";
-import { Settings } from "lucide-react";
+import { Settings, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -19,12 +19,10 @@ const Header: React.FC<HeaderProps> = ({ modelName }) => {
     <header className="fixed top-0 left-0 right-0 z-10 bg-black/10 backdrop-blur-lg border-b border-white/10">
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center">
-          <img 
-            src="https://seeklogo.com/images/G/google-gemini-logo-F4B15CF417-seeklogo.com.png" 
-            alt="Gemini Logo" 
-            className="h-5 w-5 mr-2"
-          />
-          <h1 className="text-lg font-semibold">Gemini Chat</h1>
+          <div className="bg-gradient-to-r from-gemini-primary to-gemini-secondary p-1.5 rounded-full mr-2">
+            <MessageSquare className="h-5 w-5 text-white" />
+          </div>
+          <h1 className="text-lg font-semibold">Chuself's AI Assistant</h1>
         </div>
         
         <div className="flex items-center">

@@ -7,6 +7,7 @@ export interface Message {
   text: string;
   isUser: boolean;
   timestamp: Date;
+  isLoading?: boolean;
 }
 
 interface MessageItemProps {
@@ -34,15 +35,25 @@ const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
         <div
           className={cn(
             "rounded-lg px-3 py-2",
-            message.isUser ? "bg-gemini-primary text-white" : "bg-white shadow-sm"
+            message.isUser 
+              ? "message-bubble-user" 
+              : "message-bubble-ai"
           )}
         >
-          {textLines.map((line, index) => (
-            <React.Fragment key={index}>
-              {line}
-              {index < textLines.length - 1 && <br />}
-            </React.Fragment>
-          ))}
+          {message.isLoading ? (
+            <div className="flex space-x-2 py-2">
+              <div className="h-3 w-3 rounded-full bg-gemini-tertiary/60 animation-pulse"></div>
+              <div className="h-3 w-3 rounded-full bg-gemini-secondary/60 animation-pulse delay-200"></div>
+              <div className="h-3 w-3 rounded-full bg-gemini-primary/60 animation-pulse delay-400"></div>
+            </div>
+          ) : (
+            textLines.map((line, index) => (
+              <React.Fragment key={index}>
+                {line}
+                {index < textLines.length - 1 && <br />}
+              </React.Fragment>
+            ))
+          )}
         </div>
         <span
           className={cn(
