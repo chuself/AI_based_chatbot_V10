@@ -31,10 +31,10 @@ const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
       <div className="flex flex-col max-w-[85%]">
         <div
           className={cn(
-            "whitespace-pre-wrap rounded-2xl",
+            "whitespace-pre-wrap rounded-2xl px-4 py-2",
             message.isUser 
-              ? "bg-gradient-to-r from-pink-100 to-pink-200 text-gemini-dark px-4 py-2 rounded-t-2xl rounded-bl-2xl rounded-br-sm max-w-[85%] break-words shadow-sm" 
-              : "bg-gradient-to-r from-purple-100 to-indigo-100 text-gemini-dark px-4 py-2 rounded-t-2xl rounded-br-2xl rounded-bl-sm max-w-[85%] shadow-sm break-words"
+              ? "bg-pink-100 text-gemini-dark rounded-t-2xl rounded-bl-2xl rounded-br-sm shadow-sm break-words" 
+              : "bg-gradient-to-r from-purple-100 to-indigo-100 text-gemini-dark rounded-t-2xl rounded-br-2xl rounded-bl-sm shadow-sm break-words"
           )}
         >
           {message.isLoading ? (
