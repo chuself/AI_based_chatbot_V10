@@ -22,11 +22,14 @@ interface SpeechRecognitionErrorEvent {
 }
 
 interface SpeechRecognitionEvent {
-  results: {
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  [index: number]: {
     [index: number]: {
-      [index: number]: {
-        transcript: string;
-      };
+      transcript: string;
     };
   };
 }
@@ -52,10 +55,11 @@ const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, isLoading })
       recognitionInstance.lang = 'en-US';
       
       recognitionInstance.onresult = (event) => {
-        const transcript = Array.from(event.results)
-          .map(result => result[0])
-          .map(result => result.transcript)
-          .join('');
+        let transcript = '';
+        // Correctly iterate through the results
+        for (let i = 0; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
         
         setMessage(transcript);
       };

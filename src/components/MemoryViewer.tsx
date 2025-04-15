@@ -6,7 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Memory, Clock, Tag, Trash } from "lucide-react";
+import { Brain, Clock, Tag, Trash } from "lucide-react";
 
 const MemoryViewer: React.FC = () => {
   const [memories, setMemories] = useState<MemoryEntry[]>([]);
@@ -107,7 +107,7 @@ const MemoryViewer: React.FC = () => {
         <TabsContent value="timeline" className="flex-1">
           {memories.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-400">
-              <Memory size={48} className="mb-4" />
+              <Brain size={48} className="mb-4" />
               <p>No memories stored yet</p>
             </div>
           ) : groupedMemories.length === 0 ? (
