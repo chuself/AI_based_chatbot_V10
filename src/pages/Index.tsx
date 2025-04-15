@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
@@ -6,9 +7,13 @@ import { Message } from "@/components/MessageItem";
 import { useGemini, ChatMessage } from "@/hooks/useGemini";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
-import { Trash2 } from "lucide-react";
+import { Trash2, Brain, Search } from "lucide-react";
 import { App } from '@capacitor/app';
 import { checkGoogleConnection, getEmails, getCalendarEvents, getDriveFiles } from "@/utils/googleService";
+import { MemoryService } from "@/services/memoryService";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import MemorySearch from "@/components/MemorySearch";
+import { useNavigate } from "react-router-dom";
 
 const LOCAL_STORAGE_MODEL_CONFIG = "ai-model-config";
 const STORAGE_KEY_COMMANDS = "custom-ai-commands";
@@ -26,6 +31,8 @@ const Index = () => {
   const { toast } = useToast();
   const [googleConnected, setGoogleConnected] = useState(false);
   const [customCommands, setCustomCommands] = useState<Command[]>([]);
+  const [isMemorySearchOpen, setIsMemorySearchOpen] = useState(false);
+  const navigate = useNavigate();
   
   useEffect(() => {
     const savedCommands = localStorage.getItem(STORAGE_KEY_COMMANDS);
@@ -142,6 +149,43 @@ const Index = () => {
     
     return activeCommands.map(cmd => cmd.instruction).join('\n\n');
   };
+
+  const detectMemoryQuery = (text: string): boolean => {
+    const memoryKeywords = [
+      "remember", "remind me", "what did we talk about", 
+      "what did I tell you", "previous conversation", 
+      "last time", "you told me", "recall", "memory"
+    ];
+    
+    const lowerText = text.toLowerCase();
+    
+    // Check if this looks like a memory query
+    return memoryKeywords.some(keyword => lowerText.includes(keyword));
+  };
+  
+  const handleMemoryQuery = async (query: string): Promise<string> => {
+    // Parse and search for memories
+    const searchParams = MemoryService.parseNaturalLanguageQuery(query);
+    const results = MemoryService.searchMemories(searchParams);
+    
+    if (results.length === 0) {
+      return "I don't have any memories matching that query. Could you try a different question or be more specific?";
+    }
+    
+    // Format the top result for display
+    const topMemory = results[0].entry;
+    const formattedDate = new Date(topMemory.timestamp).toLocaleString();
+    
+    let response = `I found this in my memory from ${formattedDate}:\n\n`;
+    response += `You said: "${topMemory.userInput}"\n\n`;
+    response += `I responded: "${topMemory.assistantReply}"`;
+    
+    if (results.length > 1) {
+      response += `\n\nI found ${results.length} memories related to your query. You can view all memories in the Memories section.`;
+    }
+    
+    return response;
+  };
   
   const detectServiceRequest = (text: string) => {
     const lowerText = text.toLowerCase();
@@ -220,25 +264,37 @@ const Index = () => {
 
     const commandInstructions = getActiveCommands();
     
-    const serviceType = detectServiceRequest(text);
+    // Check if this is a memory query
+    const isMemoryQuery = detectMemoryQuery(text);
     let response;
     
-    if (googleConnected && serviceType) {
-      switch(serviceType) {
-        case "gmail":
-          response = await handleEmailRequest(text);
-          break;
-        case "calendar":
-          response = await handleCalendarRequest(text);
-          break;
-        case "drive":
-          response = await handleDriveRequest(text);
-          break;
-        default:
-          response = await sendMessage(text, commandInstructions);
-      }
+    if (isMemoryQuery) {
+      response = await handleMemoryQuery(text);
     } else {
-      response = await sendMessage(text, commandInstructions);
+      const serviceType = detectServiceRequest(text);
+      
+      if (googleConnected && serviceType) {
+        switch(serviceType) {
+          case "gmail":
+            response = await handleEmailRequest(text);
+            break;
+          case "calendar":
+            response = await handleCalendarRequest(text);
+            break;
+          case "drive":
+            response = await handleDriveRequest(text);
+            break;
+          default:
+            response = await sendMessage(text, commandInstructions);
+        }
+      } else {
+        response = await sendMessage(text, commandInstructions);
+      }
+    }
+    
+    // Save the conversation to memory if it's not a memory query itself
+    if (!isMemoryQuery) {
+      MemoryService.saveMemory(text, response);
     }
     
     setMessages((prevMessages) => 
@@ -271,11 +327,45 @@ const Index = () => {
     });
   };
 
+  const handleMemorySelect = (query: string) => {
+    handleSendMessage(query);
+    setIsMemorySearchOpen(false);
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50 overscroll-none">
       <Header modelName={selectedModel} />
       
-      <div className="fixed top-16 right-4 z-10">
+      <div className="fixed top-16 right-4 z-10 flex gap-2">
+        <Sheet open={isMemorySearchOpen} onOpenChange={setIsMemorySearchOpen}>
+          <SheetTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="bg-white/80 hover:bg-white border border-gray-200"
+              title="Search memories"
+            >
+              <Search className="h-4 w-4 text-gray-500" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent className="w-[400px] sm:w-[540px] p-4">
+            <h2 className="text-xl font-semibold mb-4">Search Memories</h2>
+            <MemorySearch onSelectMemory={(memory) => {
+              handleMemorySelect(`What did we talk about regarding "${memory.userInput.substring(0, 30)}..."`);
+            }} />
+          </SheetContent>
+        </Sheet>
+        
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => navigate('/memories')}
+          className="bg-white/80 hover:bg-white border border-gray-200"
+          title="View memories"
+        >
+          <Brain className="h-4 w-4 text-gray-500" />
+        </Button>
+      
         <Button
           variant="ghost"
           size="icon"
