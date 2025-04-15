@@ -1,19 +1,23 @@
-
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Command } from "lucide-react";
+import { ArrowLeft, Command, Brain, Search, Trash2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGemini } from "@/hooks/useGemini";
 import ModelSettings from "@/components/ModelSettings";
 import GoogleIntegration from "@/components/GoogleIntegration";
+import MemoryViewer from "@/components/MemoryViewer";
+import MemorySearch from "@/components/MemorySearch";
 
 const Settings = () => {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isMemoryViewerOpen, setIsMemoryViewerOpen] = useState(false);
+  const [isMemorySearchOpen, setIsMemorySearchOpen] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { clearChatHistory } = useGemini();
 
   const handleGoBack = () => {
     navigate("/");
@@ -21,6 +25,19 @@ const Settings = () => {
 
   const navigateToCommands = () => {
     navigate("/commands");
+  };
+
+  const navigateToMemories = () => {
+    navigate("/memories");
+  };
+
+  const handleClearChat = () => {
+    clearChatHistory();
+    
+    toast({
+      title: "Chat Cleared",
+      description: "Your conversation history has been cleared.",
+    });
   };
 
   return (
@@ -56,6 +73,43 @@ const Settings = () => {
                 <p className="text-sm text-gray-400">
                   General application settings
                 </p>
+              </div>
+              
+              {/* Memory Management Section */}
+              <div className="space-y-2 p-4 rounded-lg border border-white/10 bg-white/5">
+                <h3 className="text-md font-medium">Memory Management</h3>
+                <p className="text-sm text-gray-400 mb-4">
+                  Manage your conversation history and stored memories
+                </p>
+                
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <Button 
+                    variant="outline" 
+                    className="flex justify-start"
+                    onClick={() => navigate('/memories')}
+                  >
+                    <Brain className="h-4 w-4 mr-2" />
+                    View Memories
+                  </Button>
+                  
+                  <Button 
+                    variant="outline" 
+                    className="flex justify-start"
+                    onClick={() => setIsMemorySearchOpen(true)}
+                  >
+                    <Search className="h-4 w-4 mr-2" />
+                    Search Memories
+                  </Button>
+                  
+                  <Button 
+                    variant="destructive" 
+                    className="flex justify-start md:col-span-2"
+                    onClick={handleClearChat}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Clear Chat History
+                  </Button>
+                </div>
               </div>
               
               {/* Custom Commands Button */}
@@ -189,6 +243,18 @@ const Settings = () => {
           </div>
         </div>
       </div>
+
+      {/* Memory Search Sheet */}
+      <Sheet open={isMemorySearchOpen} onOpenChange={setIsMemorySearchOpen}>
+        <SheetContent className="w-[400px] sm:w-[540px] p-4">
+          <SheetHeader>
+            <SheetTitle>Search Memories</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">
+            <MemorySearch />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };
