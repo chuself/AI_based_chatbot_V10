@@ -163,7 +163,7 @@ export const useGemini = () => {
       
       // Add AI response to chat history
       const aiMessage: ChatMessage = {
-        role: "model",
+        role: "assistant",
         content: responseText,
         timestamp: Date.now()
       };
