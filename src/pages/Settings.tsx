@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Command } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,6 +17,10 @@ const Settings = () => {
 
   const handleGoBack = () => {
     navigate("/");
+  };
+
+  const navigateToCommands = () => {
+    navigate("/commands");
   };
 
   return (
@@ -52,6 +56,22 @@ const Settings = () => {
                 <p className="text-sm text-gray-400">
                   General application settings
                 </p>
+              </div>
+              
+              {/* Custom Commands Button */}
+              <div className="space-y-2 p-4 rounded-lg border border-white/10 bg-white/5">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="text-md font-medium">Custom Commands</h3>
+                    <p className="text-sm text-gray-400">
+                      Create instructions for the AI to follow
+                    </p>
+                  </div>
+                  <Button onClick={navigateToCommands} variant="outline" size="sm">
+                    <Command className="h-4 w-4 mr-2" />
+                    Manage
+                  </Button>
+                </div>
               </div>
               
               {/* Conversation Memory Info */}

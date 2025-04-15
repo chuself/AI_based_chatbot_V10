@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 
 // Local storage keys
@@ -11,7 +10,7 @@ const MAX_HISTORY_LENGTH = 10;
 
 // Type definitions for better type safety
 export interface ChatMessage {
-  role: "user" | "model";
+  role: "user" | "assistant" | "system";
   content: string;
   timestamp: number;
 }
@@ -107,7 +106,10 @@ export const useGemini = () => {
     localStorage.removeItem(LOCAL_STORAGE_CHAT_HISTORY);
   };
 
-  const sendMessage = async (message: string) => {
+  /**
+   * Send a message to the selected AI model
+   */
+  const sendMessage = async (message: string, customInstructions?: string): Promise<string> => {
     if (!modelConfig) {
       setError("No model configuration available. Please set up your model in settings.");
       return "Sorry, no AI model is currently available. Please configure your model in settings.";
@@ -124,7 +126,18 @@ export const useGemini = () => {
         timestamp: Date.now()
       };
       
-      const updatedHistory = [...chatHistory, userMessage];
+      const messageHistory = [...chatHistory];
+      
+      // Add custom instructions as a system message if provided
+      if (customInstructions && customInstructions.trim()) {
+        messageHistory.unshift({
+          role: "system",
+          content: customInstructions,
+          timestamp: Date.now() - 10000, // Add slightly before user message
+        });
+      }
+      
+      const updatedHistory = [...messageHistory, userMessage];
       setChatHistory(updatedHistory);
 
       // Prepare the conversation history for the API request

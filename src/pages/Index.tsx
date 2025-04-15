@@ -11,14 +11,33 @@ import { App } from '@capacitor/app';
 import { checkGoogleConnection, getEmails, getCalendarEvents, getDriveFiles, createCalendarEvent } from "@/utils/googleService";
 
 const LOCAL_STORAGE_MODEL_CONFIG = "ai-model-config";
+const STORAGE_KEY_COMMANDS = "custom-ai-commands";
+
+interface Command {
+  id: string;
+  name: string;
+  instruction: string;
+  condition?: string;
+}
 
 const Index = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const { sendMessage, isLoading, error, selectedModel, chatHistory, clearChatHistory } = useGemini();
   const { toast } = useToast();
   const [googleConnected, setGoogleConnected] = useState(false);
+  const [customCommands, setCustomCommands] = useState<Command[]>([]);
   
-  // Check if Google services are connected
+  useEffect(() => {
+    const savedCommands = localStorage.getItem(STORAGE_KEY_COMMANDS);
+    if (savedCommands) {
+      try {
+        setCustomCommands(JSON.parse(savedCommands));
+      } catch (e) {
+        console.error("Failed to parse saved commands:", e);
+      }
+    }
+  }, []);
+  
   useEffect(() => {
     const googleStatus = checkGoogleConnection();
     setGoogleConnected(googleStatus.gmail || googleStatus.calendar || googleStatus.drive);
@@ -72,7 +91,58 @@ const Index = () => {
     }
   }, [error, toast]);
   
-  // Helper function to detect Google service requests
+  const getActiveCommands = (): string => {
+    const now = new Date();
+    const currentHour = now.getHours();
+    
+    const activeCommands = customCommands.filter(cmd => {
+      if (!cmd.condition) return true;
+      
+      const condition = cmd.condition.toLowerCase();
+      
+      if (condition.includes('before') && condition.includes('am')) {
+        const timeMatch = condition.match(/before\s+(\d+)(?:am|a\.m\.)/i);
+        if (timeMatch && currentHour < parseInt(timeMatch[1])) {
+          return true;
+        }
+      }
+      
+      if (condition.includes('after') && condition.includes('pm')) {
+        const timeMatch = condition.match(/after\s+(\d+)(?:pm|p\.m\.)/i);
+        if (timeMatch && currentHour > (parseInt(timeMatch[1]) + 12)) {
+          return true;
+        }
+      }
+      
+      if (condition.includes('morning') && currentHour >= 5 && currentHour < 12) {
+        return true;
+      }
+      
+      if (condition.includes('afternoon') && currentHour >= 12 && currentHour < 17) {
+        return true;
+      }
+      
+      if (condition.includes('evening') && currentHour >= 17 && currentHour < 21) {
+        return true;
+      }
+      
+      if (condition.includes('night') && (currentHour >= 21 || currentHour < 5)) {
+        return true;
+      }
+      
+      const hourMatch = condition.match(/at\s+(\d+)(?:am|a\.m\.|pm|p\.m\.)/i);
+      if (hourMatch) {
+        let hour = parseInt(hourMatch[1]);
+        if (condition.includes('pm') && hour < 12) hour += 12;
+        if (currentHour === hour) return true;
+      }
+      
+      return false;
+    });
+    
+    return activeCommands.map(cmd => cmd.instruction).join('\n\n');
+  };
+  
   const detectServiceRequest = (text: string) => {
     const lowerText = text.toLowerCase();
     
@@ -94,7 +164,6 @@ const Index = () => {
     return null;
   };
   
-  // Handler for Gmail requests
   const handleEmailRequest = async (query: string) => {
     try {
       const emails = await getEmails(5);
@@ -106,7 +175,6 @@ const Index = () => {
     }
   };
   
-  // Handler for Calendar requests
   const handleCalendarRequest = async (query: string) => {
     try {
       const events = await getCalendarEvents(7);
@@ -118,7 +186,6 @@ const Index = () => {
     }
   };
   
-  // Handler for Drive requests
   const handleDriveRequest = async (query: string) => {
     try {
       const files = await getDriveFiles(query);
@@ -151,12 +218,12 @@ const Index = () => {
     
     setMessages((prevMessages) => [...prevMessages, loadingMessage]);
 
-    // Check if this is a request for a Google service
+    const commandInstructions = getActiveCommands();
+    
     const serviceType = detectServiceRequest(text);
     let response;
     
     if (googleConnected && serviceType) {
-      // Handle service-specific requests
       switch(serviceType) {
         case "gmail":
           response = await handleEmailRequest(text);
@@ -168,11 +235,10 @@ const Index = () => {
           response = await handleDriveRequest(text);
           break;
         default:
-          response = await sendMessage(text);
+          response = await sendMessage(text, commandInstructions);
       }
     } else {
-      // Use the regular AI model for responses
-      response = await sendMessage(text);
+      response = await sendMessage(text, commandInstructions);
     }
     
     setMessages((prevMessages) => 
@@ -227,6 +293,17 @@ const Index = () => {
       
       <div className="fixed bottom-0 left-0 right-0 w-full">
         <MessageInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+      </div>
+      
+      <div className="fixed bottom-20 left-4 z-10 opacity-60 hover:opacity-100 transition-opacity">
+        <a 
+          href="https://lovable.ai" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="text-xs text-gray-500 flex items-center"
+        >
+          Made with Lovable
+        </a>
       </div>
     </div>
   );
