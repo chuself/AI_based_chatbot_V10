@@ -1,8 +1,17 @@
+
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Mic, MicOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
+// Using the global type definition from src/types/speechRecognition.d.ts
+declare global {
+  interface Window {
+    SpeechRecognition: typeof SpeechRecognition;
+    webkitSpeechRecognition: typeof SpeechRecognition;
+  }
+}
 
 interface MessageInputProps {
   onSendMessage: (message: string) => void;

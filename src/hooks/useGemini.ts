@@ -119,6 +119,34 @@ export const useGemini = () => {
     setError(null);
 
     try {
+      // Create message history with system message first if provided
+      const messageHistory = [...chatHistory];
+      
+      // Always add custom instructions at the beginning of the conversation
+      // This ensures the model receives the instructions first
+      if (customInstructions && customInstructions.trim()) {
+        // Only add system message if it doesn't exist or is different
+        const existingSystemMessage = messageHistory.find(msg => 
+          msg.role === "system" && msg.content === customInstructions
+        );
+        
+        if (!existingSystemMessage) {
+          // Remove any previous system messages to avoid conflicting instructions
+          const filteredHistory = messageHistory.filter(msg => msg.role !== "system");
+          
+          // Add the new system message at the beginning
+          filteredHistory.unshift({
+            role: "system",
+            content: customInstructions,
+            timestamp: Date.now() - 10000, // Add slightly before user message
+          });
+          
+          // Update the history
+          messageHistory.length = 0;
+          messageHistory.push(...filteredHistory);
+        }
+      }
+      
       // Add user message to chat history
       const userMessage: ChatMessage = {
         role: "user",
@@ -126,23 +154,34 @@ export const useGemini = () => {
         timestamp: Date.now()
       };
       
-      const messageHistory = [...chatHistory];
-      
-      // Add custom instructions as a system message if provided
-      if (customInstructions && customInstructions.trim()) {
-        messageHistory.unshift({
-          role: "system",
-          content: customInstructions,
-          timestamp: Date.now() - 10000, // Add slightly before user message
-        });
-      }
-      
       const updatedHistory = [...messageHistory, userMessage];
       setChatHistory(updatedHistory);
 
       // Prepare the conversation history for the API request
-      // Only include the most recent messages to avoid token limits
-      const recentHistory = updatedHistory.slice(-MAX_HISTORY_LENGTH);
+      // Use a smart token management approach to maintain context
+      // Keep the most recent messages, plus important earlier context
+      let recentHistory: ChatMessage[] = [];
+      
+      if (updatedHistory.length > MAX_HISTORY_LENGTH) {
+        // Always include system message(s) if present
+        const systemMessages = updatedHistory.filter(msg => msg.role === "system");
+        
+        // Include the most recent MAX_HISTORY_LENGTH/2 messages to capture immediate context
+        const recentMessages = updatedHistory.slice(-Math.floor(MAX_HISTORY_LENGTH/2));
+        
+        // Include some earlier messages with a larger gap between them to maintain long-term context
+        // Skip messages to reduce token count while keeping the conversation flow
+        const earlierMessages = updatedHistory
+          .filter(msg => msg.role !== "system") // Exclude system messages (already included)
+          .slice(0, -Math.floor(MAX_HISTORY_LENGTH/2)) // Exclude recent messages (already included)
+          .filter((_, index) => index % 3 === 0) // Take every third message
+          .slice(-Math.floor(MAX_HISTORY_LENGTH/2)); // Limit to half the max length
+        
+        // Combine all parts of the history
+        recentHistory = [...systemMessages, ...earlierMessages, ...recentMessages];
+      } else {
+        recentHistory = updatedHistory;
+      }
       
       let responseText = "";
       
@@ -192,7 +231,7 @@ export const useGemini = () => {
     
     // Format conversation history for Gemini API
     const formattedHistory = history.map(msg => ({
-      role: msg.role === "user" ? "user" : "model",
+      role: msg.role === "user" ? "user" : msg.role === "system" ? "user" : "model",
       parts: [{ text: msg.content }]
     }));
 
@@ -229,7 +268,7 @@ export const useGemini = () => {
     
     // Format conversation history for OpenRouter API (OpenAI compatible)
     const formattedHistory = history.map(msg => ({
-      role: msg.role === "user" ? "user" : "assistant",
+      role: msg.role,
       content: msg.content
     }));
 
@@ -264,7 +303,7 @@ export const useGemini = () => {
     
     // Format conversation history for Groq API (OpenAI compatible)
     const formattedHistory = history.map(msg => ({
-      role: msg.role === "user" ? "user" : "assistant",
+      role: msg.role,
       content: msg.content
     }));
 

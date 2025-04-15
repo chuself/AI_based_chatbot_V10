@@ -8,7 +8,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
 import { App } from '@capacitor/app';
-import { checkGoogleConnection, getEmails, getCalendarEvents, getDriveFiles, createCalendarEvent } from "@/utils/googleService";
+import { checkGoogleConnection, getEmails, getCalendarEvents, getDriveFiles } from "@/utils/googleService";
 
 const LOCAL_STORAGE_MODEL_CONFIG = "ai-model-config";
 const STORAGE_KEY_COMMANDS = "custom-ai-commands";
