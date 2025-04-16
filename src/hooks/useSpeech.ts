@@ -9,6 +9,9 @@ export const useSpeech = () => {
     return saved ? saved === 'true' : false;
   });
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [rate, setRate] = useState(speechService.getCurrentSettings().rate || 1);
+  const [pitch, setPitch] = useState(speechService.getCurrentSettings().pitch || 1);
+  const [volume, setVolume] = useState(speechService.getCurrentSettings().volume || 1);
   
   useEffect(() => {
     // Initial load of voices
@@ -33,6 +36,19 @@ export const useSpeech = () => {
     localStorage.setItem('speech-autoplay', autoPlay.toString());
   }, [autoPlay]);
   
+  // Update the speech service when rate, pitch, or volume changes
+  useEffect(() => {
+    speechService.setSpeechRate(rate);
+  }, [rate]);
+  
+  useEffect(() => {
+    speechService.setSpeechPitch(pitch);
+  }, [pitch]);
+  
+  useEffect(() => {
+    speechService.setSpeechVolume(volume);
+  }, [volume]);
+  
   const speak = async (text: string) => {
     setIsSpeaking(true);
     try {
@@ -55,6 +71,18 @@ export const useSpeech = () => {
     speechService.setPreferredVoice(voice);
   };
   
+  const updateRate = (newRate: number) => {
+    setRate(newRate);
+  };
+  
+  const updatePitch = (newPitch: number) => {
+    setPitch(newPitch);
+  };
+  
+  const updateVolume = (newVolume: number) => {
+    setVolume(newVolume);
+  };
+  
   return {
     speak,
     stop,
@@ -62,6 +90,12 @@ export const useSpeech = () => {
     autoPlay,
     toggleAutoPlay,
     availableVoices,
-    selectVoice
+    selectVoice,
+    rate,
+    pitch,
+    volume,
+    updateRate,
+    updatePitch,
+    updateVolume
   };
 };
