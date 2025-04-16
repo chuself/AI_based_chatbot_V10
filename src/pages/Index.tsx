@@ -1,18 +1,22 @@
+
 import React, { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
 import MessageInput from "@/components/MessageInput";
+import Changelog from "@/components/Changelog";
 import { Message } from "@/components/MessageItem";
 import { useGemini, ChatMessage } from "@/hooks/useGemini";
+import { useSpeech } from "@/hooks/useSpeech";
 import { useToast } from "@/components/ui/use-toast";
-import { Button } from "@/components/ui/button";
 import { App } from '@capacitor/app';
 import { checkGoogleConnection, getEmails, getCalendarEvents, getDriveFiles } from "@/utils/googleService";
 import { MemoryService } from "@/services/memoryService";
-import { useNavigate } from "react-router-dom";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Volume2 } from "lucide-react";
 
-const LOCAL_STORAGE_MODEL_CONFIG = "ai-model-config";
 const STORAGE_KEY_COMMANDS = "custom-ai-commands";
+const STORAGE_KEY_SHOW_CHANGELOG = "show-changelog-1.5.0"; // Update with version
 
 interface Command {
   id: string;
@@ -24,10 +28,24 @@ interface Command {
 const Index = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const { sendMessage, isLoading, error, selectedModel, chatHistory, clearChatHistory } = useGemini();
+  const { autoPlay, toggleAutoPlay } = useSpeech();
   const { toast } = useToast();
   const [googleConnected, setGoogleConnected] = useState(false);
   const [customCommands, setCustomCommands] = useState<Command[]>([]);
-  const navigate = useNavigate();
+  const [showChangelog, setShowChangelog] = useState(false);
+  
+  // Check if we should show the changelog
+  useEffect(() => {
+    const hasSeenChangelog = localStorage.getItem(STORAGE_KEY_SHOW_CHANGELOG);
+    if (!hasSeenChangelog) {
+      setShowChangelog(true);
+    }
+  }, []);
+  
+  const handleCloseChangelog = () => {
+    localStorage.setItem(STORAGE_KEY_SHOW_CHANGELOG, 'true');
+    setShowChangelog(false);
+  };
   
   useEffect(() => {
     const savedCommands = localStorage.getItem(STORAGE_KEY_COMMANDS);
@@ -312,11 +330,24 @@ const Index = () => {
         <MessageList messages={messages} />
       </div>
       
+      <div className="fixed bottom-16 left-4 z-10">
+        <div className="flex items-center space-x-2 bg-white/80 backdrop-blur-sm rounded-lg p-2 shadow-sm">
+          <Volume2 size={16} className="text-gray-500" />
+          <Label htmlFor="autoplay-toggle" className="text-xs text-gray-600">Auto-read replies</Label>
+          <Switch 
+            id="autoplay-toggle" 
+            checked={autoPlay} 
+            onCheckedChange={toggleAutoPlay} 
+            aria-label="Toggle auto-read"
+          />
+        </div>
+      </div>
+      
       <div className="fixed bottom-0 left-0 right-0 w-full">
         <MessageInput onSendMessage={handleSendMessage} isLoading={isLoading} />
       </div>
       
-      <div className="fixed bottom-20 left-4 z-10 opacity-60 hover:opacity-100 transition-opacity">
+      <div className="fixed bottom-20 right-4 z-10 opacity-60 hover:opacity-100 transition-opacity">
         <a 
           href="https://lovable.ai" 
           target="_blank" 
@@ -326,6 +357,9 @@ const Index = () => {
           Made with Lovable
         </a>
       </div>
+      
+      {/* Changelog Modal */}
+      <Changelog isOpen={showChangelog} onClose={handleCloseChangelog} />
     </div>
   );
 };

@@ -1,10 +1,12 @@
 
-import React from "react";
+import React, { useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { Bot, User } from "lucide-react";
+import { Bot, User, Volume2, VolumeX } from "lucide-react";
 import LoadingDots from "./LoadingDots";
+import { Button } from "./ui/button";
+import { useSpeech } from "@/hooks/useSpeech";
 
 export interface Message {
   id: string;
@@ -16,14 +18,38 @@ export interface Message {
 
 interface MessageItemProps {
   message: Message;
+  autoPlaySpeech?: boolean;
 }
 
-const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
+const MessageItem: React.FC<MessageItemProps> = ({ message, autoPlaySpeech = false }) => {
+  const { speak, stop, isSpeaking, autoPlay } = useSpeech();
+  
   const formatTimestamp = (timestamp: Date) => {
     return timestamp.toLocaleTimeString([], { 
       hour: '2-digit', 
       minute: '2-digit'
     });
+  };
+
+  // Auto-play text if it's an AI message and autoPlay is enabled
+  useEffect(() => {
+    if (!message.isUser && !message.isLoading && (autoPlaySpeech || autoPlay) && message.text) {
+      speak(message.text);
+    }
+    
+    return () => {
+      if (isSpeaking) {
+        stop();
+      }
+    };
+  }, [message.text, message.isLoading, message.isUser, autoPlaySpeech, autoPlay]);
+
+  const handlePlaySpeech = () => {
+    if (isSpeaking) {
+      stop();
+    } else {
+      speak(message.text);
+    }
   };
 
   return (
@@ -47,7 +73,7 @@ const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
         
         <div>
           <Card className={cn(
-            "px-4 py-3 mb-1",
+            "px-4 py-3 mb-1 relative group",
             message.isUser 
               ? "bg-gemini-primary text-white" 
               : "bg-white border-gray-200 text-gray-800"
@@ -57,15 +83,31 @@ const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
                 <LoadingDots className="py-2" />
               </div>
             ) : (
-              <div className="whitespace-pre-wrap">{message.text}</div>
+              <>
+                <div className="whitespace-pre-wrap">{message.text}</div>
+                
+                {/* Speech Controls - Only show for AI messages */}
+                {!message.isUser && (
+                  <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button 
+                      size="icon" 
+                      variant="ghost" 
+                      className="h-6 w-6" 
+                      onClick={handlePlaySpeech}
+                    >
+                      {isSpeaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </Card>
           
           <div className={cn(
-            "text-xs text-gray-500",
-            message.isUser ? "text-right" : "text-left"
+            "text-xs text-gray-500 flex items-center",
+            message.isUser ? "justify-end" : "justify-start"
           )}>
-            {formatTimestamp(message.timestamp)}
+            <span>{formatTimestamp(message.timestamp)}</span>
           </div>
         </div>
       </div>

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Command, Brain, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, Command, Brain, Search, Trash2, Volume2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,9 +11,9 @@ import ModelSettings from "@/components/ModelSettings";
 import GoogleIntegration from "@/components/GoogleIntegration";
 import MemoryViewer from "@/components/MemoryViewer";
 import MemorySearch from "@/components/MemorySearch";
+import SpeechSettings from "@/components/SpeechSettings";
 
 const Settings = () => {
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isMemoryViewerOpen, setIsMemoryViewerOpen] = useState(false);
   const [isMemorySearchOpen, setIsMemorySearchOpen] = useState(false);
   const { toast } = useToast();
@@ -61,9 +62,10 @@ const Settings = () => {
       <div className="flex-1 overflow-y-auto pt-16 pb-16 px-4">
         <div className="max-w-md mx-auto space-y-6 py-8">
           <Tabs defaultValue="general" className="w-full">
-            <TabsList className="grid w-full grid-cols-3 mb-6">
+            <TabsList className="grid w-full grid-cols-4 mb-6">
               <TabsTrigger value="general">General</TabsTrigger>
               <TabsTrigger value="models">Models</TabsTrigger>
+              <TabsTrigger value="speech">Speech</TabsTrigger>
               <TabsTrigger value="integrations">Integrations</TabsTrigger>
             </TabsList>
             
@@ -186,6 +188,10 @@ const Settings = () => {
               </div>
             </TabsContent>
             
+            <TabsContent value="speech" className="space-y-6">
+              <SpeechSettings className="space-y-4 p-4 rounded-lg border border-white/10 bg-white/5" />
+            </TabsContent>
+            
             <TabsContent value="integrations" className="space-y-6">
               <div className="space-y-1">
                 <h2 className="text-xl font-medium">Integrations</h2>
@@ -217,7 +223,16 @@ const Settings = () => {
           <div className="space-y-2 p-4 rounded-lg border border-white/10 bg-white/5">
             <h3 className="text-md font-medium">Changelog</h3>
             <div className="text-xs text-gray-300">
-              <p className="font-semibold">Version 1.4.0 (2025-04-14)</p>
+              <p className="font-semibold">Version 1.5.0 (2025-04-16)</p>
+              <ul className="list-disc pl-5 space-y-1 mt-1">
+                <li>Added text-to-speech functionality for AI responses</li>
+                <li>Improved memory search with highlighting and relevance scores</li>
+                <li>Added loading indicators with animated message bubbles</li>
+                <li>Optimized memory storage for better recall</li>
+                <li>Centralized memory management in settings</li>
+              </ul>
+              
+              <p className="font-semibold mt-2">Version 1.4.0 (2025-04-14)</p>
               <ul className="list-disc pl-5 space-y-1 mt-1">
                 <li>Added support for multiple AI model providers</li>
                 <li>Added Google services integration (Gmail, Calendar, Drive)</li>
@@ -231,13 +246,6 @@ const Settings = () => {
                 <li>Added ability to clear conversation history</li>
                 <li>Fixed model selection issues</li>
                 <li>Added model refresh button to settings</li>
-              </ul>
-              
-              <p className="font-semibold mt-2">Version 1.2.0</p>
-              <ul className="list-disc pl-5 space-y-1 mt-1">
-                <li>Added model selection dropdown</li>
-                <li>Added scroll navigation for message history</li>
-                <li>Improved settings page with API key management</li>
               </ul>
             </div>
           </div>
