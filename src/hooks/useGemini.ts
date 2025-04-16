@@ -4,8 +4,9 @@ import { useGeminiConfig } from "./useGeminiConfig";
 import { useChatHistory, ChatMessage } from "./useChatHistory";
 import { callGeminiApi, callOpenRouterApi, callGroqApi, prepareMessageHistory } from "@/services/aiProviders";
 
-export { ChatMessage } from "./useChatHistory";
-export { ModelConfig } from "./useGeminiConfig";
+// Export types with the 'export type' syntax for isolatedModules compatibility
+export type { ChatMessage } from "./useChatHistory";
+export type { ModelConfig } from "./useGeminiConfig";
 
 export const useGemini = () => {
   const [isLoading, setIsLoading] = useState(false);
