@@ -1,6 +1,10 @@
 
 import React from "react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { Bot, User } from "lucide-react";
+import LoadingDots from "./LoadingDots";
 
 export interface Message {
   id: string;
@@ -15,46 +19,55 @@ interface MessageItemProps {
 }
 
 const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
-  const formattedTime = new Intl.DateTimeFormat("en", {
-    hour: "numeric",
-    minute: "numeric",
-    hour12: true,
-  }).format(message.timestamp);
+  const formatTimestamp = (timestamp: Date) => {
+    return timestamp.toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit'
+    });
+  };
 
   return (
-    <div
-      className={cn(
-        "mb-3 flex",
-        message.isUser ? "justify-end" : "justify-start"
-      )}
-    >
-      <div className="flex flex-col max-w-[85%]">
-        <div
-          className={cn(
-            "whitespace-pre-wrap rounded-2xl px-4 py-2",
+    <div className={cn(
+      "flex w-full mb-4", 
+      message.isUser ? "justify-end" : "justify-start"
+    )}>
+      <div className={cn(
+        "flex max-w-[80%] md:max-w-[70%]", 
+        message.isUser ? "flex-row-reverse" : "flex-row"
+      )}>
+        <Avatar className={cn(
+          "h-8 w-8 mt-1", 
+          message.isUser ? "ml-2" : "mr-2"
+        )}>
+          <AvatarFallback>
+            {message.isUser ? <User size={14} /> : <Bot size={14} />}
+          </AvatarFallback>
+          <AvatarImage src={message.isUser ? "/user-avatar.png" : "/bot-avatar.png"} />
+        </Avatar>
+        
+        <div>
+          <Card className={cn(
+            "px-4 py-3 mb-1",
             message.isUser 
-              ? "bg-pink-100 text-gemini-dark rounded-t-2xl rounded-bl-2xl rounded-br-sm shadow-sm break-words" 
-              : "bg-gradient-to-r from-purple-100 to-indigo-100 text-gemini-dark rounded-t-2xl rounded-br-2xl rounded-bl-sm shadow-sm break-words"
-          )}
-        >
-          {message.isLoading ? (
-            <div className="flex space-x-2 py-2">
-              <div className="h-3 w-3 rounded-full bg-gemini-tertiary/60 animation-pulse"></div>
-              <div className="h-3 w-3 rounded-full bg-gemini-secondary/60 animation-pulse delay-200"></div>
-              <div className="h-3 w-3 rounded-full bg-gemini-primary/60 animation-pulse delay-400"></div>
-            </div>
-          ) : (
-            message.text
-          )}
-        </div>
-        <span
-          className={cn(
-            "text-xs mt-1 text-gray-500",
+              ? "bg-gemini-primary text-white" 
+              : "bg-white border-gray-200 text-gray-800"
+          )}>
+            {message.isLoading ? (
+              <div className="p-2 min-w-[60px] flex items-center justify-center">
+                <LoadingDots className="py-2" />
+              </div>
+            ) : (
+              <div className="whitespace-pre-wrap">{message.text}</div>
+            )}
+          </Card>
+          
+          <div className={cn(
+            "text-xs text-gray-500",
             message.isUser ? "text-right" : "text-left"
-          )}
-        >
-          {formattedTime}
-        </span>
+          )}>
+            {formatTimestamp(message.timestamp)}
+          </div>
+        </div>
       </div>
     </div>
   );

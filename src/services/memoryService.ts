@@ -3,6 +3,7 @@ import { MemoryEntry, MemorySearchParams, MemorySearchResult } from "@/types/mem
 
 const MEMORY_STORAGE_KEY = "chat-memory-storage";
 const MEMORY_INDEX_KEY = "chat-memory-index";
+const MAX_MEMORIES = 200; // Limit number of stored memories
 
 /**
  * Extracts potential intent from a user message
@@ -74,23 +75,84 @@ const extractTags = (userMessage: string, assistantResponse: string): string[] =
   }
   if (hasDate) tags.add("date");
   
+  // Extract topic keywords - important for memory retrieval
+  const topicKeywords = [
+    "project", "deadline", "meeting", "appointment", "event", 
+    "birthday", "anniversary", "holiday", "vacation", "trip",
+    "work", "job", "task", "assignment", "report", "presentation",
+    "health", "doctor", "medication", "prescription", "symptom",
+    "family", "friend", "contact", "address", "phone", "number",
+    "finance", "money", "payment", "bill", "invoice", "budget",
+    "food", "recipe", "restaurant", "reservation"
+  ];
+  
+  const lowerUserMsg = userMessage.toLowerCase();
+  const lowerAssistantMsg = assistantResponse.toLowerCase();
+  
+  topicKeywords.forEach(keyword => {
+    if (lowerUserMsg.includes(keyword) || lowerAssistantMsg.includes(keyword)) {
+      tags.add(keyword);
+    }
+  });
+  
   return Array.from(tags);
 };
 
 /**
- * Simple text similarity function using overlap
+ * Improved text similarity function using BM25-inspired approach
  */
 const calculateSimilarity = (text1: string, text2: string): number => {
-  const words1 = new Set(text1.toLowerCase().split(/\s+/).filter(w => w.length > 3));
-  const words2 = new Set(text2.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+  // Simple preprocessing - lowercase and tokenize
+  const words1 = text1.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  const words2 = text2.toLowerCase().split(/\s+/).filter(w => w.length > 2);
   
-  let matchCount = 0;
-  for (const word of words1) {
-    if (words2.has(word)) matchCount++;
-  }
+  if (words1.length === 0 || words2.length === 0) return 0;
   
-  const totalUniqueWords = new Set([...words1, ...words2]).size;
-  return totalUniqueWords === 0 ? 0 : matchCount / totalUniqueWords;
+  // Create word frequency maps
+  const freqMap1 = new Map<string, number>();
+  words1.forEach(word => {
+    freqMap1.set(word, (freqMap1.get(word) || 0) + 1);
+  });
+  
+  // Calculate IDF-like weights (simplified)
+  const uniqueWords = new Set([...words1, ...words2]);
+  
+  // Count matches with term frequency consideration
+  let matchScore = 0;
+  let maxPossibleScore = words2.length; // Normalize by query length
+  
+  words2.forEach(word => {
+    if (freqMap1.has(word)) {
+      // Words that are rare get higher weight
+      const rarity = 1.0;
+      // Words that appear multiple times get higher weight, but with diminishing returns
+      const frequency = Math.log(1 + freqMap1.get(word)!);
+      // Position bias - earlier matches are weighted more (not implemented here for simplicity)
+      
+      matchScore += rarity * frequency;
+    }
+  });
+  
+  // Normalize score between 0 and 1
+  return matchScore / maxPossibleScore;
+};
+
+/**
+ * Get the most important terms from a query for matching
+ */
+const extractKeyTerms = (query: string): string[] => {
+  // Remove stopwords
+  const stopwords = new Set([
+    "a", "an", "the", "and", "or", "but", "is", "are", "was", "were", 
+    "to", "of", "in", "for", "with", "by", "about", "like", "through"
+  ]);
+  
+  // Extract terms
+  return query.toLowerCase()
+    .split(/\s+/)
+    .filter(word => word.length > 2 && !stopwords.has(word))
+    .map(word => word.replace(/[.,!?;:'"()]/g, ''))
+    .filter(word => word.length > 2);
 };
 
 export const MemoryService = {
@@ -113,7 +175,12 @@ export const MemoryService = {
       };
       
       // Add to existing memories
-      existingMemories.push(newMemory);
+      existingMemories.unshift(newMemory); // Add to front for more efficient recent retrieval
+      
+      // Limit the number of memories stored to avoid excessive localStorage usage
+      if (existingMemories.length > MAX_MEMORIES) {
+        existingMemories.splice(MAX_MEMORIES);
+      }
       
       // Save back to localStorage
       localStorage.setItem(MEMORY_STORAGE_KEY, JSON.stringify(existingMemories));
@@ -154,6 +221,9 @@ export const MemoryService = {
       
       const { query, limit = 5, startDate, endDate, tags } = params;
       
+      // Extract key terms from the query
+      const keyTerms = extractKeyTerms(query);
+      
       // Filter by date range if provided
       let filteredMemories = memories;
       if (startDate) {
@@ -176,9 +246,38 @@ export const MemoryService = {
       
       // Calculate relevance scores
       const results: MemorySearchResult[] = filteredMemories.map(memory => {
+        // Weight the memory parts differently
+        const userInputWeight = 1.0;
+        const assistantReplyWeight = 0.7;
+        const tagsWeight = 1.5;
+        
         // Calculate similarity between query and memory content
-        const combinedMemoryText = `${memory.userInput} ${memory.assistantReply}`;
-        const relevanceScore = calculateSimilarity(query, combinedMemoryText);
+        const userInputScore = calculateSimilarity(query, memory.userInput) * userInputWeight;
+        const assistantReplyScore = calculateSimilarity(query, memory.assistantReply) * assistantReplyWeight;
+        
+        // Extra boost for tag matches
+        let tagScore = 0;
+        if (memory.tags && memory.tags.length > 0) {
+          const tagMatchCount = keyTerms.filter(term => 
+            memory.tags!.some(tag => tag.includes(term))
+          ).length;
+          
+          if (tagMatchCount > 0) {
+            tagScore = (tagMatchCount / keyTerms.length) * tagsWeight;
+          }
+        }
+        
+        // Recency boost - more recent memories get a slight boost
+        const RECENCY_WEIGHT = 0.1;
+        const now = Date.now();
+        const ageInDays = (now - memory.timestamp) / (1000 * 60 * 60 * 24);
+        const recencyBoost = Math.max(0, RECENCY_WEIGHT * (1 - Math.min(ageInDays / 30, 1)));
+        
+        // Combined relevance score
+        const relevanceScore = Math.min(
+          userInputScore + assistantReplyScore + tagScore + recencyBoost, 
+          1.0 // Cap at 1.0
+        );
         
         return {
           entry: memory,
@@ -189,7 +288,7 @@ export const MemoryService = {
       // Sort by relevance and limit results
       return results
         .sort((a, b) => b.relevanceScore - a.relevanceScore)
-        .filter(result => result.relevanceScore > 0.1) // Only return somewhat relevant results
+        .filter(result => result.relevanceScore > 0.05) // Only return somewhat relevant results
         .slice(0, limit);
     } catch (error) {
       console.error("Error searching memories:", error);
@@ -267,6 +366,12 @@ export const MemoryService = {
       if (match && match[1]) {
         params.tags = [match[1].toLowerCase()];
       }
+    }
+    
+    // Extract additional topics from question patterns
+    const extractedKeywords = extractKeyTerms(query);
+    if (extractedKeywords.length > 0 && !params.tags) {
+      params.tags = extractedKeywords;
     }
     
     return params;

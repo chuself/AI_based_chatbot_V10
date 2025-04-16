@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
@@ -7,12 +6,9 @@ import { Message } from "@/components/MessageItem";
 import { useGemini, ChatMessage } from "@/hooks/useGemini";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
-import { Trash2, Brain, Search } from "lucide-react";
 import { App } from '@capacitor/app';
 import { checkGoogleConnection, getEmails, getCalendarEvents, getDriveFiles } from "@/utils/googleService";
 import { MemoryService } from "@/services/memoryService";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import MemorySearch from "@/components/MemorySearch";
 import { useNavigate } from "react-router-dom";
 
 const LOCAL_STORAGE_MODEL_CONFIG = "ai-model-config";
@@ -31,7 +27,6 @@ const Index = () => {
   const { toast } = useToast();
   const [googleConnected, setGoogleConnected] = useState(false);
   const [customCommands, setCustomCommands] = useState<Command[]>([]);
-  const [isMemorySearchOpen, setIsMemorySearchOpen] = useState(false);
   const navigate = useNavigate();
   
   useEffect(() => {
@@ -309,73 +304,9 @@ const Index = () => {
     );
   };
 
-  const handleClearChat = () => {
-    clearChatHistory();
-    
-    const welcomeMessage: Message = {
-      id: Date.now().toString(),
-      text: "Chat history cleared. How can I help you today?",
-      isUser: false,
-      timestamp: new Date(),
-    };
-    
-    setMessages([welcomeMessage]);
-    
-    toast({
-      title: "Chat Cleared",
-      description: "Your conversation history has been cleared.",
-    });
-  };
-
-  const handleMemorySelect = (query: string) => {
-    handleSendMessage(query);
-    setIsMemorySearchOpen(false);
-  };
-
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50 overscroll-none">
       <Header modelName={selectedModel} />
-      
-      <div className="fixed top-16 right-4 z-10 flex gap-2">
-        <Sheet open={isMemorySearchOpen} onOpenChange={setIsMemorySearchOpen}>
-          <SheetTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="bg-white/80 hover:bg-white border border-gray-200"
-              title="Search memories"
-            >
-              <Search className="h-4 w-4 text-gray-500" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent className="w-[400px] sm:w-[540px] p-4">
-            <h2 className="text-xl font-semibold mb-4">Search Memories</h2>
-            <MemorySearch onSelectMemory={(memory) => {
-              handleMemorySelect(`What did we talk about regarding "${memory.userInput.substring(0, 30)}..."`);
-            }} />
-          </SheetContent>
-        </Sheet>
-        
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate('/memories')}
-          className="bg-white/80 hover:bg-white border border-gray-200"
-          title="View memories"
-        >
-          <Brain className="h-4 w-4 text-gray-500" />
-        </Button>
-      
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleClearChat}
-          className="bg-white/80 hover:bg-white border border-gray-200"
-          title="Clear chat history"
-        >
-          <Trash2 className="h-4 w-4 text-gray-500" />
-        </Button>
-      </div>
       
       <div className="flex-1 overflow-hidden pt-16 pb-16">
         <MessageList messages={messages} />

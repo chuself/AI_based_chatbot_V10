@@ -1,11 +1,12 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Search } from "lucide-react";
+import { Search, Check } from "lucide-react";
 import { MemoryService } from "@/services/memoryService";
 import { MemoryEntry, MemorySearchResult } from "@/types/memory";
+import { Progress } from "@/components/ui/progress";
 
 interface MemorySearchProps {
   onSelectMemory?: (memory: MemoryEntry) => void;
@@ -15,6 +16,7 @@ const MemorySearch: React.FC<MemorySearchProps> = ({ onSelectMemory }) => {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MemorySearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [selectedMemory, setSelectedMemory] = useState<string | null>(null);
 
   const handleSearch = () => {
     if (!query.trim()) return;
@@ -48,6 +50,25 @@ const MemorySearch: React.FC<MemorySearchProps> = ({ onSelectMemory }) => {
     return new Date(timestamp).toLocaleString();
   };
 
+  const handleMemorySelect = (memory: MemoryEntry) => {
+    setSelectedMemory(memory.id);
+    if (onSelectMemory) {
+      onSelectMemory(memory);
+    }
+  };
+
+  const highlightMatchingText = (text: string, searchQuery: string) => {
+    if (!searchQuery.trim()) return text;
+    
+    try {
+      const regex = new RegExp(`(${searchQuery.trim()})`, 'gi');
+      return text.replace(regex, '<mark class="bg-yellow-200 text-gray-900">$1</mark>');
+    } catch (e) {
+      // If regex fails (e.g., with special characters), return original text
+      return text;
+    }
+  };
+
   return (
     <div className="w-full">
       <div className="flex mb-4">
@@ -68,10 +89,22 @@ const MemorySearch: React.FC<MemorySearchProps> = ({ onSelectMemory }) => {
         </Button>
       </div>
 
+      {isSearching && (
+        <div className="py-8 flex flex-col items-center">
+          <p className="mb-3 text-sm text-gray-500">Searching through memories...</p>
+          <Progress value={65} className="w-64 h-2" />
+        </div>
+      )}
+
       {results.length > 0 ? (
         <div className="space-y-4 mt-4">
           {results.map((result) => (
-            <Card key={result.entry.id} className="border border-gray-200 hover:border-gemini-primary transition-all">
+            <Card 
+              key={result.entry.id} 
+              className={`border hover:border-gemini-primary transition-all ${
+                selectedMemory === result.entry.id ? 'border-gemini-primary ring-1 ring-gemini-primary' : 'border-gray-200'
+              }`}
+            >
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium flex justify-between">
                   <span>{formatDate(result.entry.timestamp)}</span>
@@ -83,11 +116,21 @@ const MemorySearch: React.FC<MemorySearchProps> = ({ onSelectMemory }) => {
               <CardContent className="pb-2">
                 <div className="mb-2">
                   <p className="text-sm font-medium">You:</p>
-                  <p className="text-sm text-gray-700">{result.entry.userInput}</p>
+                  <p 
+                    className="text-sm text-gray-700"
+                    dangerouslySetInnerHTML={{ 
+                      __html: highlightMatchingText(result.entry.userInput, query) 
+                    }}
+                  />
                 </div>
                 <div>
                   <p className="text-sm font-medium">Assistant:</p>
-                  <p className="text-sm text-gray-700">{result.entry.assistantReply}</p>
+                  <p 
+                    className="text-sm text-gray-700"
+                    dangerouslySetInnerHTML={{ 
+                      __html: highlightMatchingText(result.entry.assistantReply, query) 
+                    }}
+                  />
                 </div>
               </CardContent>
               {result.entry.tags && result.entry.tags.length > 0 && (
@@ -107,12 +150,19 @@ const MemorySearch: React.FC<MemorySearchProps> = ({ onSelectMemory }) => {
               {onSelectMemory && (
                 <CardFooter className="pt-0">
                   <Button
-                    variant="ghost"
+                    variant={selectedMemory === result.entry.id ? "default" : "ghost"}
                     size="sm"
-                    onClick={() => onSelectMemory(result.entry)}
-                    className="ml-auto text-gemini-primary hover:text-gemini-secondary"
+                    onClick={() => handleMemorySelect(result.entry)}
+                    className="ml-auto"
                   >
-                    Use this memory
+                    {selectedMemory === result.entry.id ? (
+                      <>
+                        <Check size={16} className="mr-1" />
+                        Selected
+                      </>
+                    ) : (
+                      "Use this memory"
+                    )}
                   </Button>
                 </CardFooter>
               )}
