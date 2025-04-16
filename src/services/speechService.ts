@@ -13,7 +13,7 @@ interface SpeechOptions {
 }
 
 // Play.ht API integration
-interface PlayHTVoice {
+export interface PlayHTVoice {
   id: string;
   name: string;
   language: string;
@@ -23,7 +23,7 @@ interface PlayHTVoice {
 }
 
 // Speech source options
-type SpeechSource = 'browser' | 'playht';
+export type SpeechSource = 'browser' | 'playht';
 
 class SpeechService {
   private speechSynthesis: SpeechSynthesis;
@@ -443,18 +443,6 @@ class SpeechService {
     return result;
   }
 }
-
-// Expose PlayHTVoice interface for use in other components
-export interface PlayHTVoice {
-  id: string;
-  name: string;
-  language: string;
-  gender: string;
-  provider: string;
-  sampleUrl?: string;
-}
-
-export type SpeechSource = 'browser' | 'playht';
 
 // Singleton instance
 const speechService = new SpeechService();

@@ -1,18 +1,16 @@
+
 import React, { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
 import MessageInput from "@/components/MessageInput";
 import Changelog from "@/components/Changelog";
 import { Message } from "@/components/MessageItem";
-import { useGemini, ChatMessage } from "@/hooks/useGemini";
+import { useGemini } from "@/hooks/useGemini";
 import { useSpeech } from "@/hooks/useSpeech";
 import { useToast } from "@/components/ui/use-toast";
 import { App } from '@capacitor/app';
 import { checkGoogleConnection, getEmails, getCalendarEvents, getDriveFiles } from "@/utils/googleService";
 import { MemoryService } from "@/services/memoryService";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Volume2 } from "lucide-react";
 
 const STORAGE_KEY_COMMANDS = "custom-ai-commands";
 const STORAGE_KEY_SHOW_CHANGELOG = "show-changelog-1.5.0"; // Update with version
@@ -27,7 +25,7 @@ interface Command {
 const Index = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const { sendMessage, isLoading, error, selectedModel, chatHistory, clearChatHistory } = useGemini();
-  const { autoPlay, toggleAutoPlay } = useSpeech();
+  const { speak, autoPlay } = useSpeech();
   const { toast } = useToast();
   const [googleConnected, setGoogleConnected] = useState(false);
   const [customCommands, setCustomCommands] = useState<Command[]>([]);
@@ -80,7 +78,7 @@ const Index = () => {
   
   useEffect(() => {
     if (chatHistory.length > 0) {
-      const convertedMessages = chatHistory.map((msg: ChatMessage) => ({
+      const convertedMessages = chatHistory.map((msg) => ({
         id: msg.timestamp.toString(),
         text: msg.content,
         isUser: msg.role === "user",
@@ -98,7 +96,7 @@ const Index = () => {
       
       setMessages([welcomeMessage]);
     }
-  }, [chatHistory]);
+  }, [chatHistory, messages.length]);
   
   useEffect(() => {
     if (error) {
@@ -307,6 +305,11 @@ const Index = () => {
     // Save the conversation to memory if it's not a memory query itself
     if (!isMemoryQuery) {
       MemoryService.saveMemory(text, response);
+    }
+    
+    // Play speech if autoplay is enabled
+    if (autoPlay && response) {
+      speak(response);
     }
     
     setMessages((prevMessages) => 
