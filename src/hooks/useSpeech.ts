@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import speechService from '@/services/speechService';
+import speechService, { PlayHTVoice, SpeechSource } from '@/services/speechService';
 
 export const useSpeech = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -9,14 +9,22 @@ export const useSpeech = () => {
     return saved ? saved === 'true' : false;
   });
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [availablePlayHTVoices, setAvailablePlayHTVoices] = useState<PlayHTVoice[]>([]);
+  const [speechSource, setSpeechSource] = useState<SpeechSource>(
+    speechService.getCurrentSettings().speechSource || 'browser'
+  );
+  
   const [rate, setRate] = useState(speechService.getCurrentSettings().rate || 1);
   const [pitch, setPitch] = useState(speechService.getCurrentSettings().pitch || 1);
   const [volume, setVolume] = useState(speechService.getCurrentSettings().volume || 1);
+  const [isPlayHTAvailable, setIsPlayHTAvailable] = useState(false);
   
   useEffect(() => {
     // Initial load of voices
     const loadVoices = () => {
       setAvailableVoices(speechService.getAvailableVoices());
+      setAvailablePlayHTVoices(speechService.getAvailablePlayHTVoices());
+      setIsPlayHTAvailable(speechService.isPlayHTServiceAvailable());
     };
     
     loadVoices();
@@ -26,8 +34,19 @@ export const useSpeech = () => {
       window.speechSynthesis.onvoiceschanged = loadVoices;
     }
     
+    // Poll for PlayHT voices to become available
+    const playhtInterval = setInterval(() => {
+      const playhtVoices = speechService.getAvailablePlayHTVoices();
+      if (playhtVoices.length > 0) {
+        setAvailablePlayHTVoices(playhtVoices);
+        setIsPlayHTAvailable(true);
+        clearInterval(playhtInterval);
+      }
+    }, 2000);
+    
     return () => {
       window.speechSynthesis.onvoiceschanged = null;
+      clearInterval(playhtInterval);
     };
   }, []);
   
@@ -36,7 +55,7 @@ export const useSpeech = () => {
     localStorage.setItem('speech-autoplay', autoPlay.toString());
   }, [autoPlay]);
   
-  // Update the speech service when rate, pitch, or volume changes
+  // Update the speech service when settings change
   useEffect(() => {
     speechService.setSpeechRate(rate);
   }, [rate]);
@@ -48,6 +67,10 @@ export const useSpeech = () => {
   useEffect(() => {
     speechService.setSpeechVolume(volume);
   }, [volume]);
+  
+  useEffect(() => {
+    speechService.setSpeechSource(speechSource);
+  }, [speechSource]);
   
   const speak = async (text: string) => {
     setIsSpeaking(true);
@@ -71,6 +94,10 @@ export const useSpeech = () => {
     speechService.setPreferredVoice(voice);
   };
   
+  const selectPlayHTVoice = (voice: PlayHTVoice) => {
+    speechService.setPreferredPlayHTVoice(voice);
+  };
+  
   const updateRate = (newRate: number) => {
     setRate(newRate);
   };
@@ -83,6 +110,10 @@ export const useSpeech = () => {
     setVolume(newVolume);
   };
   
+  const updateSpeechSource = (source: SpeechSource) => {
+    setSpeechSource(source);
+  };
+  
   return {
     speak,
     stop,
@@ -90,12 +121,17 @@ export const useSpeech = () => {
     autoPlay,
     toggleAutoPlay,
     availableVoices,
+    availablePlayHTVoices,
     selectVoice,
+    selectPlayHTVoice,
     rate,
     pitch,
     volume,
     updateRate,
     updatePitch,
-    updateVolume
+    updateVolume,
+    speechSource,
+    updateSpeechSource,
+    isPlayHTAvailable
   };
 };

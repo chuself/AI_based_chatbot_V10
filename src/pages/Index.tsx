@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
@@ -328,19 +327,6 @@ const Index = () => {
       
       <div className="flex-1 overflow-hidden pt-16 pb-16">
         <MessageList messages={messages} />
-      </div>
-      
-      <div className="fixed bottom-16 left-4 z-10">
-        <div className="flex items-center space-x-2 bg-white/80 backdrop-blur-sm rounded-lg p-2 shadow-sm">
-          <Volume2 size={16} className="text-gray-500" />
-          <Label htmlFor="autoplay-toggle" className="text-xs text-gray-600">Auto-read replies</Label>
-          <Switch 
-            id="autoplay-toggle" 
-            checked={autoPlay} 
-            onCheckedChange={toggleAutoPlay} 
-            aria-label="Toggle auto-read"
-          />
-        </div>
       </div>
       
       <div className="fixed bottom-0 left-0 right-0 w-full">
