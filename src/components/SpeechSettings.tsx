@@ -77,7 +77,7 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
   }, {} as Record<string, SpeechSynthesisVoice[]>);
   
   // Create a filtered view of voices based on search
-  const filteredGroupedVoices = Object.fromEntries(
+  const filteredGroupedVoices: Record<string, SpeechSynthesisVoice[]> = Object.fromEntries(
     Object.entries(groupedVoices)
       .map(([lang, voices]) => {
         const filteredVoices = voices.filter(voice => 
