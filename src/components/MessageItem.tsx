@@ -79,8 +79,8 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, autoPlaySpeech = fal
               : "bg-white border-gray-200 text-gray-800"
           )}>
             {message.isLoading ? (
-              <div className="p-2 min-w-[60px] flex items-center justify-center">
-                <LoadingDots className="py-2" />
+              <div className="p-4 min-w-[120px] flex items-center justify-center">
+                <LoadingDots className="scale-150 opacity-100" />
               </div>
             ) : (
               <>

@@ -356,6 +356,9 @@ class SpeechService {
   }
   
   private useBrowserSpeech(text: string, options: SpeechOptions, resolve: () => void): void {
+    // Advanced text preprocessing for more natural speech
+    text = this.preprocessText(text);
+    
     // Break text into sentences for more natural pauses
     const sentences = this.splitIntoSentences(text);
     let currentIndex = 0;
@@ -375,21 +378,29 @@ class SpeechService {
         return;
       }
       
-      const utterance = new SpeechSynthesisUtterance(sentence);
+      // Add SSML-like markup for emphasis (will be ignored by browsers that don't support it)
+      const enhancedSentence = this.enhanceSentence(sentence);
+      
+      const utterance = new SpeechSynthesisUtterance(enhancedSentence);
       
       // Set voice and options
       if (this.preferredVoice) {
         utterance.voice = this.preferredVoice;
       }
       
-      // Use provided options or defaults from service
-      utterance.rate = options.rate !== undefined ? options.rate : this.rate;
-      utterance.pitch = options.pitch !== undefined ? options.pitch : this.pitch;
+      // Use provided options or defaults from service with humanization adjustments
+      utterance.rate = options.rate !== undefined ? this.humanizeRate(options.rate) : this.humanizeRate(this.rate);
+      utterance.pitch = options.pitch !== undefined ? this.humanizePitch(options.pitch) : this.humanizePitch(this.pitch);
       utterance.volume = options.volume !== undefined ? options.volume : this.volume;
       
+      // Add slight randomness to rate and pitch for more natural speech
+      utterance.rate += (Math.random() * 0.1) - 0.05; // +/- 0.05 variation
+      utterance.pitch += (Math.random() * 0.1) - 0.05; // +/- 0.05 variation
+      
       utterance.onend = () => {
-        // Small delay between sentences for more natural speech
-        setTimeout(speakNextSentence, 100);
+        // Dynamic pause between sentences based on punctuation
+        const pauseTime = this.getPauseTime(sentence);
+        setTimeout(speakNextSentence, pauseTime);
       };
       
       utterance.onerror = (event) => {
@@ -404,6 +415,127 @@ class SpeechService {
     };
     
     speakNextSentence();
+  }
+  
+  // Enhanced text preprocessing for more natural speech
+  private preprocessText(text: string): string {
+    // Replace common abbreviations with expanded forms
+    text = text.replace(/Dr\./g, 'Doctor ');
+    text = text.replace(/Mr\./g, 'Mister ');
+    text = text.replace(/Mrs\./g, 'Misses ');
+    text = text.replace(/Ms\./g, 'Miss ');
+    text = text.replace(/Prof\./g, 'Professor ');
+    text = text.replace(/Inc\./g, 'Incorporated ');
+    text = text.replace(/Corp\./g, 'Corporation ');
+    text = text.replace(/Dept\./g, 'Department ');
+    text = text.replace(/St\./g, 'Street ');
+    text = text.replace(/Rd\./g, 'Road ');
+    text = text.replace(/Ave\./g, 'Avenue ');
+    
+    // Add spaces after punctuation if missing
+    text = text.replace(/([.!?])([A-Z])/g, '$1 $2');
+    
+    // Ensure proper spacing around punctuation
+    text = text.replace(/\s+([.,;:!?])/g, '$1');
+    
+    // Convert numbers to words for better pronunciation
+    text = this.convertNumbersToWords(text);
+    
+    return text;
+  }
+  
+  // Convert numbers to words for better pronunciation
+  private convertNumbersToWords(text: string): string {
+    // Replace isolated numbers with their word forms
+    return text.replace(/\b(\d+)\b/g, (match, number) => {
+      // This is a simplified version - in a real implementation, 
+      // you'd want a more comprehensive number-to-words conversion
+      if (number.length === 4 && number >= 1900 && number <= 2100) {
+        // Year format: 1984 -> nineteen eighty-four
+        const century = Math.floor(number / 100);
+        const year = number % 100;
+        
+        let centuryWord = '';
+        if (century === 19) centuryWord = 'nineteen';
+        else if (century === 20) centuryWord = 'twenty';
+        else if (century === 21) centuryWord = 'twenty-one';
+        
+        let yearWord = '';
+        if (year < 10) yearWord = `oh-${year}`;
+        else if (year < 20) {
+          const teens = ['ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 
+                         'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+          yearWord = teens[year - 10];
+        } else {
+          const tens = ['twenty', 'thirty', 'forty', 'fifty', 
+                        'sixty', 'seventy', 'eighty', 'ninety'];
+          const ones = ['', 'one', 'two', 'three', 'four', 
+                        'five', 'six', 'seven', 'eight', 'nine'];
+          
+          const tensDigit = Math.floor(year / 10);
+          const onesDigit = year % 10;
+          
+          yearWord = tens[tensDigit - 2];
+          if (onesDigit > 0) yearWord += `-${ones[onesDigit]}`;
+        }
+        
+        return `${centuryWord} ${yearWord}`;
+      }
+      
+      // For simplicity, we'll keep other numbers as is
+      // In a real implementation, you would convert all numbers to words
+      return match;
+    });
+  }
+  
+  // Add natural variations to speech rate
+  private humanizeRate(rate: number): number {
+    // For slower rates, make them slightly faster
+    // For faster rates, make them slightly slower
+    // This helps avoid extremely unnatural speeds
+    if (rate < 0.8) return rate * 1.1;
+    if (rate > 1.5) return rate * 0.95;
+    return rate;
+  }
+  
+  // Add natural variations to pitch
+  private humanizePitch(pitch: number): number {
+    // Avoid extreme pitch values
+    if (pitch < 0.7) return 0.7;
+    if (pitch > 1.3) return 1.3;
+    return pitch;
+  }
+  
+  // Enhance sentence with emphasis and pauses
+  private enhanceSentence(sentence: string): string {
+    // Add emphasis to words after colons and question marks
+    sentence = sentence.replace(/:(\s+)([A-Za-z]+)/g, ': <emphasis>$2</emphasis>');
+    
+    // Add emphasis to words in quotes
+    sentence = sentence.replace(/"([^"]+)"/g, '"<emphasis>$1</emphasis>"');
+    
+    // Add emphasis to words in ALL CAPS
+    sentence = sentence.replace(/\b([A-Z]{2,})\b/g, '<emphasis>$1</emphasis>');
+    
+    return sentence;
+  }
+  
+  // Get appropriate pause time based on sentence ending
+  private getPauseTime(sentence: string): number {
+    // Longer pauses for periods and exclamation points
+    if (sentence.trim().endsWith('.')) return 350;
+    if (sentence.trim().endsWith('!')) return 400;
+    if (sentence.trim().endsWith('?')) return 400;
+    
+    // Medium pauses for semicolons and colons
+    if (sentence.trim().endsWith(';')) return 300;
+    if (sentence.trim().endsWith(':')) return 300;
+    
+    // Shorter pauses for commas
+    if (sentence.trim().endsWith(',')) return 200;
+    
+    // Default pause
+    return 150;
   }
   
   public stop(): void {
@@ -425,15 +557,46 @@ class SpeechService {
   }
   
   private splitIntoSentences(text: string): string[] {
-    // Split by sentence ending punctuation, keeping the punctuation
-    const sentences = text.split(/(?<=[.!?])\s+/);
+    // More sophisticated sentence splitting that preserves punctuation
+    // and handles abbreviations better
     
-    // If text is very long, further split it into chunks
+    // First, protect common abbreviations from being split
+    text = text.replace(/Mr\./g, 'Mr@');
+    text = text.replace(/Mrs\./g, 'Mrs@');
+    text = text.replace(/Ms\./g, 'Ms@');
+    text = text.replace(/Dr\./g, 'Dr@');
+    text = text.replace(/Prof\./g, 'Prof@');
+    text = text.replace(/Inc\./g, 'Inc@');
+    text = text.replace(/Ltd\./g, 'Ltd@');
+    text = text.replace(/St\./g, 'St@');
+    text = text.replace(/Ave\./g, 'Ave@');
+    text = text.replace(/Rd\./g, 'Rd@');
+    
+    // Split by sentence ending punctuation, keeping the punctuation
+    const rawSentences = text.split(/(?<=[.!?])\s+/);
+    
+    // Restore protected abbreviations
+    const sentences = rawSentences.map(s => {
+      s = s.replace(/Mr@/g, 'Mr.');
+      s = s.replace(/Mrs@/g, 'Mrs.');
+      s = s.replace(/Ms@/g, 'Ms.');
+      s = s.replace(/Dr@/g, 'Dr.');
+      s = s.replace(/Prof@/g, 'Prof.');
+      s = s.replace(/Inc@/g, 'Inc.');
+      s = s.replace(/Ltd@/g, 'Ltd.');
+      s = s.replace(/St@/g, 'St.');
+      s = s.replace(/Ave@/g, 'Ave.');
+      s = s.replace(/Rd@/g, 'Rd.');
+      return s;
+    });
+    
+    // Further split long sentences at natural breakpoints
     const result: string[] = [];
+    
     for (const sentence of sentences) {
-      if (sentence.length > 200) {
-        // Split at commas or other natural pauses
-        const parts = sentence.split(/(?<=,|\(|\)|-|;|:)\s+/);
+      if (sentence.length > 150) {
+        // Split at commas, semicolons, colons, or dashes
+        const parts = sentence.split(/(?<=[:;,\-])\s+/);
         result.push(...parts);
       } else {
         result.push(sentence);
