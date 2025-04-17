@@ -1,6 +1,6 @@
 
 import React from "react";
-import { ModelSettings as ModelsComponent } from "@/components/ModelSettings";
+import ModelSettingsComponent from "@/components/ModelSettings";
 
 const ModelSettingsTab = () => {
   return (
@@ -12,7 +12,7 @@ const ModelSettingsTab = () => {
         </p>
       </div>
       
-      <ModelsComponent />
+      <ModelSettingsComponent />
       
       <div className="space-y-2">
         <h3 className="text-md font-medium">How to get API Keys</h3>

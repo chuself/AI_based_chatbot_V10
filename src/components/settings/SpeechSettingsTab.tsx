@@ -1,6 +1,6 @@
 
 import React from "react";
-import { SpeechSettings } from "@/components/SpeechSettings";
+import SpeechSettingsComponent from "@/components/SpeechSettings";
 
 const SpeechSettingsTab = () => {
   return (
@@ -11,7 +11,7 @@ const SpeechSettingsTab = () => {
           Configure voice and speech recognition settings
         </p>
       </div>
-      <SpeechSettings className="space-y-4 p-4 rounded-lg border border-white/10 bg-white/5 transition-all hover:bg-white/10 duration-200" />
+      <SpeechSettingsComponent className="space-y-4 p-4 rounded-lg border border-white/10 bg-white/5 transition-all hover:bg-white/10 duration-200" />
     </div>
   );
 };
