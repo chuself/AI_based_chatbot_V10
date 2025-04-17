@@ -1,42 +1,29 @@
-
 import React from "react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-} from "@/components/ui/sidebar";
-
+import { Sidebar, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
 type Tab = {
   id: string;
   label: string;
   icon: React.ReactNode;
 };
-
 interface SettingsSidebarProps {
   tabs: Tab[];
   activeTab: string;
   setActiveTab: (tabId: string) => void;
 }
-
-const SettingsSidebar = ({ tabs, activeTab, setActiveTab }: SettingsSidebarProps) => {
-  return (
-    <div className="h-full">
+const SettingsSidebar = ({
+  tabs,
+  activeTab,
+  setActiveTab
+}: SettingsSidebarProps) => {
+  return <div className="h-full">
       <Sidebar variant="floating" collapsible="icon" className="pt-2 h-full">
-        <SidebarContent>
+        <SidebarContent className="py-[57px]">
           <SidebarMenu>
-            {tabs.map((tab) => (
-              <SidebarMenuItem key={tab.id}>
+            {tabs.map(tab => <SidebarMenuItem key={tab.id}>
                 <HoverCard>
                   <HoverCardTrigger asChild>
-                    <SidebarMenuButton 
-                      isActive={activeTab === tab.id}
-                      tooltip={tab.label}
-                      onClick={() => setActiveTab(tab.id)}
-                      className="transition-all duration-200 hover:scale-105"
-                    >
+                    <SidebarMenuButton isActive={activeTab === tab.id} tooltip={tab.label} onClick={() => setActiveTab(tab.id)} className="transition-all duration-200 hover:scale-105">
                       {tab.icon}
                       <span>{tab.label}</span>
                     </SidebarMenuButton>
@@ -51,13 +38,10 @@ const SettingsSidebar = ({ tabs, activeTab, setActiveTab }: SettingsSidebarProps
                     </p>
                   </HoverCardContent>
                 </HoverCard>
-              </SidebarMenuItem>
-            ))}
+              </SidebarMenuItem>)}
           </SidebarMenu>
         </SidebarContent>
       </Sidebar>
-    </div>
-  );
+    </div>;
 };
-
 export default SettingsSidebar;
