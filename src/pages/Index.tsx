@@ -276,7 +276,7 @@ const Index = () => {
       </div>
       
       <div className="fixed bottom-20 right-4 z-10 opacity-60 hover:opacity-100 transition-opacity">
-        <a href="https://lovable.ai" target="_blank" rel="noopener noreferrer" className="text-xs text-white-500 flex items-center">
+        <a href="https://lovable.ai" target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 flex items-center">
           Made with Lovable
         </a>
       </div>
