@@ -17,7 +17,7 @@ const SettingsSidebar = ({
   setActiveTab
 }: SettingsSidebarProps) => {
   return <div className="h-full">
-      <Sidebar variant="floating" collapsible="icon" className="pt-2 h-full">
+      <Sidebar variant="floating" collapsible="icon" className="pt-2 h-full px-0 mx-[2px] my-[65px]">
         <SidebarContent className="py-[57px]">
           <SidebarMenu>
             {tabs.map(tab => <SidebarMenuItem key={tab.id}>
