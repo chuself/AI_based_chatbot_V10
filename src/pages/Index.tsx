@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
@@ -31,7 +30,6 @@ const Index = () => {
   const [customCommands, setCustomCommands] = useState<Command[]>([]);
   const [showChangelog, setShowChangelog] = useState(false);
   
-  // Check if we should show the changelog
   useEffect(() => {
     const hasSeenChangelog = localStorage.getItem(STORAGE_KEY_SHOW_CHANGELOG);
     if (!hasSeenChangelog) {
@@ -164,35 +162,45 @@ const Index = () => {
     const memoryKeywords = [
       "remember", "remind me", "what did we talk about", 
       "what did I tell you", "previous conversation", 
-      "last time", "you told me", "recall", "memory"
+      "last time", "you told me", "recall", "memory",
+      "we discussed", "you mentioned", "we talked about",
+      "I asked you", "fetch memory", "search memory"
     ];
     
     const lowerText = text.toLowerCase();
     
-    // Check if this looks like a memory query
     return memoryKeywords.some(keyword => lowerText.includes(keyword));
   };
   
   const handleMemoryQuery = async (query: string): Promise<string> => {
-    // Parse and search for memories
     const searchParams = MemoryService.parseNaturalLanguageQuery(query);
-    const results = MemoryService.searchMemories(searchParams);
+    const results = MemoryService.searchMemories({
+      ...searchParams,
+      limit: 5
+    });
     
     if (results.length === 0) {
       return "I don't have any memories matching that query. Could you try a different question or be more specific?";
     }
     
-    // Format the top result for display
-    const topMemory = results[0].entry;
-    const formattedDate = new Date(topMemory.timestamp).toLocaleString();
+    let response = "I found these memories from our previous conversations:\n\n";
     
-    let response = `I found this in my memory from ${formattedDate}:\n\n`;
-    response += `You said: "${topMemory.userInput}"\n\n`;
-    response += `I responded: "${topMemory.assistantReply}"`;
+    results.forEach((result, index) => {
+      const memory = result.entry;
+      const formattedDate = new Date(memory.timestamp).toLocaleString();
+      
+      response += `Memory ${index + 1} (${formattedDate}):\n`;
+      response += `You asked: "${memory.userInput}"\n`;
+      response += `I responded: "${memory.assistantReply}"\n`;
+      
+      if (memory.tags && memory.tags.length > 0) {
+        response += `Tags: ${memory.tags.join(", ")}\n`;
+      }
+      
+      response += "\n";
+    });
     
-    if (results.length > 1) {
-      response += `\n\nI found ${results.length} memories related to your query. You can view all memories in the Memories section.`;
-    }
+    response += "Is there something specific from these memories you'd like me to elaborate on?";
     
     return response;
   };
@@ -274,11 +282,10 @@ const Index = () => {
 
     const commandInstructions = getActiveCommands();
     
-    // Check if this is a memory query
-    const isMemoryQuery = detectMemoryQuery(text);
+    const isExplicitMemoryQuery = detectMemoryQuery(text);
     let response;
     
-    if (isMemoryQuery) {
+    if (isExplicitMemoryQuery) {
       response = await handleMemoryQuery(text);
     } else {
       const serviceType = detectServiceRequest(text);
@@ -302,12 +309,8 @@ const Index = () => {
       }
     }
     
-    // Save the conversation to memory if it's not a memory query itself
-    if (!isMemoryQuery) {
-      MemoryService.saveMemory(text, response);
-    }
+    MemoryService.saveMemory(text, response);
     
-    // Play speech if autoplay is enabled
     if (autoPlay && response) {
       speak(response);
     }
@@ -347,7 +350,6 @@ const Index = () => {
         </a>
       </div>
       
-      {/* Changelog Modal */}
       <Changelog isOpen={showChangelog} onClose={handleCloseChangelog} />
     </div>
   );

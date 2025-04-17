@@ -4,6 +4,7 @@ import { useGeminiConfig } from "./useGeminiConfig";
 import { useChatHistory, ChatMessage } from "./useChatHistory";
 import { callGeminiApi, callOpenRouterApi, callGroqApi, prepareMessageHistory } from "@/services/aiProviders";
 import getMcpClient from "@/services/mcpService";
+import { MemoryService } from "@/services/memoryService";
 
 // Export types with the 'export type' syntax for isolatedModules compatibility
 export type { ChatMessage } from "./useChatHistory";
@@ -16,6 +17,50 @@ export const useGemini = () => {
   const { chatHistory, setChatHistory, clearChatHistory } = useChatHistory();
   const { availableModels, selectedModel, modelConfig, setSelectedModel } = useGeminiConfig();
   const mcpClient = getMcpClient();
+
+  /**
+   * Check if a message might reference previous conversations
+   */
+  const detectReferenceToMemory = (text: string): boolean => {
+    const referenceKeywords = [
+      "you said", "we talked about", "we discussed", "you mentioned", 
+      "previously", "earlier", "before", "last time", "remember when",
+      "as I mentioned", "like I said", "as we discussed", "recall"
+    ];
+    
+    const lowerText = text.toLowerCase();
+    return referenceKeywords.some(keyword => lowerText.includes(keyword));
+  };
+
+  /**
+   * Retrieve relevant memories to provide context
+   */
+  const getMemoryContext = (message: string): string => {
+    // Use the search functionality to find relevant memories
+    const searchParams = MemoryService.parseNaturalLanguageQuery(message);
+    const results = MemoryService.searchMemories({
+      ...searchParams,
+      limit: 3 // Limit to top 3 most relevant memories
+    });
+    
+    if (results.length === 0) return "";
+    
+    // Format memories as context
+    let context = "Here are some relevant memories from our previous conversations that might help with this question:\n\n";
+    
+    results.forEach((result, index) => {
+      const memory = result.entry;
+      const date = new Date(memory.timestamp).toLocaleDateString();
+      
+      context += `Memory ${index + 1} (${date}):\n`;
+      context += `You: ${memory.userInput}\n`;
+      context += `Me: ${memory.assistantReply}\n\n`;
+    });
+    
+    context += "Please use these memories to inform your response to the current question.\n\n";
+    
+    return context;
+  };
 
   /**
    * Send a message to the selected AI model
@@ -39,10 +84,23 @@ export const useGemini = () => {
 When you need to use Gmail, Calendar, or Drive tools, emit exactly:
 { "mcp_call": { "tool": "<toolName>", "method": "<methodName>", "params": { ... }, "id": 1 } }`;
       
-      // Combine user instructions with MCP instructions
+      // Check if the message might be referencing previous conversations
+      const mightReferenceMemory = detectReferenceToMemory(message);
+      let memoryContext = "";
+      
+      if (mightReferenceMemory) {
+        memoryContext = getMemoryContext(message);
+      }
+      
+      // Combine all instructions
       let systemInstructions = mcpInstructions;
+      
+      if (memoryContext) {
+        systemInstructions = `${memoryContext}\n\n${systemInstructions}`;
+      }
+      
       if (customInstructions && customInstructions.trim()) {
-        systemInstructions = `${customInstructions}\n\n${mcpInstructions}`;
+        systemInstructions = `${customInstructions}\n\n${systemInstructions}`;
       }
       
       // Only add system message if it doesn't exist or is different

@@ -6,12 +6,21 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Brain, Clock, Tag, Trash } from "lucide-react";
+import { Brain, Clock, Tag, Trash, MessageSquare, Check } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useToast } from "@/components/ui/use-toast";
 
-const MemoryViewer: React.FC = () => {
+interface MemoryViewerProps {
+  onSelectMemory?: (memory: MemoryEntry) => void;
+  selectedMemoryId?: string;
+}
+
+const MemoryViewer: React.FC<MemoryViewerProps> = ({ onSelectMemory, selectedMemoryId }) => {
   const [memories, setMemories] = useState<MemoryEntry[]>([]);
   const [activeTab, setActiveTab] = useState("timeline");
   const [filter, setFilter] = useState("");
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     loadMemories();
@@ -27,6 +36,24 @@ const MemoryViewer: React.FC = () => {
       MemoryService.clearAllMemories();
       setMemories([]);
     }
+  };
+
+  const handleUseInChat = (memory: MemoryEntry) => {
+    // Store the selected memory in sessionStorage for cross-page communication
+    sessionStorage.setItem('memory-reference', JSON.stringify({
+      id: memory.id,
+      userInput: memory.userInput,
+      assistantReply: memory.assistantReply,
+      timestamp: memory.timestamp
+    }));
+    
+    toast({
+      title: "Memory Selected",
+      description: "Navigate to the chat to reference this memory",
+    });
+    
+    // Navigate to chat
+    navigate('/');
   };
 
   const formatDate = (timestamp: number) => {
@@ -121,7 +148,14 @@ const MemoryViewer: React.FC = () => {
                   </h3>
                   <div className="space-y-3">
                     {entries.map(memory => (
-                      <Card key={memory.id} className="border border-gray-200">
+                      <Card 
+                        key={memory.id} 
+                        className={`border transition-all duration-200 ${
+                          selectedMemoryId === memory.id 
+                            ? 'border-gemini-primary ring-1 ring-gemini-primary' 
+                            : 'border-gray-200 hover:border-gemini-primary/50'
+                        }`}
+                      >
                         <CardHeader className="pb-2">
                           <CardTitle className="text-sm font-medium">
                             {formatDate(memory.timestamp)}
@@ -142,20 +176,46 @@ const MemoryViewer: React.FC = () => {
                             <p className="text-sm text-gray-700">{memory.assistantReply}</p>
                           </div>
                         </CardContent>
-                        {memory.tags && memory.tags.length > 0 && (
-                          <CardFooter className="pt-0">
-                            <div className="flex flex-wrap gap-2">
-                              {memory.tags.map(tag => (
-                                <span 
-                                  key={tag} 
-                                  className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs"
-                                >
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          </CardFooter>
-                        )}
+                        <CardFooter className="flex justify-between items-center">
+                          <div className="flex flex-wrap gap-2">
+                            {memory.tags && memory.tags.length > 0 && memory.tags.map(tag => (
+                              <span 
+                                key={tag} 
+                                className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            {onSelectMemory && (
+                              <Button
+                                variant={selectedMemoryId === memory.id ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => onSelectMemory(memory)}
+                                className="text-xs"
+                              >
+                                {selectedMemoryId === memory.id ? (
+                                  <>
+                                    <Check size={14} className="mr-1" />
+                                    Selected
+                                  </>
+                                ) : (
+                                  "Select"
+                                )}
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleUseInChat(memory)}
+                              className="text-xs flex items-center"
+                            >
+                              <MessageSquare size={14} className="mr-1" />
+                              Use in Chat
+                            </Button>
+                          </div>
+                        </CardFooter>
                       </Card>
                     ))}
                   </div>
