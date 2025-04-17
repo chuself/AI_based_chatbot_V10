@@ -8,6 +8,9 @@ export interface ChatMessage {
   isMcpResult?: boolean;
 }
 
+// Add MAX_HISTORY_LENGTH as an exported constant
+export const MAX_HISTORY_LENGTH = 50;
+
 const LOCAL_STORAGE_KEY = "chat-history";
 
 export const useChatHistory = () => {
