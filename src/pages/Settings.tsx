@@ -44,14 +44,14 @@ const Settings = () => {
 
   return (
     <SidebarProvider>
-      <div className="flex flex-col h-screen w-full bg-gemini-background">
+      <div className="flex flex-col h-screen w-full bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50">
         <SettingsHeader />
 
-        <div className="flex flex-1 pt-24 overflow-hidden"> {/* Increased top padding to move content down */}
+        <div className="flex flex-1 pt-28 overflow-hidden"> {/* Increased top padding to move content down */}
           <SettingsSidebar tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} />
 
-          <div className="flex-1 overflow-y-auto px-4 pb-16 pt-4">
-            <div className="max-w-2xl mx-auto">
+          <div className="flex-1 overflow-y-auto px-6 pb-16 pt-4">
+            <div className="max-w-2xl mx-auto animate-in fade-in-50 duration-500 slide-in-from-bottom-5">
               {renderTabContent()}
             </div>
           </div>
