@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -11,7 +10,6 @@ import {
   Volume2, 
   Settings as SettingsIcon,
   Cpu,
-  SpeakerWave,
   Globe
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
@@ -62,11 +60,10 @@ const Settings = () => {
     });
   };
 
-  // Tab config with icons and labels
   const tabs = [
     { id: "general", label: "General", icon: <SettingsIcon className="h-5 w-5" /> },
     { id: "models", label: "Models", icon: <Cpu className="h-5 w-5" /> },
-    { id: "speech", label: "Speech", icon: <SpeakerWave className="h-5 w-5" /> },
+    { id: "speech", label: "Speech", icon: <Volume2 className="h-5 w-5" /> },
     { id: "integrations", label: "Integrations", icon: <Globe className="h-5 w-5" /> }
   ];
 
@@ -82,7 +79,6 @@ const Settings = () => {
               </p>
             </div>
             
-            {/* Memory Management Section */}
             <div className="space-y-2 p-4 rounded-lg border border-white/10 bg-white/5">
               <h3 className="text-md font-medium">Memory Management</h3>
               <p className="text-sm text-gray-400 mb-4">
@@ -119,7 +115,6 @@ const Settings = () => {
               </div>
             </div>
             
-            {/* Custom Commands Button */}
             <div className="space-y-2 p-4 rounded-lg border border-white/10 bg-white/5">
               <div className="flex justify-between items-center">
                 <div>
@@ -135,7 +130,6 @@ const Settings = () => {
               </div>
             </div>
             
-            {/* Conversation Memory Info */}
             <div className="space-y-2 p-4 rounded-lg border border-white/10 bg-white/5">
               <h3 className="text-md font-medium">Conversation Memory</h3>
               <p className="text-sm text-gray-400">
@@ -254,7 +248,6 @@ const Settings = () => {
         </div>
 
         <div className="flex flex-1 pt-16 overflow-hidden">
-          {/* Sidebar Navigation */}
           <div className="h-full">
             <Sidebar variant="floating" collapsible="icon" className="pt-2 h-full">
               <SidebarContent>
@@ -289,12 +282,10 @@ const Settings = () => {
             </Sidebar>
           </div>
 
-          {/* Main Content */}
           <div className="flex-1 overflow-y-auto px-4 pb-16 pt-4">
             <div className="max-w-2xl mx-auto">
               {renderTabContent()}
               
-              {/* Changelog Section */}
               {activeTab === "general" && (
                 <div className="space-y-2 p-4 rounded-lg border border-white/10 bg-white/5 mt-6">
                   <h3 className="text-md font-medium">Changelog</h3>
@@ -339,7 +330,6 @@ const Settings = () => {
           </div>
         </div>
 
-        {/* Memory Search Sheet */}
         <Sheet open={isMemorySearchOpen} onOpenChange={setIsMemorySearchOpen}>
           <SheetContent className="w-[400px] sm:w-[540px] p-4">
             <SheetHeader>
