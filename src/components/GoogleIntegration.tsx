@@ -1,66 +1,92 @@
 
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { Mail, Calendar, FolderOpen, Check, X } from "lucide-react";
+import { getMcpClient } from "@/services/mcpService";
 
-// Mock localStorage key to store the connection status (in a real app, you'd use OAuth tokens)
-const LOCAL_STORAGE_GOOGLE_SERVICES = "google-services-connected";
+// MCP server auth URL
+const MCP_SERVER_URL = "https://cloud-connect-mcp-server.onrender.com";
+const AUTH_INIT_URL = `${MCP_SERVER_URL}/auth/init/gmail`;
 
-interface GoogleServices {
+// Storage key for connection state
+const LOCAL_STORAGE_GMAIL_CONNECTED = "gmail-connected";
+
+interface ConnectionStatus {
   gmail: boolean;
   calendar: boolean;
   drive: boolean;
-  account?: string;
+  email?: string;
 }
 
 const GoogleIntegration: React.FC = () => {
-  const [connected, setConnected] = useState<GoogleServices>({
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
     gmail: false,
     calendar: false,
-    drive: false,
+    drive: false
   });
   const { toast } = useToast();
 
+  // Check for connection status on component mount
   useEffect(() => {
-    const savedServices = localStorage.getItem(LOCAL_STORAGE_GOOGLE_SERVICES);
-    if (savedServices) {
-      try {
-        setConnected(JSON.parse(savedServices));
-      } catch (error) {
-        console.error("Failed to parse saved Google services:", error);
+    const checkConnectionStatus = () => {
+      // Check if we have a stored connection status
+      const storedStatus = localStorage.getItem(LOCAL_STORAGE_GMAIL_CONNECTED);
+      if (storedStatus) {
+        try {
+          setConnectionStatus(JSON.parse(storedStatus));
+        } catch (error) {
+          console.error("Failed to parse stored connection status:", error);
+        }
       }
-    }
-  }, []);
 
-  const handleConnectGoogle = () => {
-    // In a real implementation, this would initiate the OAuth2 flow
-    // For this mock, we'll just simulate a successful connection
-    const newConnected = {
-      gmail: true,
-      calendar: true,
-      drive: true,
-      account: "user@gmail.com",
+      // Check for OAuth callback parameters in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const success = urlParams.get('auth_success');
+      const email = urlParams.get('email');
+      
+      if (success === 'true' && email) {
+        // Update connection status
+        const newStatus = {
+          gmail: true,
+          calendar: false, // We're only supporting Gmail for now
+          drive: false,
+          email: email
+        };
+        
+        setConnectionStatus(newStatus);
+        localStorage.setItem(LOCAL_STORAGE_GMAIL_CONNECTED, JSON.stringify(newStatus));
+        
+        // Show success toast
+        toast({
+          title: "Gmail Connected",
+          description: `Successfully connected Gmail for ${email}`,
+        });
+        
+        // Remove query parameters from URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
     };
-    
-    setConnected(newConnected);
-    localStorage.setItem(LOCAL_STORAGE_GOOGLE_SERVICES, JSON.stringify(newConnected));
-    
-    toast({
-      title: "Connected",
-      description: "Successfully connected to Google services",
-    });
+
+    checkConnectionStatus();
+  }, [toast]);
+
+  const handleConnectGmail = () => {
+    // Redirect to the MCP server's OAuth init endpoint
+    window.location.href = AUTH_INIT_URL;
   };
 
   const handleDisconnect = () => {
-    const newConnected = {
+    // In a real implementation, we would call an endpoint to revoke tokens
+    // For now, just clear the local storage
+    const newStatus = {
       gmail: false,
       calendar: false,
-      drive: false,
+      drive: false
     };
     
-    setConnected(newConnected);
-    localStorage.setItem(LOCAL_STORAGE_GOOGLE_SERVICES, JSON.stringify(newConnected));
+    setConnectionStatus(newStatus);
+    localStorage.setItem(LOCAL_STORAGE_GMAIL_CONNECTED, JSON.stringify(newStatus));
     
     toast({
       title: "Disconnected",
@@ -73,17 +99,17 @@ const GoogleIntegration: React.FC = () => {
       <div className="space-y-2">
         <h3 className="text-lg font-medium">Google Integration</h3>
         <p className="text-sm text-gray-400">
-          Connect your Google account to access Gmail, Calendar, and Drive
+          Connect your Google account to access Gmail through our MCP server
         </p>
       </div>
       
-      {connected.account ? (
+      {connectionStatus.email ? (
         <div className="space-y-4">
           <div className="bg-green-100/10 p-3 rounded-lg border border-green-200/20">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Check className="h-5 w-5 text-green-500" />
-                <span className="text-sm font-medium">Connected as {connected.account}</span>
+                <span className="text-sm font-medium">Connected as {connectionStatus.email}</span>
               </div>
               <Button 
                 variant="outline" 
@@ -111,16 +137,16 @@ const GoogleIntegration: React.FC = () => {
               <div className="flex items-center space-x-3 p-2 bg-white/5 rounded-lg">
                 <Calendar className="h-5 w-5 text-gemini-secondary" />
                 <span className="text-sm">Google Calendar</span>
-                <span className="ml-auto text-xs bg-green-100/20 text-green-500 px-2 py-1 rounded-full">
-                  Connected
+                <span className="ml-auto text-xs bg-gray-100/20 text-gray-500 px-2 py-1 rounded-full">
+                  Not Connected
                 </span>
               </div>
               
               <div className="flex items-center space-x-3 p-2 bg-white/5 rounded-lg">
                 <FolderOpen className="h-5 w-5 text-gemini-tertiary" />
                 <span className="text-sm">Google Drive</span>
-                <span className="ml-auto text-xs bg-green-100/20 text-green-500 px-2 py-1 rounded-full">
-                  Connected
+                <span className="ml-auto text-xs bg-gray-100/20 text-gray-500 px-2 py-1 rounded-full">
+                  Not Connected
                 </span>
               </div>
             </div>
@@ -129,21 +155,25 @@ const GoogleIntegration: React.FC = () => {
       ) : (
         <Button 
           className="w-full bg-gemini-primary hover:bg-gemini-secondary"
-          onClick={handleConnectGoogle}
+          onClick={handleConnectGmail}
         >
-          Connect Google Account
+          <Mail className="h-4 w-4 mr-2" />
+          Connect Gmail
         </Button>
       )}
       
       <div className="text-xs text-gray-400 mt-2">
         <p>
-          Connecting your Google account will allow the AI assistant to:
+          When you connect Gmail, our assistant will be able to:
         </p>
         <ul className="list-disc pl-5 mt-1 space-y-1">
-          <li>Read and compose emails (Gmail)</li>
-          <li>View and create calendar events (Calendar)</li>
-          <li>Access and manage files (Drive)</li>
+          <li>Read your emails when prompted</li>
+          <li>Send emails on your behalf when requested</li>
+          <li>Search and retrieve specific emails</li>
         </ul>
+        <p className="mt-2">
+          All communication happens securely through our MCP server.
+        </p>
       </div>
     </div>
   );

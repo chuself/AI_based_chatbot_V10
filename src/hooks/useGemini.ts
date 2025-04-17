@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useGeminiConfig } from "./useGeminiConfig";
 import { useChatHistory, ChatMessage } from "./useChatHistory";
 import { callGeminiApi, callOpenRouterApi, callGroqApi, prepareMessageHistory } from "@/services/aiProviders";
+import getMcpClient from "@/services/mcpService";
 
 // Export types with the 'export type' syntax for isolatedModules compatibility
 export type { ChatMessage } from "./useChatHistory";
@@ -11,8 +12,10 @@ export type { ModelConfig } from "./useGeminiConfig";
 export const useGemini = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mcpResult, setMcpResult] = useState<any | null>(null);
   const { chatHistory, setChatHistory, clearChatHistory } = useChatHistory();
   const { availableModels, selectedModel, modelConfig, setSelectedModel } = useGeminiConfig();
+  const mcpClient = getMcpClient();
 
   /**
    * Send a message to the selected AI model
@@ -25,34 +28,42 @@ export const useGemini = () => {
 
     setIsLoading(true);
     setError(null);
+    setMcpResult(null);
 
     try {
       // Create message history with system message first if provided
       const messageHistory = [...chatHistory];
       
-      // Always add custom instructions at the beginning of the conversation
-      // This ensures the model receives the instructions first
+      // Add MCP server information to the system message
+      const mcpInstructions = `You have access to an MCP server at https://cloud-connect-mcp-server.onrender.com/.
+When you need to use Gmail, Calendar, or Drive tools, emit exactly:
+{ "mcp_call": { "tool": "<toolName>", "method": "<methodName>", "params": { ... }, "id": 1 } }`;
+      
+      // Combine user instructions with MCP instructions
+      let systemInstructions = mcpInstructions;
       if (customInstructions && customInstructions.trim()) {
-        // Only add system message if it doesn't exist or is different
-        const existingSystemMessage = messageHistory.find(msg => 
-          msg.role === "system" && msg.content === customInstructions
-        );
+        systemInstructions = `${customInstructions}\n\n${mcpInstructions}`;
+      }
+      
+      // Only add system message if it doesn't exist or is different
+      const existingSystemMessage = messageHistory.find(msg => 
+        msg.role === "system" && msg.content === systemInstructions
+      );
+      
+      if (!existingSystemMessage) {
+        // Remove any previous system messages to avoid conflicting instructions
+        const filteredHistory = messageHistory.filter(msg => msg.role !== "system");
         
-        if (!existingSystemMessage) {
-          // Remove any previous system messages to avoid conflicting instructions
-          const filteredHistory = messageHistory.filter(msg => msg.role !== "system");
-          
-          // Add the new system message at the beginning
-          filteredHistory.unshift({
-            role: "system",
-            content: customInstructions,
-            timestamp: Date.now() - 10000, // Add slightly before user message
-          });
-          
-          // Update the history
-          messageHistory.length = 0;
-          messageHistory.push(...filteredHistory);
-        }
+        // Add the new system message at the beginning
+        filteredHistory.unshift({
+          role: "system",
+          content: systemInstructions,
+          timestamp: Date.now() - 10000, // Add slightly before user message
+        });
+        
+        // Update the history
+        messageHistory.length = 0;
+        messageHistory.push(...filteredHistory);
       }
       
       // Add user message to chat history
@@ -85,7 +96,47 @@ export const useGemini = () => {
           throw new Error(`Unsupported provider: ${modelConfig.provider}`);
       }
       
-      // Add AI response to chat history
+      // Check if the response contains an MCP call
+      if (mcpClient.hasMcpCall(responseText)) {
+        const mcpCall = mcpClient.extractMcpCall(responseText);
+        if (mcpCall) {
+          // Add AI message with MCP call request
+          const aiRequestMessage: ChatMessage = {
+            role: "assistant",
+            content: `I'll help you with that using ${mcpCall.tool}.`,
+            timestamp: Date.now()
+          };
+          
+          setChatHistory(prevHistory => [...prevHistory, aiRequestMessage]);
+          
+          // Process the MCP call
+          const mcpResponse = await mcpClient.processMcpCall(mcpCall);
+          setMcpResult(mcpResponse);
+          
+          // Add MCP result message
+          let resultMessage = "";
+          
+          if (mcpResponse.error) {
+            resultMessage = `Error: ${mcpResponse.error.message}`;
+          } else {
+            resultMessage = JSON.stringify(mcpResponse.result, null, 2);
+          }
+          
+          // Add a new AI message with the result
+          const aiResultMessage: ChatMessage = {
+            role: "assistant",
+            content: resultMessage,
+            timestamp: Date.now() + 1000,
+            isMcpResult: true
+          };
+          
+          setChatHistory(prevHistory => [...prevHistory, aiResultMessage]);
+          
+          return resultMessage;
+        }
+      }
+      
+      // Add AI response to chat history for normal responses
       const aiMessage: ChatMessage = {
         role: "assistant",
         content: responseText,
@@ -110,6 +161,7 @@ export const useGemini = () => {
     sendMessage,
     isLoading,
     error,
+    mcpResult,
     availableModels,
     selectedModel,
     setSelectedModel,
