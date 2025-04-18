@@ -2,8 +2,14 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, Calendar, FolderOpen, Check, X, Zap, Activity } from "lucide-react";
+import { Mail, Calendar, FolderOpen, Check, X, Zap, Activity, Info } from "lucide-react";
 import { getMcpClient } from "@/services/mcpService";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { 
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger 
+} from "@/components/ui/tooltip";
 
 // MCP server auth URL
 const MCP_SERVER_URL = "https://cloud-connect-mcp-server.onrender.com";
@@ -28,10 +34,12 @@ const GoogleIntegration: React.FC = () => {
   const [activeServices, setActiveServices] = useState<Record<string, boolean>>({
     gmail: false,
     calendar: false,
-    drive: false
+    drive: false,
+    search: false
   });
   const { toast } = useToast();
   const mcpClient = getMcpClient();
+  const isMobile = useIsMobile();
 
   // Check for connection status on component mount
   useEffect(() => {
@@ -55,7 +63,7 @@ const GoogleIntegration: React.FC = () => {
         // Update connection status
         const newStatus = {
           gmail: true,
-          calendar: false, // We're only supporting Gmail for now
+          calendar: false,
           drive: false,
           email: email
         };
@@ -84,7 +92,8 @@ const GoogleIntegration: React.FC = () => {
       setActiveServices({
         gmail: connections.gmail || false,
         calendar: connections.calendar || false,
-        drive: connections.drive || false
+        drive: connections.drive || false,
+        search: connections.search || false
       });
     }, 1000);
     
@@ -123,16 +132,30 @@ const GoogleIntegration: React.FC = () => {
   return (
     <div className="space-y-4 p-4 rounded-lg border border-white/10 bg-white/5">
       <div className="space-y-2">
-        <h3 className="text-lg font-medium">Google Integration</h3>
+        <div className="flex items-center">
+          <h3 className="text-lg font-medium">Google Integration</h3>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="ml-2 cursor-help">
+                <Info className="h-4 w-4 text-gray-400" />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="max-w-xs text-xs">
+                MCP (Model Context Protocol) allows the AI to interact with external services
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
         <p className="text-sm text-gray-400">
-          Connect your Google account to access Gmail through our MCP server
+          Connect your Google account to access Gmail, Calendar and Drive
         </p>
       </div>
       
       {connectionStatus.email ? (
         <div className="space-y-4">
           <div className="bg-green-100/10 p-3 rounded-lg border border-green-200/20">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center space-x-2">
                 <Check className="h-5 w-5 text-green-500" />
                 <span className="text-sm font-medium">Connected as {connectionStatus.email}</span>
@@ -150,8 +173,11 @@ const GoogleIntegration: React.FC = () => {
           </div>
           
           <div className="space-y-2">
-            <h4 className="text-sm font-medium">Connected Services</h4>
-            <div className="grid grid-cols-1 gap-2">
+            <h4 className="text-sm font-medium flex items-center">
+              <span>Connected Services</span>
+              <span className="ml-2 text-xs bg-blue-500/20 text-blue-500 px-2 py-0.5 rounded-full">MCP Enabled</span>
+            </h4>
+            <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'} gap-2`}>
               <div className="flex items-center space-x-3 p-2 bg-white/5 rounded-lg">
                 <Mail className="h-5 w-5 text-gemini-primary" />
                 <span className="text-sm">Gmail</span>
@@ -196,6 +222,22 @@ const GoogleIntegration: React.FC = () => {
                   )}
                   <span className="text-xs bg-gray-100/20 text-gray-500 px-2 py-1 rounded-full">
                     Not Connected
+                  </span>
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-3 p-2 bg-white/5 rounded-lg">
+                <Search className="h-5 w-5 text-gray-400" />
+                <span className="text-sm">Search</span>
+                <div className="flex items-center ml-auto">
+                  {activeServices.search && (
+                    <div className="flex items-center mr-2 px-1.5 py-0.5 bg-green-500/20 rounded text-xs text-green-500">
+                      <Zap className="h-3 w-3 mr-1" />
+                      Active
+                    </div>
+                  )}
+                  <span className="text-xs bg-gray-100/20 text-gray-500 px-2 py-1 rounded-full">
+                    MCP Ready
                   </span>
                 </div>
               </div>

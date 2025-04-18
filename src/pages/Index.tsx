@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { App } from '@capacitor/app';
 import { checkGoogleConnection, getEmails, getCalendarEvents, getDriveFiles } from "@/utils/googleService";
 import { MemoryService } from "@/services/memoryService";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const STORAGE_KEY_COMMANDS = "custom-ai-commands";
 const STORAGE_KEY_SHOW_CHANGELOG = "show-changelog-1.5.0"; // Update with version
@@ -30,6 +31,7 @@ const Index = () => {
   const [googleConnected, setGoogleConnected] = useState(false);
   const [customCommands, setCustomCommands] = useState<Command[]>([]);
   const [showChangelog, setShowChangelog] = useState(false);
+  const isMobile = useIsMobile();
   
   useEffect(() => {
     const hasSeenChangelog = localStorage.getItem(STORAGE_KEY_SHOW_CHANGELOG);
@@ -342,7 +344,7 @@ const Index = () => {
       
       <MCPStatusIndicator />
       
-      <div className="fixed bottom-20 right-4 z-10 opacity-60 hover:opacity-100 transition-opacity">
+      <div className={`fixed ${isMobile ? 'bottom-24 left-4' : 'bottom-20 right-4'} z-10 opacity-60 hover:opacity-100 transition-opacity`}>
         <a 
           href="https://lovable.ai" 
           target="_blank" 

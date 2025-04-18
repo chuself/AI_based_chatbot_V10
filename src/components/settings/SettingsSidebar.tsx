@@ -2,6 +2,7 @@
 import React from "react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Sidebar, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type Tab = {
   id: string;
@@ -20,14 +21,16 @@ const SettingsSidebar = ({
   activeTab,
   setActiveTab
 }: SettingsSidebarProps) => {
+  const isMobile = useIsMobile();
+
   return (
     <div className="h-full">
       <Sidebar 
         variant="floating" 
-        collapsible="icon" 
-        className="pt-2 h-full px-0 mx-[2px] my-[65px]"
+        collapsible={isMobile ? "offcanvas" : "icon"} 
+        className={`${isMobile ? 'pt-1' : 'pt-2'} h-full px-0 mx-[2px] ${isMobile ? 'my-[20px]' : 'my-[65px]'}`}
       >
-        <SidebarContent className="py-[57px]">
+        <SidebarContent className={isMobile ? "py-[25px]" : "py-[57px]"}>
           <SidebarMenu>
             {tabs.map(tab => (
               <SidebarMenuItem key={tab.id}>
