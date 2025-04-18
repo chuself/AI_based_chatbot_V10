@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, Calendar, FolderOpen, Check, X, Zap, Activity, Info } from "lucide-react";
+import { Mail, Calendar, FolderOpen, Check, X, Zap, Activity, Info, Search } from "lucide-react";
 import { getMcpClient } from "@/services/mcpService";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { 
