@@ -28,6 +28,22 @@ const Settings = () => {
     { id: "integrations", label: "Integrations", icon: <Globe className="h-5 w-5" /> }
   ];
 
+  // Function to render the content based on the active tab
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case "general":
+        return <GeneralSettings />;
+      case "models":
+        return <ModelSettingsTab />;
+      case "speech":
+        return <SpeechSettingsTab />;
+      case "integrations":
+        return <IntegrationsTab />;
+      default:
+        return <GeneralSettings />;
+    }
+  };
+
   return (
     <SidebarProvider>
       <div className="flex flex-col h-screen w-full bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50">
