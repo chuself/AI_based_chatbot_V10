@@ -1,21 +1,23 @@
+
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Mail, Calendar, FolderOpen, Check, X, Zap, Activity, Info, Search, Settings } from "lucide-react";
-import { getMcpClient } from "@/services/mcpService";
+import getMcpClient from "@/services/mcpService";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { 
   Tooltip,
   TooltipContent,
   TooltipTrigger 
 } from "@/components/ui/tooltip";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 // MCP server auth URL
 const MCP_SERVER_URL = "https://cloud-connect-mcp-server.onrender.com";
 const AUTH_INIT_URL = `${MCP_SERVER_URL}/auth/init/gmail`;
+const DEFAULT_SEARCH_SERVER = "https://duckduckgo-mcp-server.onrender.com";
 
 // Storage key for connection state
 const LOCAL_STORAGE_GMAIL_CONNECTED = "gmail-connected";
@@ -88,6 +90,12 @@ const GoogleIntegration: React.FC = () => {
     };
 
     checkConnectionStatus();
+    
+    // Initialize search server URL if not set
+    const searchServerUrl = localStorage.getItem('mcp-server-search');
+    if (!searchServerUrl) {
+      localStorage.setItem('mcp-server-search', DEFAULT_SEARCH_SERVER);
+    }
   }, [toast]);
   
   // Regularly check for active MCP connections
@@ -130,13 +138,22 @@ const GoogleIntegration: React.FC = () => {
 
   const handleConfigureService = (service: string) => {
     setSelectedService(service);
+    
+    // Set initial URL value based on current configuration
+    if (service === 'search') {
+      const currentUrl = mcpClient.getServerUrl(service);
+      setServerUrl(currentUrl);
+    } else {
+      setServerUrl("");
+    }
+    
     setIsConfiguring(true);
   };
 
   const handleSaveServiceConfig = () => {
     if (!selectedService || !serverUrl) return;
     
-    localStorage.setItem(`mcp-server-${selectedService}`, serverUrl);
+    mcpClient.updateServerUrl(selectedService, serverUrl);
     toast({
       title: "Server Configuration Saved",
       description: `Updated ${selectedService} server configuration`,
@@ -147,10 +164,18 @@ const GoogleIntegration: React.FC = () => {
     setServerUrl("");
   };
 
-  const getActivityIcon = (isActive: boolean) => {
-    return isActive ? (
-      <Activity className="h-3 w-3 text-green-500 animate-pulse" />
-    ) : null;
+  const handleResetToDefault = () => {
+    if (!selectedService) return;
+    
+    if (selectedService === 'search') {
+      mcpClient.updateServerUrl(selectedService, DEFAULT_SEARCH_SERVER);
+      setServerUrl(DEFAULT_SEARCH_SERVER);
+      
+      toast({
+        title: "Default Configuration Restored",
+        description: `Reset ${selectedService} server to default`,
+      });
+    }
   };
 
   return (
@@ -300,6 +325,12 @@ const GoogleIntegration: React.FC = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Configure MCP Server</DialogTitle>
+            <DialogDescription>
+              {selectedService === 'search' ? 
+                "Set the URL for the DuckDuckGo search server" :
+                `Configure ${selectedService} server settings`
+              }
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -307,11 +338,29 @@ const GoogleIntegration: React.FC = () => {
               <Input
                 value={serverUrl}
                 onChange={(e) => setServerUrl(e.target.value)}
-                placeholder="Enter MCP server URL"
+                placeholder={selectedService === 'search' ? 
+                  "https://duckduckgo-mcp-server.onrender.com" : 
+                  "Enter MCP server URL"
+                }
               />
+              <p className="text-xs text-gray-500">
+                {selectedService === 'search' ? 
+                  "Default: https://duckduckgo-mcp-server.onrender.com" : 
+                  "Enter the complete URL including http:// or https://"
+                }
+              </p>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            {selectedService === 'search' && (
+              <Button 
+                variant="outline" 
+                onClick={handleResetToDefault}
+                className="sm:mr-auto"
+              >
+                Reset to Default
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setIsConfiguring(false)}>
               Cancel
             </Button>

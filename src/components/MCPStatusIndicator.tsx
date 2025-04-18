@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from "react";
 import { Cloud, Zap, Mail, Calendar, FolderOpen, Search, ArrowUpRight } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import getMcpClient from "@/services/mcpService";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -15,6 +16,9 @@ const MCPStatusIndicator: React.FC = () => {
   });
   const [isAnyActive, setIsAnyActive] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [serverUrls, setServerUrls] = useState<Record<string, string>>({
+    search: ""
+  });
   const isMobile = useIsMobile();
   
   useEffect(() => {
@@ -22,6 +26,11 @@ const MCPStatusIndicator: React.FC = () => {
       const connections = mcpClient.getActiveConnections();
       setActiveConnections(connections);
       setIsAnyActive(mcpClient.isAnyToolActive());
+      
+      // Update server URLs
+      setServerUrls({
+        search: mcpClient.getServerUrl('search')
+      });
     }, 1000);
     
     return () => clearInterval(interval);
@@ -68,6 +77,9 @@ const MCPStatusIndicator: React.FC = () => {
               <Cloud className="h-5 w-5 mr-2" />
               MCP Connection Status
             </SheetTitle>
+            <SheetDescription>
+              Current status of external services
+            </SheetDescription>
           </SheetHeader>
           
           <div className="mt-6 space-y-4">
@@ -84,6 +96,11 @@ const MCPStatusIndicator: React.FC = () => {
                       <p className="text-xs text-gray-500">
                         {isActive ? 'Active connection' : 'Not currently active'}
                       </p>
+                      {tool === 'search' && (
+                        <p className="text-xs text-gray-400 mt-1 truncate max-w-[180px]">
+                          Server: {serverUrls.search || 'Not configured'}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className={`h-3 w-3 rounded-full ${isActive ? 'bg-green-500' : 'bg-gray-300'}`} />

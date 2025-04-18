@@ -1,3 +1,4 @@
+
 /**
  * MCP Service - Handles interactions with the Model Context Protocol server
  * 
@@ -79,6 +80,7 @@ export const getMcpClient = () => {
     try {
       // Get the appropriate server URL based on the tool and stored configuration
       const serverUrl = getServerUrl(tool);
+      console.log(`Calling MCP server for ${tool} at ${serverUrl}`);
       
       const response = await fetch(`${serverUrl}/tools/${tool}/${method}`, {
         method: "POST",
@@ -136,6 +138,7 @@ export const getMcpClient = () => {
    */
   const processMcpCall = async (mcpCall: MCPCall): Promise<MCPResponse> => {
     try {
+      console.log("Processing MCP call:", mcpCall);
       return await callMcp(
         mcpCall.tool,
         mcpCall.method,
@@ -214,6 +217,7 @@ export const getMcpClient = () => {
   };
 
   const updateServerUrl = (tool: string, url: string) => {
+    console.log(`Updating ${tool} server URL to ${url}`);
     if (tool === 'search') {
       localStorage.setItem('mcp-server-search', url);
     }
@@ -221,7 +225,8 @@ export const getMcpClient = () => {
 
   const getServerUrl = (tool: string) => {
     if (tool === 'search') {
-      return localStorage.getItem('mcp-server-search') || SEARCH_MCP_SERVER_URL;
+      const customUrl = localStorage.getItem('mcp-server-search');
+      return customUrl || SEARCH_MCP_SERVER_URL;
     }
     return MCP_SERVER_URL;
   };

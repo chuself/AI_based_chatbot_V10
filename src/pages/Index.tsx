@@ -226,6 +226,12 @@ const Index = () => {
       return "drive";
     }
     
+    if (lowerText.includes("search") || lowerText.includes("find information") || 
+        lowerText.includes("look up") || lowerText.includes("news") || 
+        lowerText.includes("what is") || lowerText.includes("tell me about")) {
+      return "search";
+    }
+    
     return null;
   };
   
@@ -259,6 +265,27 @@ const Index = () => {
       ).join('---\n\n')}`;
     } catch (e) {
       return `Error: ${e instanceof Error ? e.message : 'Could not access your files'}. Please connect your Google Drive in Settings.`;
+    }
+  };
+  
+  const handleSearchRequest = async (query: string) => {
+    const mcpClient = getMcpClient();
+    try {
+      const mcpCall = {
+        tool: "search",
+        method: "search",
+        params: { query },
+        id: 1
+      };
+      
+      const response = await mcpClient.processMcpCall(mcpCall);
+      if (response.error) {
+        return `Error performing search: ${response.error.message}. Please check your search server configuration in Settings > Integrations.`;
+      }
+      
+      return `Search results for "${query}":\n\n${JSON.stringify(response.result, null, 2)}`;
+    } catch (e) {
+      return `Error: ${e instanceof Error ? e.message : 'Could not perform search'}. Please check your search server configuration in Settings > Integrations.`;
     }
   };
   
@@ -303,6 +330,9 @@ const Index = () => {
             break;
           case "drive":
             response = await handleDriveRequest(text);
+            break;
+          case "search":
+            response = await handleSearchRequest(text);
             break;
           default:
             response = await sendMessage(text, commandInstructions);
