@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, Calendar, FolderOpen, Check, X } from "lucide-react";
+import { Mail, Calendar, FolderOpen, Check, X, Zap, Activity } from "lucide-react";
 import { getMcpClient } from "@/services/mcpService";
 
 // MCP server auth URL
@@ -25,7 +25,13 @@ const GoogleIntegration: React.FC = () => {
     calendar: false,
     drive: false
   });
+  const [activeServices, setActiveServices] = useState<Record<string, boolean>>({
+    gmail: false,
+    calendar: false,
+    drive: false
+  });
   const { toast } = useToast();
+  const mcpClient = getMcpClient();
 
   // Check for connection status on component mount
   useEffect(() => {
@@ -70,6 +76,20 @@ const GoogleIntegration: React.FC = () => {
 
     checkConnectionStatus();
   }, [toast]);
+  
+  // Regularly check for active MCP connections
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const connections = mcpClient.getActiveConnections();
+      setActiveServices({
+        gmail: connections.gmail || false,
+        calendar: connections.calendar || false,
+        drive: connections.drive || false
+      });
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   const handleConnectGmail = () => {
     // Redirect to the MCP server's OAuth init endpoint
@@ -92,6 +112,12 @@ const GoogleIntegration: React.FC = () => {
       title: "Disconnected",
       description: "Google services have been disconnected",
     });
+  };
+
+  const getActivityIcon = (isActive: boolean) => {
+    return isActive ? (
+      <Activity className="h-3 w-3 text-green-500 animate-pulse" />
+    ) : null;
   };
 
   return (
@@ -129,25 +155,49 @@ const GoogleIntegration: React.FC = () => {
               <div className="flex items-center space-x-3 p-2 bg-white/5 rounded-lg">
                 <Mail className="h-5 w-5 text-gemini-primary" />
                 <span className="text-sm">Gmail</span>
-                <span className="ml-auto text-xs bg-green-100/20 text-green-500 px-2 py-1 rounded-full">
-                  Connected
-                </span>
+                <div className="flex items-center ml-auto">
+                  {activeServices.gmail && (
+                    <div className="flex items-center mr-2 px-1.5 py-0.5 bg-green-500/20 rounded text-xs text-green-500">
+                      <Zap className="h-3 w-3 mr-1" />
+                      Active
+                    </div>
+                  )}
+                  <span className="text-xs bg-green-100/20 text-green-500 px-2 py-1 rounded-full">
+                    Connected
+                  </span>
+                </div>
               </div>
               
               <div className="flex items-center space-x-3 p-2 bg-white/5 rounded-lg">
                 <Calendar className="h-5 w-5 text-gemini-secondary" />
                 <span className="text-sm">Google Calendar</span>
-                <span className="ml-auto text-xs bg-gray-100/20 text-gray-500 px-2 py-1 rounded-full">
-                  Not Connected
-                </span>
+                <div className="flex items-center ml-auto">
+                  {activeServices.calendar && (
+                    <div className="flex items-center mr-2 px-1.5 py-0.5 bg-green-500/20 rounded text-xs text-green-500">
+                      <Zap className="h-3 w-3 mr-1" />
+                      Active
+                    </div>
+                  )}
+                  <span className="text-xs bg-gray-100/20 text-gray-500 px-2 py-1 rounded-full">
+                    Not Connected
+                  </span>
+                </div>
               </div>
               
               <div className="flex items-center space-x-3 p-2 bg-white/5 rounded-lg">
                 <FolderOpen className="h-5 w-5 text-gemini-tertiary" />
                 <span className="text-sm">Google Drive</span>
-                <span className="ml-auto text-xs bg-gray-100/20 text-gray-500 px-2 py-1 rounded-full">
-                  Not Connected
-                </span>
+                <div className="flex items-center ml-auto">
+                  {activeServices.drive && (
+                    <div className="flex items-center mr-2 px-1.5 py-0.5 bg-green-500/20 rounded text-xs text-green-500">
+                      <Zap className="h-3 w-3 mr-1" />
+                      Active
+                    </div>
+                  )}
+                  <span className="text-xs bg-gray-100/20 text-gray-500 px-2 py-1 rounded-full">
+                    Not Connected
+                  </span>
+                </div>
               </div>
             </div>
           </div>

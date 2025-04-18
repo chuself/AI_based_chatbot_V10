@@ -3,6 +3,7 @@ import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
 import MessageInput from "@/components/MessageInput";
 import Changelog from "@/components/Changelog";
+import MCPStatusIndicator from "@/components/MCPStatusIndicator";
 import { Message } from "@/components/MessageItem";
 import { useGemini } from "@/hooks/useGemini";
 import { useSpeech } from "@/hooks/useSpeech";
@@ -338,6 +339,8 @@ const Index = () => {
       <div className="fixed bottom-0 left-0 right-0 w-full">
         <MessageInput onSendMessage={handleSendMessage} isLoading={isLoading} />
       </div>
+      
+      <MCPStatusIndicator />
       
       <div className="fixed bottom-20 right-4 z-10 opacity-60 hover:opacity-100 transition-opacity">
         <a 

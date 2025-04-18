@@ -79,10 +79,19 @@ export const useGemini = () => {
       // Create message history with system message first if provided
       const messageHistory = [...chatHistory];
       
-      // Add MCP server information to the system message
+      // Add MCP server information to the system message with detailed instructions
       const mcpInstructions = `You have access to an MCP server at https://cloud-connect-mcp-server.onrender.com/.
-When you need to use Gmail, Calendar, or Drive tools, emit exactly:
-{ "mcp_call": { "tool": "<toolName>", "method": "<methodName>", "params": { ... }, "id": 1 } }`;
+When you need to use Gmail, Calendar, Drive, or Search tools, emit exactly:
+{ "mcp_call": { "tool": "<toolName>", "method": "<methodName>", "params": { ... }, "id": 1 } }
+
+Available tools:
+- gmail: For reading and sending emails
+- calendar: For managing calendar events
+- drive: For file management
+- search: For web search
+
+Example of MCP call for Gmail:
+{ "mcp_call": { "tool": "gmail", "method": "listMessages", "params": { "maxResults": 5 }, "id": 1 } }`;
       
       // Check if the message might be referencing previous conversations
       const mightReferenceMemory = detectReferenceToMemory(message);
@@ -167,7 +176,7 @@ When you need to use Gmail, Calendar, or Drive tools, emit exactly:
           
           setChatHistory(prevHistory => [...prevHistory, aiRequestMessage]);
           
-          // Process the MCP call
+          // Process the MCP call - this will trigger the active connection indicators
           const mcpResponse = await mcpClient.processMcpCall(mcpCall);
           setMcpResult(mcpResponse);
           

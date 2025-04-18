@@ -1,4 +1,3 @@
-
 /**
  * MCP Service - Handles interactions with the Model Context Protocol server
  * 
@@ -8,6 +7,21 @@
 
 // MCP Server base URL
 const MCP_SERVER_URL = "https://cloud-connect-mcp-server.onrender.com";
+
+// Track active connections
+let activeConnections: Record<string, boolean> = {
+  gmail: false,
+  calendar: false,
+  drive: false,
+  search: false
+};
+
+let lastConnectionAttempt: Record<string, number> = {
+  gmail: 0,
+  calendar: 0,
+  drive: 0,
+  search: 0
+};
 
 export interface MCPCall {
   tool: string;
@@ -56,6 +70,11 @@ export const getMcpClient = () => {
       };
     }
 
+    // Update last connection attempt time
+    lastConnectionAttempt[tool] = Date.now();
+    // Set active connection status to true while making the call
+    activeConnections[tool] = true;
+
     try {
       const response = await fetch(`${MCP_SERVER_URL}/tools/${tool}/${method}`, {
         method: "POST",
@@ -67,6 +86,8 @@ export const getMcpClient = () => {
       });
 
       if (!response.ok) {
+        activeConnections[tool] = false; // Connection failed
+        
         if (response.status === 401) {
           return {
             error: {
@@ -86,8 +107,16 @@ export const getMcpClient = () => {
       }
 
       const data = await response.json();
+      // Successfully got data, keep active status for 10 seconds
+      setTimeout(() => {
+        activeConnections[tool] = false;
+      }, 10000);
+      
       return { result: data };
     } catch (error) {
+      // Connection failed
+      activeConnections[tool] = false;
+      
       console.error("MCP call failed:", error);
       return {
         error: {
@@ -148,12 +177,47 @@ export const getMcpClient = () => {
     }
   };
 
+  /**
+   * Get the current active connection status
+   */
+  const getActiveConnections = () => {
+    return { ...activeConnections };
+  };
+
+  /**
+   * Check if any tool is actively connecting
+   */
+  const isAnyToolActive = () => {
+    return Object.values(activeConnections).some(status => status === true);
+  };
+
+  /**
+   * Get the time since last connection attempt
+   */
+  const getTimeSinceLastConnection = () => {
+    const now = Date.now();
+    const result: Record<string, number> = {};
+    
+    for (const tool in lastConnectionAttempt) {
+      if (lastConnectionAttempt[tool] > 0) {
+        result[tool] = now - lastConnectionAttempt[tool];
+      } else {
+        result[tool] = -1; // Never connected
+      }
+    }
+    
+    return result;
+  };
+
   return {
     callMcp,
     processMcpCall,
     hasMcpCall,
     extractMcpCall,
-    isGmailConnected
+    isGmailConnected,
+    getActiveConnections,
+    isAnyToolActive,
+    getTimeSinceLastConnection
   };
 };
 
