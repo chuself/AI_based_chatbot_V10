@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, Calendar, FolderOpen, Check, X, Zap, Activity, Info, Search } from "lucide-react";
+import { Mail, Calendar, FolderOpen, Check, X, Zap, Activity, Info, Search, Settings } from "lucide-react";
 import { getMcpClient } from "@/services/mcpService";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { 
@@ -9,6 +9,9 @@ import {
   TooltipContent,
   TooltipTrigger 
 } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 // MCP server auth URL
 const MCP_SERVER_URL = "https://cloud-connect-mcp-server.onrender.com";
@@ -36,6 +39,9 @@ const GoogleIntegration: React.FC = () => {
     drive: false,
     search: false
   });
+  const [selectedService, setSelectedService] = useState<string | null>(null);
+  const [serverUrl, setServerUrl] = useState<string>("");
+  const [isConfiguring, setIsConfiguring] = useState(false);
   const { toast } = useToast();
   const mcpClient = getMcpClient();
   const isMobile = useIsMobile();
@@ -122,6 +128,25 @@ const GoogleIntegration: React.FC = () => {
     });
   };
 
+  const handleConfigureService = (service: string) => {
+    setSelectedService(service);
+    setIsConfiguring(true);
+  };
+
+  const handleSaveServiceConfig = () => {
+    if (!selectedService || !serverUrl) return;
+    
+    localStorage.setItem(`mcp-server-${selectedService}`, serverUrl);
+    toast({
+      title: "Server Configuration Saved",
+      description: `Updated ${selectedService} server configuration`,
+    });
+    
+    setIsConfiguring(false);
+    setSelectedService(null);
+    setServerUrl("");
+  };
+
   const getActivityIcon = (isActive: boolean) => {
     return isActive ? (
       <Activity className="h-3 w-3 text-green-500 animate-pulse" />
@@ -203,9 +228,15 @@ const GoogleIntegration: React.FC = () => {
                       Active
                     </div>
                   )}
-                  <span className="text-xs bg-gray-100/20 text-gray-500 px-2 py-1 rounded-full">
-                    Not Connected
-                  </span>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => handleConfigureService('calendar')}
+                    className="text-xs px-2 py-1"
+                  >
+                    <Settings className="h-3 w-3 mr-1" />
+                    Configure
+                  </Button>
                 </div>
               </div>
               
@@ -219,9 +250,15 @@ const GoogleIntegration: React.FC = () => {
                       Active
                     </div>
                   )}
-                  <span className="text-xs bg-gray-100/20 text-gray-500 px-2 py-1 rounded-full">
-                    Not Connected
-                  </span>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => handleConfigureService('drive')}
+                    className="text-xs px-2 py-1"
+                  >
+                    <Settings className="h-3 w-3 mr-1" />
+                    Configure
+                  </Button>
                 </div>
               </div>
               
@@ -235,9 +272,15 @@ const GoogleIntegration: React.FC = () => {
                       Active
                     </div>
                   )}
-                  <span className="text-xs bg-gray-100/20 text-gray-500 px-2 py-1 rounded-full">
-                    MCP Ready
-                  </span>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => handleConfigureService('search')}
+                    className="text-xs px-2 py-1"
+                  >
+                    <Settings className="h-3 w-3 mr-1" />
+                    Configure
+                  </Button>
                 </div>
               </div>
             </div>
@@ -252,6 +295,32 @@ const GoogleIntegration: React.FC = () => {
           Connect Gmail
         </Button>
       )}
+      
+      <Dialog open={isConfiguring} onOpenChange={setIsConfiguring}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Configure MCP Server</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Server URL</Label>
+              <Input
+                value={serverUrl}
+                onChange={(e) => setServerUrl(e.target.value)}
+                placeholder="Enter MCP server URL"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsConfiguring(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveServiceConfig}>
+              Save Configuration
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       
       <div className="text-xs text-gray-400 mt-2">
         <p>

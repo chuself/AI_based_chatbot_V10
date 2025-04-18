@@ -5,8 +5,9 @@
  * to avoid dependency issues.
  */
 
-// MCP Server base URL
+// MCP Server base URLs
 const MCP_SERVER_URL = "https://cloud-connect-mcp-server.onrender.com";
+const SEARCH_MCP_SERVER_URL = "https://duckduckgo-mcp-server.onrender.com";
 
 // Track active connections
 let activeConnections: Record<string, boolean> = {
@@ -76,13 +77,16 @@ export const getMcpClient = () => {
     activeConnections[tool] = true;
 
     try {
-      const response = await fetch(`${MCP_SERVER_URL}/tools/${tool}/${method}`, {
+      // Choose the appropriate server URL based on the tool
+      const serverUrl = tool === 'search' ? SEARCH_MCP_SERVER_URL : MCP_SERVER_URL;
+      
+      const response = await fetch(`${serverUrl}/tools/${tool}/${method}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(params),
-        credentials: "include" // Sends cookies with the request
+        credentials: "include"
       });
 
       if (!response.ok) {
