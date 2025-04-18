@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Cloud, Zap, Mail, Calendar, FolderOpen, Search, ArrowUpRight } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -19,7 +18,6 @@ const MCPStatusIndicator: React.FC = () => {
   const isMobile = useIsMobile();
   
   useEffect(() => {
-    // Check MCP connection status every second
     const interval = setInterval(() => {
       const connections = mcpClient.getActiveConnections();
       setActiveConnections(connections);
@@ -39,13 +37,7 @@ const MCPStatusIndicator: React.FC = () => {
     }
   };
   
-  // Position differently based on mobile/desktop
-  const positionClass = isMobile 
-    ? "fixed bottom-24 right-4 z-10" 
-    : "fixed bottom-20 left-4 z-10";
-  
-  // Don't hide the indicator anymore - always show it
-  // so users know the status of MCP tools
+  const positionClass = "absolute top-2 right-2 z-10";
   
   return (
     <>
@@ -61,10 +53,9 @@ const MCPStatusIndicator: React.FC = () => {
               } transition-all duration-300`}
             >
               <Zap className="h-5 w-5 text-white" />
-              {isMobile && <span className="sr-only">MCP Status</span>}
             </button>
           </TooltipTrigger>
-          <TooltipContent side={isMobile ? "left" : "right"}>
+          <TooltipContent side="left">
             <p>MCP Connection Status</p>
           </TooltipContent>
         </Tooltip>

@@ -77,8 +77,8 @@ export const getMcpClient = () => {
     activeConnections[tool] = true;
 
     try {
-      // Choose the appropriate server URL based on the tool
-      const serverUrl = tool === 'search' ? SEARCH_MCP_SERVER_URL : MCP_SERVER_URL;
+      // Get the appropriate server URL based on the tool and stored configuration
+      const serverUrl = getServerUrl(tool);
       
       const response = await fetch(`${serverUrl}/tools/${tool}/${method}`, {
         method: "POST",
@@ -213,6 +213,19 @@ export const getMcpClient = () => {
     return result;
   };
 
+  const updateServerUrl = (tool: string, url: string) => {
+    if (tool === 'search') {
+      localStorage.setItem('mcp-server-search', url);
+    }
+  };
+
+  const getServerUrl = (tool: string) => {
+    if (tool === 'search') {
+      return localStorage.getItem('mcp-server-search') || SEARCH_MCP_SERVER_URL;
+    }
+    return MCP_SERVER_URL;
+  };
+
   return {
     callMcp,
     processMcpCall,
@@ -221,7 +234,9 @@ export const getMcpClient = () => {
     isGmailConnected,
     getActiveConnections,
     isAnyToolActive,
-    getTimeSinceLastConnection
+    getTimeSinceLastConnection,
+    updateServerUrl,
+    getServerUrl
   };
 };
 

@@ -1,6 +1,7 @@
 
 import React from "react";
 import GoogleIntegration from "@/components/GoogleIntegration";
+import MCPStatusIndicator from "@/components/MCPStatusIndicator";
 
 const IntegrationsTab = () => {
   return (
@@ -12,7 +13,10 @@ const IntegrationsTab = () => {
         </p>
       </div>
       
-      <GoogleIntegration />
+      <div className="relative">
+        <MCPStatusIndicator />
+        <GoogleIntegration />
+      </div>
       
       <div className="text-xs text-gray-400 mt-4">
         <p className="font-semibold">How does this work?</p>
@@ -23,10 +27,8 @@ const IntegrationsTab = () => {
           <li>Check your recent emails by asking "Check my latest emails"</li>
           <li>Create calendar events with "Schedule a meeting with John on Friday"</li>
           <li>Manage files with "Upload this document to Drive" or "Find my resume"</li>
+          <li>Search the web with "Search for the latest news about AI"</li>
         </ul>
-        <p className="mt-2">
-          Your assistant will detect these requests and use the appropriate Google API to fulfill them.
-        </p>
       </div>
     </div>
   );

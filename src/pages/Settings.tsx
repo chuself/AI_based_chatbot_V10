@@ -50,7 +50,7 @@ const Settings = () => {
         <SettingsHeader />
 
         <div className={`flex flex-1 ${isMobile ? 'flex-col' : ''} ${isMobile ? 'pt-16' : 'pt-28'} overflow-hidden`}>
-          <div className={isMobile ? 'w-full' : ''}>
+          <div className={`${isMobile ? 'w-full' : 'min-w-[240px]'}`}>
             <SettingsSidebar tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} />
           </div>
 
