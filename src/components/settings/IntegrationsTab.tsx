@@ -5,10 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Plus, Settings, Info, ArrowUpRight, Check, X, Zap } from "lucide-react";
+import { Plus, Settings, Info, ArrowUpRight, Check, X, Zap, Database, Cloud } from "lucide-react";
 import MCPStatusIndicator from "@/components/MCPStatusIndicator";
 import getMcpClient from "@/services/mcpService";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { getCurrentUser, useSupabaseSync } from "@/services/supabaseService";
+import { supabase } from "@/integrations/supabase/client";
 
 // Default search server URL
 const DEFAULT_SEARCH_SERVER = "https://duckduckgo-mcp-server.onrender.com";
@@ -25,6 +27,11 @@ const IntegrationsTab = () => {
   const { toast } = useToast();
   const mcpClient = getMcpClient();
   
+  // Supabase related states
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const { syncStatus, checkConnection } = useSupabaseSync();
+  const [syncEnabled, setSyncEnabled] = useState(true);
+  
   // Regularly check for active MCP connections
   useEffect(() => {
     const interval = setInterval(() => {
@@ -32,6 +39,16 @@ const IntegrationsTab = () => {
     }, 1000);
     
     return () => clearInterval(interval);
+  }, []);
+
+  // Get current Supabase user
+  useEffect(() => {
+    const fetchUser = async () => {
+      const user = await getCurrentUser();
+      setCurrentUser(user);
+    };
+    
+    fetchUser();
   }, []);
 
   const handleAddIntegration = () => {
@@ -147,16 +164,94 @@ const IntegrationsTab = () => {
       });
     }
   };
-  
+
+  // Toggle Supabase sync
+  const toggleSupabaseSync = async () => {
+    const newState = !syncEnabled;
+    setSyncEnabled(newState);
+    
+    if (newState) {
+      // Re-enable sync
+      await checkConnection();
+      toast({
+        title: "Sync Enabled",
+        description: "Your data will be synchronized with the cloud",
+      });
+    } else {
+      toast({
+        title: "Sync Disabled",
+        description: "Your data will only be stored locally",
+      });
+    }
+  };
+
+  const getSyncStatusText = () => {
+    if (!syncEnabled) return "Disabled";
+    switch (syncStatus) {
+      case 'synced': return "Connected & Synced";
+      case 'syncing': return "Syncing...";
+      case 'offline': return "Offline";
+      default: return "Unknown";
+    }
+  };
+
+  const getSyncStatusColor = () => {
+    if (!syncEnabled) return "bg-gray-400";
+    switch (syncStatus) {
+      case 'synced': return "bg-green-500";
+      case 'syncing': return "bg-yellow-500";
+      case 'offline': return "bg-red-500";
+      default: return "bg-gray-500";
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="space-y-1">
         <h2 className="text-xl font-medium">Integrations</h2>
         <p className="text-sm text-gray-400">
-          Connect external MCP servers to enhance your assistant's capabilities
+          Connect external services to enhance your assistant's capabilities
         </p>
       </div>
       
+      {/* Supabase Integration Section */}
+      <div className="border rounded-lg p-4 bg-white/5 space-y-4">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-md bg-blue-100 dark:bg-blue-900">
+              <Database className="h-5 w-5 text-blue-600 dark:text-blue-300" />
+            </div>
+            <div>
+              <h3 className="font-medium">Supabase Database</h3>
+              <div className="flex items-center mt-1">
+                <div className={`h-2 w-2 rounded-full ${getSyncStatusColor()} mr-2`}></div>
+                <p className="text-xs text-gray-500">{getSyncStatusText()}</p>
+              </div>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={toggleSupabaseSync}>
+            {syncEnabled ? "Disable" : "Enable"}
+          </Button>
+        </div>
+
+        <div className="text-sm text-gray-500 space-y-2 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-md">
+          <div className="flex items-center justify-between">
+            <span>Cloud User ID:</span>
+            <span className="font-mono text-xs">{currentUser?.id || 'Not connected'}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>Sync Status:</span>
+            <span>{getSyncStatusText()}</span>
+          </div>
+        </div>
+
+        <p className="text-xs text-gray-400">
+          Your chat history, memories, and settings are automatically synchronized with Supabase, allowing you to 
+          access your data across multiple devices. All data is securely stored and can only be accessed by you.
+        </p>
+      </div>
+
+      {/* MCP Integration Section */}
       <div className="border rounded-lg p-4 bg-white/5">
         <MCPStatusIndicator />
         

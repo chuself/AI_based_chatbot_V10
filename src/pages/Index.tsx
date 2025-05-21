@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
 import MessageInput from "@/components/MessageInput";
@@ -14,6 +14,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import getMcpClient from "@/services/mcpService";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import SupabaseSyncStatus from "@/components/SupabaseSyncStatus";
+import { SupabaseContext } from "@/App";
 
 const STORAGE_KEY_COMMANDS = "custom-ai-commands";
 const STORAGE_KEY_SHOW_CHANGELOG = "show-changelog-1.5.0"; // Update with version
@@ -44,6 +46,7 @@ const Index = () => {
   const [commandLogs, setCommandLogs] = useState<CommandLog[]>([]);
   const [showCommandLogs, setShowCommandLogs] = useState(false);
   const isMobile = useIsMobile();
+  const { user } = useContext(SupabaseContext);
   
   useEffect(() => {
     // Load command visibility preference
@@ -462,7 +465,9 @@ const Index = () => {
       </div>
       
       <div className="fixed bottom-0 left-0 right-0 w-full">
-        <div className="bg-white/80 backdrop-blur-sm flex items-center justify-end px-2 py-1 text-xs text-gray-500">
+        <div className="bg-white/80 backdrop-blur-sm flex items-center justify-between px-2 py-1 text-xs text-gray-500">
+          <SupabaseSyncStatus className="ml-1" />
+          
           <div className="flex items-center space-x-2">
             <Switch 
               id="show-commands"
