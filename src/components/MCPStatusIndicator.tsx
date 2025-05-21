@@ -46,11 +46,10 @@ const MCPStatusIndicator: React.FC = () => {
     }
   };
   
-  const positionClass = "absolute top-2 right-2 z-10";
-  
   return (
     <>
-      <div className={positionClass}>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-medium">MCP Connection Status</h3>
         <Tooltip>
           <TooltipTrigger asChild>
             <button 
@@ -68,6 +67,30 @@ const MCPStatusIndicator: React.FC = () => {
             <p>MCP Connection Status</p>
           </TooltipContent>
         </Tooltip>
+      </div>
+
+      <div className="space-y-3">
+        {Object.entries(activeConnections).map(([tool, isActive]) => (
+          <div key={tool} className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-800 rounded-lg">
+            <div className="flex items-center space-x-3">
+              <div className={`p-2 rounded-full ${isActive ? 'bg-green-100 text-green-600' : 'bg-gray-200 text-gray-500'}`}>
+                {getIconForTool(tool)}
+              </div>
+              <div>
+                <p className="font-medium">{tool.charAt(0).toUpperCase() + tool.slice(1)}</p>
+                <p className="text-xs text-gray-500">
+                  {isActive ? 'Active connection' : 'Not currently active'}
+                </p>
+                {tool === 'search' && (
+                  <p className="text-xs text-gray-400 mt-1 truncate max-w-[180px]">
+                    Server: {serverUrls.search || 'Not configured'}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className={`h-3 w-3 rounded-full ${isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
+          </div>
+        ))}
       </div>
 
       <Sheet open={isOpen} onOpenChange={setIsOpen}>

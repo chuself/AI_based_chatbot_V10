@@ -50,11 +50,11 @@ const Settings = () => {
         <SettingsHeader />
 
         <div className={`flex flex-1 ${isMobile ? 'flex-col' : ''} ${isMobile ? 'pt-16' : 'pt-28'} overflow-hidden`}>
-          <div className={`${isMobile ? 'w-full' : 'min-w-[240px]'}`}>
+          <div className={`${isMobile ? 'w-full sticky top-16 bg-white/70 backdrop-blur-md z-10' : 'min-w-[240px]'}`}>
             <SettingsSidebar tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} />
           </div>
 
-          <div className={`flex-1 overflow-y-auto px-3 sm:px-6 pb-16 pt-4 ${isMobile ? 'mt-4' : ''}`}>
+          <div className={`flex-1 overflow-y-auto px-3 sm:px-6 pb-16 ${isMobile ? 'pt-2' : 'pt-4'}`}>
             <div className="max-w-2xl mx-auto animate-in fade-in-50 duration-500 slide-in-from-bottom-5">
               {renderTabContent()}
             </div>

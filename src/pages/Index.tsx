@@ -3,7 +3,6 @@ import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
 import MessageInput from "@/components/MessageInput";
 import Changelog from "@/components/Changelog";
-import MCPStatusIndicator from "@/components/MCPStatusIndicator";
 import { Message } from "@/components/MessageItem";
 import { useGemini } from "@/hooks/useGemini";
 import { useSpeech } from "@/hooks/useSpeech";
@@ -12,15 +11,26 @@ import { App } from '@capacitor/app';
 import { checkGoogleConnection, getEmails, getCalendarEvents, getDriveFiles } from "@/utils/googleService";
 import { MemoryService } from "@/services/memoryService";
 import { useIsMobile } from "@/hooks/use-mobile";
+import getMcpClient from "@/services/mcpService";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 const STORAGE_KEY_COMMANDS = "custom-ai-commands";
 const STORAGE_KEY_SHOW_CHANGELOG = "show-changelog-1.5.0"; // Update with version
+const STORAGE_KEY_SHOW_COMMANDS = "show-mcp-commands"; // For command visibility toggle
 
 interface Command {
   id: string;
   name: string;
   instruction: string;
   condition?: string;
+}
+
+interface CommandLog {
+  timestamp: Date;
+  tool: string;
+  method: string;
+  params: Record<string, any>;
 }
 
 const Index = () => {
@@ -31,7 +41,22 @@ const Index = () => {
   const [googleConnected, setGoogleConnected] = useState(false);
   const [customCommands, setCustomCommands] = useState<Command[]>([]);
   const [showChangelog, setShowChangelog] = useState(false);
+  const [commandLogs, setCommandLogs] = useState<CommandLog[]>([]);
+  const [showCommandLogs, setShowCommandLogs] = useState(false);
   const isMobile = useIsMobile();
+  
+  useEffect(() => {
+    // Load command visibility preference
+    const showCommands = localStorage.getItem(STORAGE_KEY_SHOW_COMMANDS);
+    if (showCommands !== null) {
+      setShowCommandLogs(showCommands === 'true');
+    }
+  }, []);
+  
+  // Save command visibility preference when changed
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_SHOW_COMMANDS, showCommandLogs.toString());
+  }, [showCommandLogs]);
   
   useEffect(() => {
     const hasSeenChangelog = localStorage.getItem(STORAGE_KEY_SHOW_CHANGELOG);
@@ -108,6 +133,37 @@ const Index = () => {
       });
     }
   }, [error, toast]);
+  
+  // Monitor MCP calls
+  useEffect(() => {
+    const originalExtractMcpCall = getMcpClient().extractMcpCall;
+    const originalProcessMcpCall = getMcpClient().processMcpCall;
+    
+    // Override the extractMcpCall method to log calls
+    getMcpClient().extractMcpCall = (text: string) => {
+      const mcpCall = originalExtractMcpCall(text);
+      
+      if (mcpCall) {
+        // Log the MCP call
+        const logEntry: CommandLog = {
+          timestamp: new Date(),
+          tool: mcpCall.tool,
+          method: mcpCall.method,
+          params: mcpCall.params
+        };
+        
+        setCommandLogs(prev => [...prev, logEntry]);
+      }
+      
+      return mcpCall;
+    };
+    
+    // We're not actually replacing functionality, just adding logging
+    return () => {
+      getMcpClient().extractMcpCall = originalExtractMcpCall;
+      getMcpClient().processMcpCall = originalProcessMcpCall;
+    };
+  }, []);
   
   const getActiveCommands = (): string => {
     const now = new Date();
@@ -359,20 +415,66 @@ const Index = () => {
         })
     );
   };
+  
+  // Clear command logs
+  const clearCommandLogs = () => {
+    setCommandLogs([]);
+  };
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50 overscroll-none">
       <Header modelName={selectedModel} />
+      
+      {showCommandLogs && commandLogs.length > 0 && (
+        <div className="fixed top-16 left-0 right-0 z-10 bg-black/80 text-green-400 p-2 max-h-40 overflow-y-auto font-mono text-xs">
+          <div className="flex justify-between items-center mb-1">
+            <h4>MCP Command Logs</h4>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={clearCommandLogs}
+                className="px-2 py-0.5 bg-red-900/50 text-red-300 rounded text-xs"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => setShowCommandLogs(false)}
+                className="px-2 py-0.5 bg-gray-700/50 text-gray-300 rounded text-xs"
+              >
+                Hide
+              </button>
+            </div>
+          </div>
+          {commandLogs.map((log, i) => (
+            <div key={i} className="border-t border-green-900/50 pt-1 mt-1">
+              <div className="text-green-200">
+                [{log.timestamp.toLocaleTimeString()}] {log.tool}.{log.method}
+              </div>
+              <div className="pl-2">
+                {JSON.stringify(log.params, null, 2)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       
       <div className="flex-1 overflow-hidden pt-16 pb-16">
         <MessageList messages={messages} />
       </div>
       
       <div className="fixed bottom-0 left-0 right-0 w-full">
+        <div className="bg-white/80 backdrop-blur-sm flex items-center justify-end px-2 py-1 text-xs text-gray-500">
+          <div className="flex items-center space-x-2">
+            <Switch 
+              id="show-commands"
+              checked={showCommandLogs}
+              onCheckedChange={setShowCommandLogs}
+              aria-label="Toggle command logs"
+            />
+            <Label htmlFor="show-commands">Show MCP Commands</Label>
+          </div>
+        </div>
         <MessageInput onSendMessage={handleSendMessage} isLoading={isLoading} />
       </div>
-      
-      <MCPStatusIndicator />
       
       <div className={`fixed ${isMobile ? 'bottom-24 left-4' : 'bottom-20 right-4'} z-10 opacity-60 hover:opacity-100 transition-opacity`}>
         <a 
