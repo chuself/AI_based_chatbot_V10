@@ -17,6 +17,8 @@ import { Label } from "@/components/ui/label";
 import SupabaseSyncStatus from "@/components/SupabaseSyncStatus";
 import { SupabaseContext } from "@/App";
 import { Command as CustomCommand, loadCommands } from "@/services/commandsService";
+import { fetchSettings } from "@/services/supabaseService";
+import { useGeminiConfig, ModelConfig } from "@/hooks/useGeminiConfig";
 
 const STORAGE_KEY_SHOW_CHANGELOG = "show-changelog-1.5.0"; // Update with version
 const STORAGE_KEY_SHOW_COMMANDS = "show-mcp-commands"; // For command visibility toggle
@@ -41,6 +43,8 @@ const Index = () => {
   const isMobile = useIsMobile();
   const { user } = useContext(SupabaseContext);
   const [loadingCommands, setLoadingCommands] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const { setSelectedModel, modelConfig } = useGeminiConfig();
   
   // Load command visibility preference
   useEffect(() => {
@@ -67,7 +71,31 @@ const Index = () => {
     setShowChangelog(false);
   };
   
-  // Load commands - now using the commands service that syncs with Supabase
+  // Sync user settings from Supabase when user logs in
+  useEffect(() => {
+    const syncUserSettings = async () => {
+      if (!user) return;
+      
+      try {
+        console.log("Loading user settings from cloud...");
+        const settings = await fetchSettings();
+        
+        if (settings) {
+          // Update model config from settings if available
+          if (settings.modelConfig) {
+            console.log("Found model config in settings:", settings.modelConfig.provider, settings.modelConfig.modelName);
+            setSelectedModel(settings.modelConfig.modelName);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to sync user settings:", e);
+      }
+    };
+    
+    syncUserSettings();
+  }, [user?.id, setSelectedModel]);
+  
+  // Load commands - using the commands service that syncs with Supabase
   useEffect(() => {
     const fetchCommands = async () => {
       setLoadingCommands(true);
@@ -107,7 +135,7 @@ const Index = () => {
   }, []);
   
   useEffect(() => {
-    if (chatHistory.length > 0) {
+    if (chatHistory.length > 0 && !isInitialLoad) {
       const convertedMessages = chatHistory.map((msg) => ({
         id: msg.timestamp.toString(),
         text: msg.content,
@@ -117,6 +145,7 @@ const Index = () => {
       
       setMessages(convertedMessages);
     } else if (messages.length === 0) {
+      // Show a welcome message when there are no messages
       const welcomeMessage: Message = {
         id: Date.now().toString(),
         text: "👋 Hi! I'm your Chuself AI assistant. How can I help you today?",
@@ -126,7 +155,9 @@ const Index = () => {
       
       setMessages([welcomeMessage]);
     }
-  }, [chatHistory, messages.length]);
+    
+    setIsInitialLoad(false);
+  }, [chatHistory, messages.length, isInitialLoad]);
   
   useEffect(() => {
     if (error) {

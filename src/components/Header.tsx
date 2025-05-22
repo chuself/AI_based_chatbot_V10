@@ -1,5 +1,5 @@
 
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useState, useContext } from "react";
 import { Settings, ChevronLeft, LogOut, LogIn, Menu } from "lucide-react";
 import { 
@@ -24,9 +24,10 @@ const Header = ({ modelName, showBackButton = false, title }: HeaderProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { user, signOut } = useContext(SupabaseContext);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const handleSignOut = async () => {
-    const { error } = await signOut();
+    const { error, redirected } = await signOut();
     if (error) {
       toast({
         title: "Error signing out",
@@ -38,6 +39,9 @@ const Header = ({ modelName, showBackButton = false, title }: HeaderProps) => {
         title: "Signed out",
         description: "You have been signed out.",
       });
+      
+      // Redirect to auth page after signout
+      navigate("/auth");
     }
   };
 

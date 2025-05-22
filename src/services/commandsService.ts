@@ -110,7 +110,7 @@ export const fetchCommandsFromCloud = async (): Promise<Command[] | null> => {
     
     // Return the commands from settings or null if not found
     if (settingsData && typeof settingsData === 'object' && 'commands' in settingsData) {
-      // Cast the commands to Command[] type after validation
+      // Cast the commands to a safe type first
       const commandsData = settingsData.commands;
       
       if (Array.isArray(commandsData)) {
