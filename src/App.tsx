@@ -71,18 +71,16 @@ const App = () => {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
       options: {
         // Ensure persistent sessions across browser restarts
-        data: {
-          persistent_session: true
-        }
+        persistSession: true
       }
     });
     
-    if (!error && data.session) {
+    if (!error) {
       console.log('Sign in successful, session established with persistence');
     }
     
@@ -90,14 +88,12 @@ const App = () => {
   };
 
   const signUp = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         // Set session persistence to true explicitly for all sign ups
-        data: {
-          persistent_session: true
-        }
+        persistSession: true
       }
     });
     

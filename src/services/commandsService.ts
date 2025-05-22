@@ -31,12 +31,17 @@ export const syncCommandsToCloud = async (commands: Command[]): Promise<boolean>
       .eq('user_id', user.id)
       .single();
     
-    let settingsData: Record<string, any> = existingSettings?.settings_data || {};
+    let settingsData: Record<string, any> = {};
+    if (existingSettings && existingSettings.settings_data) {
+      // Make sure we're working with a proper object
+      settingsData = typeof existingSettings.settings_data === 'object' ? 
+        existingSettings.settings_data as Record<string, any> : {};
+    }
     
     // Update the commands field - convert Commands to JSON-compatible format
     settingsData = {
       ...settingsData,
-      commands: JSON.parse(JSON.stringify(commands))
+      commands: commands
     };
     
     if (existingSettings) {
@@ -105,7 +110,18 @@ export const fetchCommandsFromCloud = async (): Promise<Command[] | null> => {
     
     // Return the commands from settings or null if not found
     if (settingsData && typeof settingsData === 'object' && 'commands' in settingsData) {
-      return settingsData.commands as Command[];
+      // Cast the commands to Command[] type after validation
+      const commandsData = settingsData.commands;
+      
+      if (Array.isArray(commandsData)) {
+        // Validate that the array contains proper Command objects
+        const validCommands = commandsData.filter(cmd => 
+          typeof cmd === 'object' && cmd !== null && 
+          'id' in cmd && 'name' in cmd && 'instruction' in cmd
+        ) as Command[];
+        
+        return validCommands;
+      }
     }
     
     return null;
@@ -134,9 +150,18 @@ export const loadCommands = async (): Promise<Command[]> => {
   const localCommands = localStorage.getItem(LOCAL_STORAGE_KEY);
   if (localCommands) {
     try {
-      const parsedCommands = JSON.parse(localCommands) as Command[];
-      console.log('Loaded commands from local storage:', parsedCommands.length);
-      return parsedCommands;
+      const parsedCommands = JSON.parse(localCommands);
+      
+      // Validate that we have an array of proper Command objects
+      if (Array.isArray(parsedCommands)) {
+        const validCommands = parsedCommands.filter(cmd => 
+          typeof cmd === 'object' && cmd !== null && 
+          'id' in cmd && 'name' in cmd && 'instruction' in cmd
+        ) as Command[];
+        
+        console.log('Loaded commands from local storage:', validCommands.length);
+        return validCommands;
+      }
     } catch (error) {
       console.error('Failed to parse commands from local storage:', error);
     }
