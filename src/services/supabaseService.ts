@@ -1,11 +1,11 @@
 
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { ChatMessage } from '@/hooks/useChatHistory';
 import { MemoryEntry } from '@/types/memory';
 import { ModelConfig } from '@/hooks/useGeminiConfig';
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Json } from '@/integrations/supabase/types';
+import { supabase } from '@/integrations/supabase/client';
 
 // Session ID storage key
 const SESSION_ID_KEY = 'chat-session-id';
@@ -36,27 +36,11 @@ const convertJsonToChatMessages = (json: Json | null): ChatMessage[] => {
 };
 
 /**
- * Get current user or create an anonymous session
+ * Get current user
  */
 export const getCurrentUser = async () => {
   const { data: { session } } = await supabase.auth.getSession();
-  
-  if (session) {
-    return session.user;
-  }
-  
-  // Auto sign in anonymously to enable data syncing
-  try {
-    const { data, error } = await supabase.auth.signInAnonymously();
-    if (error) {
-      console.error('Error signing in anonymously:', error);
-      return null;
-    }
-    return data.user;
-  } catch (error) {
-    console.error('Error during anonymous authentication:', error);
-    return null;
-  }
+  return session?.user || null;
 };
 
 /**
@@ -67,7 +51,7 @@ export const syncChatHistory = async (chatHistory: ChatMessage[]): Promise<boole
     const user = await getCurrentUser();
     
     if (!user) {
-      console.error('No user available for syncing chat history');
+      console.log('No authenticated user, storing chat history locally only');
       return false;
     }
     
@@ -112,6 +96,7 @@ export const syncChatHistory = async (chatHistory: ChatMessage[]): Promise<boole
       }
     }
     
+    console.log('Successfully synced chat history to Supabase');
     return true;
   } catch (error) {
     console.error('Error syncing chat history:', error);
@@ -127,7 +112,7 @@ export const fetchChatHistory = async (): Promise<ChatMessage[]> => {
     const user = await getCurrentUser();
     
     if (!user) {
-      console.warn('No user available for fetching chat history');
+      console.warn('No authenticated user, fetching chat history from local storage only');
       return [];
     }
     
@@ -162,7 +147,7 @@ export const syncMemories = async (memory: MemoryEntry): Promise<boolean> => {
     const user = await getCurrentUser();
     
     if (!user) {
-      console.error('No user available for syncing memories');
+      console.log('No authenticated user, storing memory locally only');
       return false;
     }
     
@@ -212,6 +197,7 @@ export const syncMemories = async (memory: MemoryEntry): Promise<boolean> => {
       }
     }
     
+    console.log('Successfully synced memory to Supabase');
     return true;
   } catch (error) {
     console.error('Error syncing memory:', error);
@@ -227,7 +213,7 @@ export const fetchMemories = async (): Promise<MemoryEntry[]> => {
     const user = await getCurrentUser();
     
     if (!user) {
-      console.warn('No user available for fetching memories');
+      console.warn('No authenticated user, fetching memories from local storage only');
       return [];
     }
     
@@ -264,7 +250,7 @@ export const syncSettings = async (settings: any): Promise<boolean> => {
     const user = await getCurrentUser();
     
     if (!user) {
-      console.error('No user available for syncing settings');
+      console.log('No authenticated user, storing settings locally only');
       return false;
     }
     
@@ -319,7 +305,7 @@ export const fetchSettings = async (): Promise<any> => {
     const user = await getCurrentUser();
     
     if (!user) {
-      console.warn('No user available for fetching settings');
+      console.warn('No authenticated user, fetching settings from local storage only');
       return null;
     }
     

@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState, createContext } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import Index from "./pages/Index";
@@ -11,6 +11,7 @@ import NotFound from "./pages/NotFound";
 import Settings from "./pages/Settings";
 import Commands from "./pages/Commands";
 import Memories from "./pages/Memories";
+import Auth from "./pages/Auth"; // We'll create this page next
 
 const queryClient = new QueryClient();
 
@@ -18,14 +19,21 @@ const queryClient = new QueryClient();
 export const SupabaseContext = createContext<{
   session: any;
   user: any;
+  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string) => Promise<{ error: any }>;
+  signOut: () => Promise<{ error: any }>;
 }>({
   session: null,
   user: null,
+  signIn: async () => ({ error: null }),
+  signUp: async () => ({ error: null }),
+  signOut: async () => ({ error: null }),
 });
 
 const App = () => {
   const [session, setSession] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // Handle auth state changes
@@ -39,6 +47,7 @@ const App = () => {
         } else if (event === 'SIGNED_IN') {
           console.log('User signed in:', session?.user?.id);
         }
+        setLoading(false);
       }
     );
 
@@ -46,17 +55,7 @@ const App = () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
-      // If no session, try anonymous sign-in
-      if (!session) {
-        supabase.auth.signInAnonymously().then(({ data, error }) => {
-          if (error) {
-            console.error('Error signing in anonymously:', error);
-          } else if (data && data.user) {
-            console.log('Signed in anonymously as:', data.user.id);
-          }
-        });
-      }
+      setLoading(false);
     });
 
     // Cleanup function
@@ -65,20 +64,64 @@ const App = () => {
     };
   }, []);
 
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    return { error };
+  };
+
+  const signUp = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+    return { error };
+  };
+
+  const signOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    return { error };
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50">
+        <div className="animate-pulse text-purple-600">Loading...</div>
+      </div>
+    );
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
-      <SupabaseContext.Provider value={{ session, user }}>
+      <SupabaseContext.Provider value={{ session, user, signIn, signUp, signOut }}>
         <TooltipProvider>
           <div className="min-h-screen bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50">
             <Toaster />
             <Sonner />
             <BrowserRouter>
               <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/commands" element={<Commands />} />
-                <Route path="/memories" element={<Memories />} />
-                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route 
+                  path="/" 
+                  element={user ? <Index /> : <Navigate to="/auth" />} 
+                />
+                <Route 
+                  path="/auth" 
+                  element={!user ? <Auth /> : <Navigate to="/" />} 
+                />
+                <Route 
+                  path="/settings" 
+                  element={user ? <Settings /> : <Navigate to="/auth" />} 
+                />
+                <Route 
+                  path="/commands" 
+                  element={user ? <Commands /> : <Navigate to="/auth" />} 
+                />
+                <Route 
+                  path="/memories" 
+                  element={user ? <Memories /> : <Navigate to="/auth" />} 
+                />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
