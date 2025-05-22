@@ -20,11 +20,13 @@ export const useChatHistory = () => {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const { user } = useContext(SupabaseContext);
 
+  // Load chat history on mount or when user changes
   useEffect(() => {
     const loadChatHistory = async () => {
       try {
         // Only try to load from Supabase if the user is logged in
         if (user) {
+          console.log("Fetching chat history from Supabase");
           const cloudHistory = await fetchChatHistory();
           
           if (cloudHistory && cloudHistory.length > 0) {
@@ -34,10 +36,12 @@ export const useChatHistory = () => {
             // Save to localStorage as backup
             localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cloudHistory));
           } else {
+            console.info("No cloud history found, loading from local storage");
             // Fall back to local storage if cloud fetch fails or returns empty
             loadFromLocalStorage();
           }
         } else {
+          console.info("Not logged in, loading from local storage only");
           // User is not logged in, load from local storage only
           loadFromLocalStorage();
         }
@@ -69,14 +73,19 @@ export const useChatHistory = () => {
   // Save to both localStorage and cloud when history changes
   useEffect(() => {
     if (chatHistory.length > 0 && !isInitialLoad) {
+      console.log("Saving chat history", { length: chatHistory.length, isLoggedIn: !!user });
+      
       // Always save to localStorage for offline access
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(chatHistory));
       
       // Sync with cloud if user is logged in
       if (user) {
+        console.log("Syncing chat history with cloud");
         syncChatHistory(chatHistory).then(success => {
           if (!success) {
             console.warn("Failed to sync chat history with cloud. Changes saved locally only.");
+          } else {
+            console.log("Successfully synced chat history with cloud");
           }
         });
       }

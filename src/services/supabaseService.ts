@@ -24,7 +24,7 @@ const getSessionId = (): string => {
  * Convert ChatMessage[] to Json type for Supabase
  */
 const convertChatMessagesToJson = (messages: ChatMessage[]): Json => {
-  return messages as unknown as Json;
+  return JSON.parse(JSON.stringify(messages)) as Json;
 };
 
 /**
@@ -32,7 +32,17 @@ const convertChatMessagesToJson = (messages: ChatMessage[]): Json => {
  */
 const convertJsonToChatMessages = (json: Json | null): ChatMessage[] => {
   if (!json) return [];
-  return json as unknown as ChatMessage[];
+  
+  // Ensure we're handling an array
+  const jsonArray = Array.isArray(json) ? json : [];
+  
+  // Convert each item in the array to a ChatMessage
+  return jsonArray.map((item: any) => ({
+    role: item.role || "assistant",
+    content: item.content || "",
+    timestamp: item.timestamp || Date.now(),
+    isMcpResult: item.isMcpResult || false
+  }));
 };
 
 /**
@@ -57,6 +67,11 @@ export const syncChatHistory = async (chatHistory: ChatMessage[]): Promise<boole
     
     const sessionId = getSessionId();
     const messagesJson = convertChatMessagesToJson(chatHistory);
+    
+    console.log('Converting chat history for Supabase', { 
+      originalLength: chatHistory.length, 
+      jsonType: typeof messagesJson 
+    });
     
     // Check if a record exists for this session
     const { data: existingSession } = await supabase
@@ -132,6 +147,12 @@ export const fetchChatHistory = async (): Promise<ChatMessage[]> => {
       return [];
     }
     
+    console.log('Received chat history data from Supabase', { 
+      hasData: !!data,
+      messagesType: data?.messages ? typeof data.messages : 'undefined',
+      isArray: data?.messages ? Array.isArray(data.messages) : false
+    });
+    
     return convertJsonToChatMessages(data?.messages);
   } catch (error) {
     console.error('Error in fetchChatHistory:', error);
@@ -168,7 +189,7 @@ export const syncMemories = async (memory: MemoryEntry): Promise<boolean> => {
           user_input: memory.userInput,
           assistant_reply: memory.assistantReply,
           intent: memory.intent,
-          tags: memory.tags,
+          tags: memory.tags ? JSON.parse(JSON.stringify(memory.tags)) : [],
           updated_at: new Date().toISOString()
         })
         .eq('id', memory.id);
@@ -188,7 +209,7 @@ export const syncMemories = async (memory: MemoryEntry): Promise<boolean> => {
           user_input: memory.userInput,
           assistant_reply: memory.assistantReply,
           intent: memory.intent,
-          tags: memory.tags
+          tags: memory.tags ? JSON.parse(JSON.stringify(memory.tags)) : []
         });
       
       if (error) {
@@ -254,6 +275,9 @@ export const syncSettings = async (settings: any): Promise<boolean> => {
       return false;
     }
     
+    // Prepare settings for storage by converting to pure JSON
+    const settingsJson = JSON.parse(JSON.stringify(settings));
+    
     // Check if settings exist for this user
     const { data: existingSettings } = await supabase
       .from('user_settings')
@@ -266,7 +290,7 @@ export const syncSettings = async (settings: any): Promise<boolean> => {
       const { error } = await supabase
         .from('user_settings')
         .update({
-          settings_data: settings,
+          settings_data: settingsJson,
           updated_at: new Date().toISOString()
         })
         .eq('user_id', user.id);
@@ -281,7 +305,7 @@ export const syncSettings = async (settings: any): Promise<boolean> => {
         .from('user_settings')
         .insert({
           user_id: user.id,
-          settings_data: settings
+          settings_data: settingsJson
         });
       
       if (error) {

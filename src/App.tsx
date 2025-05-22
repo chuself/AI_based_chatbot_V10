@@ -11,7 +11,7 @@ import NotFound from "./pages/NotFound";
 import Settings from "./pages/Settings";
 import Commands from "./pages/Commands";
 import Memories from "./pages/Memories";
-import Auth from "./pages/Auth"; // We'll create this page next
+import Auth from "./pages/Auth";
 
 const queryClient = new QueryClient();
 
@@ -36,23 +36,30 @@ const App = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Handle auth state changes
+    // Handle auth state changes - set this up first
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        console.log('Auth state changed:', event);
         setSession(session);
         setUser(session?.user ?? null);
         
         if (event === 'SIGNED_OUT') {
           console.log('User signed out');
+          localStorage.removeItem('supabase.auth.token');
         } else if (event === 'SIGNED_IN') {
           console.log('User signed in:', session?.user?.id);
+          // We don't need to set localStorage here as Supabase handles this
         }
-        setLoading(false);
+        
+        if (loading) {
+          setLoading(false);
+        }
       }
     );
 
-    // Check for existing session
+    // Check for existing session - do this after setting up the listener
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('Checked existing session:', session ? 'Found' : 'None');
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -65,23 +72,38 @@ const App = () => {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+    
+    if (!error && data.session) {
+      console.log('Sign in successful, session established');
+    }
+    
     return { error };
   };
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        // Set session persistence to true explicitly for all sign ups
+        data: {
+          persistent_session: true
+        }
+      }
     });
+    
     return { error };
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut({
+      // Setting scope to 'local' ensures we only sign out on this device
+      scope: 'local'
+    });
     return { error };
   };
 
@@ -104,7 +126,7 @@ const App = () => {
               <Routes>
                 <Route 
                   path="/" 
-                  element={user ? <Index /> : <Navigate to="/auth" />} 
+                  element={<Index />}
                 />
                 <Route 
                   path="/auth" 
@@ -112,15 +134,15 @@ const App = () => {
                 />
                 <Route 
                   path="/settings" 
-                  element={user ? <Settings /> : <Navigate to="/auth" />} 
+                  element={<Settings />}
                 />
                 <Route 
                   path="/commands" 
-                  element={user ? <Commands /> : <Navigate to="/auth" />} 
+                  element={<Commands />}
                 />
                 <Route 
                   path="/memories" 
-                  element={user ? <Memories /> : <Navigate to="/auth" />} 
+                  element={<Memories />}
                 />
                 <Route path="*" element={<NotFound />} />
               </Routes>

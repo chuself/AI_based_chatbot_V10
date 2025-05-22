@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import SupabaseSyncStatus from "@/components/SupabaseSyncStatus";
 import { SupabaseContext } from "@/App";
+import { Command, loadCommands } from "@/services/commandsService";
 
 const STORAGE_KEY_COMMANDS = "custom-ai-commands";
 const STORAGE_KEY_SHOW_CHANGELOG = "show-changelog-1.5.0"; // Update with version
@@ -47,9 +48,10 @@ const Index = () => {
   const [showCommandLogs, setShowCommandLogs] = useState(false);
   const isMobile = useIsMobile();
   const { user } = useContext(SupabaseContext);
+  const [loadingCommands, setLoadingCommands] = useState(true);
   
+  // Load command visibility preference
   useEffect(() => {
-    // Load command visibility preference
     const showCommands = localStorage.getItem(STORAGE_KEY_SHOW_COMMANDS);
     if (showCommands !== null) {
       setShowCommandLogs(showCommands === 'true');
@@ -73,16 +75,23 @@ const Index = () => {
     setShowChangelog(false);
   };
   
+  // Load commands - now using the commands service that syncs with Supabase
   useEffect(() => {
-    const savedCommands = localStorage.getItem(STORAGE_KEY_COMMANDS);
-    if (savedCommands) {
+    const fetchCommands = async () => {
+      setLoadingCommands(true);
       try {
-        setCustomCommands(JSON.parse(savedCommands));
+        const commands = await loadCommands();
+        setCustomCommands(commands);
+        console.log(`Loaded ${commands.length} commands from storage`);
       } catch (e) {
-        console.error("Failed to parse saved commands:", e);
+        console.error("Failed to load commands:", e);
+      } finally {
+        setLoadingCommands(false);
       }
-    }
-  }, []);
+    };
+    
+    fetchCommands();
+  }, [user?.id]); // Reload when user changes
   
   useEffect(() => {
     const googleStatus = checkGoogleConnection();
@@ -169,6 +178,11 @@ const Index = () => {
   }, []);
   
   const getActiveCommands = (): string => {
+    if (loadingCommands) {
+      console.log("Commands still loading, returning empty instructions");
+      return "";
+    }
+    
     const now = new Date();
     const currentHour = now.getHours();
     
