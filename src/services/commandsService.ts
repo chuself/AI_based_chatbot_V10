@@ -120,12 +120,16 @@ export const fetchCommandsFromCloud = async (): Promise<Command[] | null> => {
             typeof cmd === 'object' && cmd !== null && 
             'id' in cmd && 'name' in cmd && 'instruction' in cmd
           )
-          .map(cmd => ({
-            id: String(cmd.id),
-            name: String(cmd.name),
-            instruction: String(cmd.instruction),
-            condition: cmd.condition ? String(cmd.condition) : undefined
-          })) as Command[];
+          .map(cmd => {
+            // Use type assertion for safe access to properties after validation
+            const cmdObj = cmd as Record<string, any>;
+            return {
+              id: String(cmdObj.id),
+              name: String(cmdObj.name),
+              instruction: String(cmdObj.instruction),
+              condition: cmdObj.condition ? String(cmdObj.condition) : undefined
+            };
+          });
         
         return validCommands;
       }
@@ -166,12 +170,16 @@ export const loadCommands = async (): Promise<Command[]> => {
             typeof cmd === 'object' && cmd !== null && 
             'id' in cmd && 'name' in cmd && 'instruction' in cmd
           )
-          .map(cmd => ({
-            id: String(cmd.id),
-            name: String(cmd.name), 
-            instruction: String(cmd.instruction),
-            condition: cmd.condition ? String(cmd.condition) : undefined
-          })) as Command[];
+          .map(cmd => {
+            // Use type assertion for safe access to properties after validation
+            const cmdObj = cmd as Record<string, any>;
+            return {
+              id: String(cmdObj.id),
+              name: String(cmdObj.name),
+              instruction: String(cmdObj.instruction),
+              condition: cmdObj.condition ? String(cmdObj.condition) : undefined
+            };
+          });
         
         console.log('Loaded commands from local storage:', validCommands.length);
         return validCommands;
