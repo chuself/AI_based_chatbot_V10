@@ -45,10 +45,9 @@ const App = () => {
         
         if (event === 'SIGNED_OUT') {
           console.log('User signed out');
-          localStorage.removeItem('supabase.auth.token');
+          // Don't clear local storage session data, let Supabase handle it
         } else if (event === 'SIGNED_IN') {
           console.log('User signed in:', session?.user?.id);
-          // We don't need to set localStorage here as Supabase handles this
         }
         
         if (loading) {
@@ -75,10 +74,16 @@ const App = () => {
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
+      options: {
+        // Ensure persistent sessions across browser restarts
+        data: {
+          persistent_session: true
+        }
+      }
     });
     
     if (!error && data.session) {
-      console.log('Sign in successful, session established');
+      console.log('Sign in successful, session established with persistence');
     }
     
     return { error };

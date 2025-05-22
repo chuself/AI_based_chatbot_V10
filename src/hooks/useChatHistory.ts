@@ -18,6 +18,7 @@ const LOCAL_STORAGE_KEY = "chat-history";
 export const useChatHistory = () => {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [loadedFromCloud, setLoadedFromCloud] = useState(false);
   const { user } = useContext(SupabaseContext);
 
   // Load chat history on mount or when user changes
@@ -32,6 +33,7 @@ export const useChatHistory = () => {
           if (cloudHistory && cloudHistory.length > 0) {
             console.info(`Loaded chat history from cloud: ${cloudHistory.length} messages`);
             setChatHistory(cloudHistory);
+            setLoadedFromCloud(true);
             
             // Save to localStorage as backup
             localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cloudHistory));
@@ -63,7 +65,10 @@ export const useChatHistory = () => {
         } catch (error) {
           console.error("Failed to parse chat history from localStorage:", error);
           localStorage.removeItem(LOCAL_STORAGE_KEY);
+          setChatHistory([]);
         }
+      } else {
+        setChatHistory([]);
       }
     };
 
@@ -107,6 +112,7 @@ export const useChatHistory = () => {
   return {
     chatHistory,
     setChatHistory,
-    clearChatHistory
+    clearChatHistory,
+    loadedFromCloud
   };
 };

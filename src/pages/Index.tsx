@@ -16,18 +16,10 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import SupabaseSyncStatus from "@/components/SupabaseSyncStatus";
 import { SupabaseContext } from "@/App";
-import { Command, loadCommands } from "@/services/commandsService";
+import { Command as CustomCommand, loadCommands } from "@/services/commandsService";
 
-const STORAGE_KEY_COMMANDS = "custom-ai-commands";
 const STORAGE_KEY_SHOW_CHANGELOG = "show-changelog-1.5.0"; // Update with version
 const STORAGE_KEY_SHOW_COMMANDS = "show-mcp-commands"; // For command visibility toggle
-
-interface Command {
-  id: string;
-  name: string;
-  instruction: string;
-  condition?: string;
-}
 
 interface CommandLog {
   timestamp: Date;
@@ -42,7 +34,7 @@ const Index = () => {
   const { speak, autoPlay } = useSpeech();
   const { toast } = useToast();
   const [googleConnected, setGoogleConnected] = useState(false);
-  const [customCommands, setCustomCommands] = useState<Command[]>([]);
+  const [customCommands, setCustomCommands] = useState<CustomCommand[]>([]);
   const [showChangelog, setShowChangelog] = useState(false);
   const [commandLogs, setCommandLogs] = useState<CommandLog[]>([]);
   const [showCommandLogs, setShowCommandLogs] = useState(false);
@@ -438,6 +430,19 @@ const Index = () => {
     setCommandLogs([]);
   };
 
+  // Reset messages on login/logout - clear UI but keep history in background
+  useEffect(() => {
+    if (user) {
+      // On login, reset the UI messages but don't clear history
+      setMessages([{
+        id: Date.now().toString(),
+        text: "👋 Hi! I'm your Chuself AI assistant. How can I help you today?",
+        isUser: false,
+        timestamp: new Date(),
+      }]);
+    }
+  }, [user?.id]);
+  
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50 overscroll-none">
       <Header modelName={selectedModel} />

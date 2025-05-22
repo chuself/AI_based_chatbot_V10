@@ -1,6 +1,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentUser } from "./supabaseService";
+import { Json } from "@/integrations/supabase/types";
 
 export interface Command {
   id: string;
@@ -30,9 +31,9 @@ export const syncCommandsToCloud = async (commands: Command[]): Promise<boolean>
       .eq('user_id', user.id)
       .single();
     
-    let settingsData = existingSettings?.settings_data || {};
+    let settingsData: Record<string, any> = existingSettings?.settings_data || {};
     
-    // Update the commands field
+    // Update the commands field - convert Commands to JSON-compatible format
     settingsData = {
       ...settingsData,
       commands: JSON.parse(JSON.stringify(commands))
@@ -100,8 +101,14 @@ export const fetchCommandsFromCloud = async (): Promise<Command[] | null> => {
       return null;
     }
     
+    const settingsData = data?.settings_data;
+    
     // Return the commands from settings or null if not found
-    return data?.settings_data?.commands || null;
+    if (settingsData && typeof settingsData === 'object' && 'commands' in settingsData) {
+      return settingsData.commands as Command[];
+    }
+    
+    return null;
   } catch (error) {
     console.error('Error in fetchCommandsFromCloud:', error);
     return null;
