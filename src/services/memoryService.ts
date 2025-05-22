@@ -1,4 +1,3 @@
-
 // Services to manage the memory storage and retrieval
 import { MemoryEntry, MemorySearchParams, MemorySearchResult } from '@/types/memory';
 import { syncMemories, fetchMemories } from '@/services/supabaseService';
@@ -123,6 +122,18 @@ class MemoryServiceImpl {
     localStorage.setItem(MEMORY_STORAGE_KEY, JSON.stringify(this.memories));
     
     // We could add a delete endpoint to the cloud service if needed
+  }
+
+  /**
+   * Clear all stored memories
+   */
+  async clearAllMemories(): Promise<void> {
+    this.memories = [];
+    localStorage.removeItem(MEMORY_STORAGE_KEY);
+    
+    // We could add a bulk delete endpoint to the cloud service
+    // For now, we just clear the local memories
+    console.log('All memories cleared locally. Cloud data may still exist.');
   }
 
   /**

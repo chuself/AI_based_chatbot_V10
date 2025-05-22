@@ -4,6 +4,8 @@ import { useToast } from '@/hooks/use-toast';
 import { ChatMessage } from '@/hooks/useChatHistory';
 import { MemoryEntry } from '@/types/memory';
 import { ModelConfig } from '@/hooks/useGeminiConfig';
+import React, { useState, useEffect } from 'react';
+import { Json } from '@/integrations/supabase/types';
 
 // Session ID storage key
 const SESSION_ID_KEY = 'chat-session-id';
@@ -16,6 +18,21 @@ const getSessionId = (): string => {
     localStorage.setItem(SESSION_ID_KEY, sessionId);
   }
   return sessionId;
+};
+
+/**
+ * Convert ChatMessage[] to Json type for Supabase
+ */
+const convertChatMessagesToJson = (messages: ChatMessage[]): Json => {
+  return messages as unknown as Json;
+};
+
+/**
+ * Convert Json to ChatMessage[] from Supabase
+ */
+const convertJsonToChatMessages = (json: Json | null): ChatMessage[] => {
+  if (!json) return [];
+  return json as unknown as ChatMessage[];
 };
 
 /**
@@ -55,6 +72,7 @@ export const syncChatHistory = async (chatHistory: ChatMessage[]): Promise<boole
     }
     
     const sessionId = getSessionId();
+    const messagesJson = convertChatMessagesToJson(chatHistory);
     
     // Check if a record exists for this session
     const { data: existingSession } = await supabase
@@ -69,7 +87,7 @@ export const syncChatHistory = async (chatHistory: ChatMessage[]): Promise<boole
       const { error } = await supabase
         .from('chat_history')
         .update({
-          messages: chatHistory,
+          messages: messagesJson,
           updated_at: new Date().toISOString()
         })
         .eq('id', existingSession.id);
@@ -85,7 +103,7 @@ export const syncChatHistory = async (chatHistory: ChatMessage[]): Promise<boole
         .insert({
           user_id: user.id,
           session_id: sessionId,
-          messages: chatHistory
+          messages: messagesJson
         });
       
       if (error) {
@@ -129,7 +147,7 @@ export const fetchChatHistory = async (): Promise<ChatMessage[]> => {
       return [];
     }
     
-    return data?.messages || [];
+    return convertJsonToChatMessages(data?.messages);
   } catch (error) {
     console.error('Error in fetchChatHistory:', error);
     return [];
@@ -330,7 +348,7 @@ export const fetchSettings = async (): Promise<any> => {
  */
 export const useSupabaseSync = () => {
   const { toast } = useToast();
-  const [syncStatus, setSyncStatus] = React.useState<'synced' | 'syncing' | 'offline'>('offline');
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('offline');
   
   // Check connection status
   const checkConnection = async () => {
@@ -349,7 +367,7 @@ export const useSupabaseSync = () => {
     }
   };
   
-  React.useEffect(() => {
+  useEffect(() => {
     checkConnection();
     
     // Check connection every 30 seconds
