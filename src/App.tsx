@@ -73,11 +73,7 @@ const App = () => {
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
       email,
-      password,
-      options: {
-        // Ensure persistent sessions across browser restarts
-        persistSession: true
-      }
+      password
     });
     
     if (!error) {
@@ -90,11 +86,7 @@ const App = () => {
   const signUp = async (email: string, password: string) => {
     const { error } = await supabase.auth.signUp({
       email,
-      password,
-      options: {
-        // Set session persistence to true explicitly for all sign ups
-        persistSession: true
-      }
+      password
     });
     
     return { error };

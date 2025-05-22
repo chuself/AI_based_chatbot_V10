@@ -115,10 +115,17 @@ export const fetchCommandsFromCloud = async (): Promise<Command[] | null> => {
       
       if (Array.isArray(commandsData)) {
         // Validate that the array contains proper Command objects
-        const validCommands = commandsData.filter(cmd => 
-          typeof cmd === 'object' && cmd !== null && 
-          'id' in cmd && 'name' in cmd && 'instruction' in cmd
-        ) as Command[];
+        const validCommands = commandsData
+          .filter(cmd => 
+            typeof cmd === 'object' && cmd !== null && 
+            'id' in cmd && 'name' in cmd && 'instruction' in cmd
+          )
+          .map(cmd => ({
+            id: String(cmd.id),
+            name: String(cmd.name),
+            instruction: String(cmd.instruction),
+            condition: cmd.condition ? String(cmd.condition) : undefined
+          })) as Command[];
         
         return validCommands;
       }
@@ -154,10 +161,17 @@ export const loadCommands = async (): Promise<Command[]> => {
       
       // Validate that we have an array of proper Command objects
       if (Array.isArray(parsedCommands)) {
-        const validCommands = parsedCommands.filter(cmd => 
-          typeof cmd === 'object' && cmd !== null && 
-          'id' in cmd && 'name' in cmd && 'instruction' in cmd
-        ) as Command[];
+        const validCommands = parsedCommands
+          .filter(cmd => 
+            typeof cmd === 'object' && cmd !== null && 
+            'id' in cmd && 'name' in cmd && 'instruction' in cmd
+          )
+          .map(cmd => ({
+            id: String(cmd.id),
+            name: String(cmd.name), 
+            instruction: String(cmd.instruction),
+            condition: cmd.condition ? String(cmd.condition) : undefined
+          })) as Command[];
         
         console.log('Loaded commands from local storage:', validCommands.length);
         return validCommands;
