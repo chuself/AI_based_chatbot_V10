@@ -11,6 +11,14 @@ import { useToast } from "@/hooks/use-toast";
 import { SupabaseContext } from "@/App";
 import { useSettingsSync } from "@/hooks/useSettingsSync";
 
+// Convert ChatMessage to Message format for MessageList
+const convertChatMessageToMessage = (chatMessage: ChatMessage, index: number) => ({
+  id: `${chatMessage.timestamp}-${index}`,
+  text: chatMessage.content,
+  isUser: chatMessage.role === "user",
+  timestamp: chatMessage.timestamp
+});
+
 const Index = () => {
   const navigate = useNavigate();
   const { user } = useContext(SupabaseContext);
@@ -23,15 +31,15 @@ const Index = () => {
   const [displayMessages, setDisplayMessages] = useState<ChatMessage[]>([]);
   const [isMemorySearchOpen, setIsMemorySearchOpen] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   
   // Hooks
   const { modelConfig } = useGeminiConfig();
   const { 
-    messages: backgroundMessages, 
-    addMessage, 
-    clearMessages,
-    isLoading: historyLoading,
-    syncToCloud: syncHistoryToCloud
+    chatHistory, 
+    setChatHistory, 
+    clearChatHistory,
+    loadedFromCloud
   } = useChatHistory();
 
   // Initialize app when user logs in
@@ -90,6 +98,8 @@ const Index = () => {
 
   const handleSendMessage = async (message: string) => {
     try {
+      setIsSendingMessage(true);
+      
       // Add user message to both display and background
       const userMessage: ChatMessage = {
         role: "user",
@@ -98,7 +108,7 @@ const Index = () => {
       };
       
       setDisplayMessages(prev => [...prev, userMessage]);
-      addMessage(userMessage);
+      setChatHistory(prev => [...prev, userMessage]);
 
       // Here you would integrate with your AI service
       // For now, adding a placeholder response
@@ -109,10 +119,10 @@ const Index = () => {
       };
       
       setDisplayMessages(prev => [...prev, assistantMessage]);
-      addMessage(assistantMessage);
+      setChatHistory(prev => [...prev, assistantMessage]);
       
-      // Sync to cloud in background
-      await syncHistoryToCloud();
+      // TODO: Sync to cloud in background using settings service
+      console.log('Message sent, should sync to cloud');
       
     } catch (error) {
       console.error('Error sending message:', error);
@@ -121,12 +131,14 @@ const Index = () => {
         description: "Failed to send message. Please try again.",
         variant: "destructive"
       });
+    } finally {
+      setIsSendingMessage(false);
     }
   };
 
   const handleNewChat = () => {
     setDisplayMessages([]);
-    // Note: We don't clear backgroundMessages to maintain history for AI reference
+    // Note: We don't clear chatHistory to maintain history for AI reference
     toast({
       title: "New Chat Started",
       description: "Previous conversation is saved in background for context.",
@@ -147,29 +159,29 @@ const Index = () => {
     );
   }
 
+  // Convert ChatMessage to Message format for MessageList
+  const messagesForDisplay = displayMessages.map((msg, index) => 
+    convertChatMessageToMessage(msg, index)
+  );
+
   return (
     <div className="flex h-screen bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50">
       <div className="flex flex-col w-full">
         <Header 
-          modelName={modelConfig?.modelName?.split('/').pop()} 
-          onNewChat={handleNewChat}
+          modelName={modelConfig?.modelName?.split('/').pop()}
         />
         
         <div className="flex-1 flex flex-col pt-16 pb-20">
           <MessageList 
-            messages={displayMessages}
-            isLoading={historyLoading}
+            messages={messagesForDisplay}
           />
           <MessageInput 
             onSendMessage={handleSendMessage}
-            disabled={historyLoading}
+            isLoading={isSendingMessage}
           />
         </div>
 
-        <MemorySearch
-          isOpen={isMemorySearchOpen}
-          onClose={() => setIsMemorySearchOpen(false)}
-        />
+        <MemorySearch />
       </div>
     </div>
   );
