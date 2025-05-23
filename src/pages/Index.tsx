@@ -10,13 +10,15 @@ import { useGeminiConfig } from "@/hooks/useGeminiConfig";
 import { useToast } from "@/hooks/use-toast";
 import { SupabaseContext } from "@/App";
 import { useSettingsSync } from "@/hooks/useSettingsSync";
+import { Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 // Convert ChatMessage to Message format for MessageList
 const convertChatMessageToMessage = (chatMessage: ChatMessage, index: number) => ({
   id: `${chatMessage.timestamp}-${index}`,
   text: chatMessage.content,
   isUser: chatMessage.role === "user",
-  timestamp: chatMessage.timestamp
+  timestamp: new Date(chatMessage.timestamp)
 });
 
 const Index = () => {
@@ -145,6 +147,10 @@ const Index = () => {
     });
   };
 
+  const toggleMemorySearch = () => {
+    setIsMemorySearchOpen(prev => !prev);
+  };
+
   // Show loading state while settings are being loaded
   if (settingsLoading || !isInitialized) {
     return (
@@ -171,6 +177,17 @@ const Index = () => {
           modelName={modelConfig?.modelName?.split('/').pop()}
         />
         
+        <div className="absolute top-4 right-4 z-10 flex items-center space-x-2">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={toggleMemorySearch}
+            className="rounded-full bg-white shadow-sm hover:bg-gray-100"
+          >
+            <Search className="h-5 w-5 text-gray-700" />
+          </Button>
+        </div>
+        
         <div className="flex-1 flex flex-col pt-16 pb-20">
           <MessageList 
             messages={messagesForDisplay}
@@ -181,7 +198,25 @@ const Index = () => {
           />
         </div>
 
-        <MemorySearch />
+        {isMemorySearchOpen && (
+          <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg w-full max-w-3xl max-h-[80vh] overflow-hidden shadow-xl">
+              <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+                <h3 className="text-lg font-semibold">Search Memories</h3>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setIsMemorySearchOpen(false)}
+                >
+                  Close
+                </Button>
+              </div>
+              <div className="p-4 overflow-y-auto">
+                <MemorySearch />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

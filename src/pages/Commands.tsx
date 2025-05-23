@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Edit2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Command, loadCommands, saveCommands } from "@/services/commandsService";
 import { SupabaseContext } from "@/App";
@@ -16,6 +16,7 @@ const Commands = () => {
   const [newCommandInstruction, setNewCommandInstruction] = useState("");
   const [newCommandCondition, setNewCommandCondition] = useState("");
   const [loading, setLoading] = useState(true);
+  const [editingCommand, setEditingCommand] = useState<Command | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user } = useContext(SupabaseContext);
@@ -65,30 +66,75 @@ const Commands = () => {
       return;
     }
 
-    const newCommand: Command = {
-      id: Date.now().toString(),
-      name: newCommandName.trim(),
-      instruction: newCommandInstruction.trim(),
-      condition: newCommandCondition.trim() || undefined,
-    };
+    if (editingCommand) {
+      // Update existing command
+      const updatedCommands = commands.map(cmd => 
+        cmd.id === editingCommand.id 
+          ? {
+              ...cmd,
+              name: newCommandName.trim(),
+              instruction: newCommandInstruction.trim(),
+              condition: newCommandCondition.trim() || undefined,
+            }
+          : cmd
+      );
+      
+      setCommands(updatedCommands);
+      setEditingCommand(null);
+      
+      toast({
+        title: "Command Updated",
+        description: `Your "${newCommandName}" command has been updated.`,
+      });
+    } else {
+      // Add new command
+      const newCommand: Command = {
+        id: Date.now().toString(),
+        name: newCommandName.trim(),
+        instruction: newCommandInstruction.trim(),
+        condition: newCommandCondition.trim() || undefined,
+      };
 
-    const updatedCommands = [...commands, newCommand];
-    setCommands(updatedCommands);
+      const updatedCommands = [...commands, newCommand];
+      setCommands(updatedCommands);
+      
+      toast({
+        title: "Command Added",
+        description: `Your "${newCommandName}" command has been saved.`,
+      });
+    }
     
     // Reset form
     setNewCommandName("");
     setNewCommandInstruction("");
     setNewCommandCondition("");
+  };
+
+  const startEditing = (command: Command) => {
+    setEditingCommand(command);
+    setNewCommandName(command.name);
+    setNewCommandInstruction(command.instruction);
+    setNewCommandCondition(command.condition || "");
     
-    toast({
-      title: "Command Added",
-      description: `Your "${newCommandName}" command has been saved.`,
-    });
+    // Scroll to form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancelEditing = () => {
+    setEditingCommand(null);
+    setNewCommandName("");
+    setNewCommandInstruction("");
+    setNewCommandCondition("");
   };
 
   const deleteCommand = (id: string) => {
     const updatedCommands = commands.filter(cmd => cmd.id !== id);
     setCommands(updatedCommands);
+    
+    // If deleting the command we're currently editing, reset the form
+    if (editingCommand && editingCommand.id === id) {
+      cancelEditing();
+    }
     
     toast({
       title: "Command Deleted",
@@ -125,9 +171,13 @@ const Commands = () => {
         ) : (
           <div className="max-w-2xl mx-auto space-y-6">
             <div className="space-y-2">
-              <h2 className="text-lg font-medium">Add New Command</h2>
+              <h2 className="text-lg font-medium">
+                {editingCommand ? 'Edit Command' : 'Add New Command'}
+              </h2>
               <p className="text-sm text-gray-500">
-                Create custom commands that will influence how the AI responds to your messages.
+                {editingCommand 
+                  ? 'Update your command details below.'
+                  : 'Create custom commands that will influence how the AI responds to your messages.'}
               </p>
               
               <div className="space-y-4 p-4 rounded-lg border border-gray-200 bg-white">
@@ -171,9 +221,22 @@ const Commands = () => {
                   </p>
                 </div>
                 
-                <Button onClick={addCommand} className="w-full mt-2">
-                  <Plus className="h-4 w-4 mr-2" /> Add Command
-                </Button>
+                <div className="flex space-x-2">
+                  <Button onClick={addCommand} className="flex-1">
+                    <Plus className="h-4 w-4 mr-2" /> 
+                    {editingCommand ? 'Save Changes' : 'Add Command'}
+                  </Button>
+                  
+                  {editingCommand && (
+                    <Button 
+                      variant="outline" 
+                      onClick={cancelEditing}
+                      className="w-1/3"
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
             
@@ -197,14 +260,24 @@ const Commands = () => {
                             </p>
                           )}
                         </div>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => deleteCommand(command.id)}
-                          className="text-gray-500 hover:text-red-500"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="flex space-x-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => startEditing(command)}
+                            className="text-gray-500 hover:text-blue-500"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => deleteCommand(command.id)}
+                            className="text-gray-500 hover:text-red-500"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                       <p className="mt-2 text-gray-700 text-sm whitespace-pre-wrap">
                         {command.instruction}
