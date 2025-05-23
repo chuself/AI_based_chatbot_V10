@@ -6,6 +6,7 @@ import MessageInput from "@/components/MessageInput";
 import Header from "@/components/Header";
 import MemorySearch from "@/components/MemorySearch";
 import { ChatMessage, useChatHistory } from "@/hooks/useChatHistory";
+import { useGemini } from "@/hooks/useGemini";
 import { useGeminiConfig } from "@/hooks/useGeminiConfig";
 import { useToast } from "@/hooks/use-toast";
 import { SupabaseContext } from "@/App";
@@ -29,11 +30,9 @@ const Index = () => {
   // Initialize settings sync
   const { settings, isLoading: settingsLoading, updateModelSettings } = useSettingsSync();
   
-  // State for UI - always start with empty messages for clean interface
-  const [displayMessages, setDisplayMessages] = useState<ChatMessage[]>([]);
+  // State for UI
   const [isMemorySearchOpen, setIsMemorySearchOpen] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [isSendingMessage, setIsSendingMessage] = useState(false);
   
   // Hooks
   const { modelConfig } = useGeminiConfig();
@@ -43,6 +42,9 @@ const Index = () => {
     clearChatHistory,
     loadedFromCloud
   } = useChatHistory();
+  
+  // Use Gemini hook for AI functionality
+  const { sendMessage, isLoading: isAiLoading, error } = useGemini();
 
   // Initialize app when user logs in
   useEffect(() => {
@@ -51,9 +53,6 @@ const Index = () => {
       
       try {
         console.log('Initializing app for user login...');
-        
-        // Reset display to show clean interface
-        setDisplayMessages([]);
         
         // Show loading message briefly
         toast({
@@ -100,31 +99,10 @@ const Index = () => {
 
   const handleSendMessage = async (message: string) => {
     try {
-      setIsSendingMessage(true);
+      // Use the sendMessage from useGemini hook which handles AI integration
+      await sendMessage(message);
       
-      // Add user message to both display and background
-      const userMessage: ChatMessage = {
-        role: "user",
-        content: message,
-        timestamp: Date.now()
-      };
-      
-      setDisplayMessages(prev => [...prev, userMessage]);
-      setChatHistory(prev => [...prev, userMessage]);
-
-      // Here you would integrate with your AI service
-      // For now, adding a placeholder response
-      const assistantMessage: ChatMessage = {
-        role: "assistant", 
-        content: "I'm processing your message. (This will be replaced with actual AI response)",
-        timestamp: Date.now()
-      };
-      
-      setDisplayMessages(prev => [...prev, assistantMessage]);
-      setChatHistory(prev => [...prev, assistantMessage]);
-      
-      // TODO: Sync to cloud in background using settings service
-      console.log('Message sent, should sync to cloud');
+      console.log('Message sent and processed by AI');
       
     } catch (error) {
       console.error('Error sending message:', error);
@@ -133,17 +111,14 @@ const Index = () => {
         description: "Failed to send message. Please try again.",
         variant: "destructive"
       });
-    } finally {
-      setIsSendingMessage(false);
     }
   };
 
   const handleNewChat = () => {
-    setDisplayMessages([]);
-    // Note: We don't clear chatHistory to maintain history for AI reference
+    clearChatHistory();
     toast({
       title: "New Chat Started",
-      description: "Previous conversation is saved in background for context.",
+      description: "Chat history has been cleared.",
     });
   };
 
@@ -166,7 +141,7 @@ const Index = () => {
   }
 
   // Convert ChatMessage to Message format for MessageList
-  const messagesForDisplay = displayMessages.map((msg, index) => 
+  const messagesForDisplay = chatHistory.map((msg, index) => 
     convertChatMessageToMessage(msg, index)
   );
 
@@ -194,7 +169,7 @@ const Index = () => {
           />
           <MessageInput 
             onSendMessage={handleSendMessage}
-            isLoading={isSendingMessage}
+            isLoading={isAiLoading}
           />
         </div>
 
