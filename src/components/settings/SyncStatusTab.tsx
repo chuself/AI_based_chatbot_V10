@@ -1,16 +1,18 @@
+
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
-import { SyncService, SyncMetadata, CloudDataVersion } from "@/services/syncService";
-import { Cloud, Download, Upload, RefreshCw, HardDrive, Wifi, WifiOff, LogOut } from "lucide-react";
+import { SyncService, SyncMetadata, CloudDataVersion, SyncStatus } from "@/services/syncService";
+import { Cloud, Download, Upload, RefreshCw, HardDrive, Wifi, WifiOff, LogOut, CheckCircle, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 
 const SyncStatusTab = () => {
   const [syncMetadata, setSyncMetadata] = useState<SyncMetadata | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [cloudVersions, setCloudVersions] = useState<CloudDataVersion[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<string>("latest");
   const [isLoading, setIsLoading] = useState(false);
@@ -19,7 +21,9 @@ const SyncStatusTab = () => {
 
   useEffect(() => {
     const metadata = SyncService.getSyncMetadata();
+    const status = SyncService.getSyncStatus();
     setSyncMetadata(metadata);
+    setSyncStatus(status);
     loadCloudVersions();
   }, []);
 
@@ -63,7 +67,9 @@ const SyncStatusTab = () => {
           description: "Local data has been uploaded to the cloud",
         });
         const metadata = SyncService.getSyncMetadata();
+        const status = SyncService.getSyncStatus();
         setSyncMetadata(metadata);
+        setSyncStatus(status);
         await loadCloudVersions();
       } else {
         toast({
@@ -95,7 +101,9 @@ const SyncStatusTab = () => {
           description: "Cloud data has been downloaded and applied locally",
         });
         const metadata = SyncService.getSyncMetadata();
+        const status = SyncService.getSyncStatus();
         setSyncMetadata(metadata);
+        setSyncStatus(status);
         // Refresh the page to apply changes
         window.location.reload();
       } else {
@@ -127,6 +135,8 @@ const SyncStatusTab = () => {
         description: `Data synced from ${result.syncMetadata.syncSource}`,
       });
       setSyncMetadata(result.syncMetadata);
+      const status = SyncService.getSyncStatus();
+      setSyncStatus(status);
       await loadCloudVersions();
     } catch (error) {
       console.error('Sync error:', error);
@@ -164,6 +174,40 @@ const SyncStatusTab = () => {
       default:
         return 'bg-red-500';
     }
+  };
+
+  const getSyncStatusDisplay = () => {
+    if (!syncStatus) return null;
+
+    const statusItems = [
+      { key: 'modelConfig', label: 'Model Configuration', synced: syncStatus.modelConfig },
+      { key: 'speechSettings', label: 'Speech Settings', synced: syncStatus.speechSettings },
+      { key: 'generalSettings', label: 'General Settings', synced: syncStatus.generalSettings },
+      { key: 'integrationSettings', label: 'Integration Settings', synced: syncStatus.integrationSettings },
+      { key: 'customCommands', label: 'Custom Commands', synced: syncStatus.customCommands },
+      { key: 'memories', label: 'Memories', synced: syncStatus.memories },
+      { key: 'chatHistory', label: 'Chat History', synced: syncStatus.chatHistory },
+    ];
+
+    return (
+      <div className="space-y-2">
+        {statusItems.map((item) => (
+          <div key={item.key} className="flex items-center justify-between">
+            <span className="text-sm font-medium">{item.label}:</span>
+            <div className="flex items-center gap-1">
+              {item.synced ? (
+                <CheckCircle className="h-4 w-4 text-green-500" />
+              ) : (
+                <XCircle className="h-4 w-4 text-red-500" />
+              )}
+              <span className="text-sm text-gray-500">
+                {item.synced ? 'Synced' : 'Not synced'}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   };
 
   return (
@@ -212,6 +256,18 @@ const SyncStatusTab = () => {
               </div>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Detailed Sync Status</CardTitle>
+          <CardDescription>
+            See what data has been successfully synced and what hasn't
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {getSyncStatusDisplay()}
         </CardContent>
       </Card>
 

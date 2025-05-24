@@ -33,6 +33,16 @@ export interface CloudDataVersion {
   syncSource: string;
 }
 
+export interface SyncStatus {
+  modelConfig: boolean;
+  speechSettings: boolean;
+  generalSettings: boolean;
+  integrationSettings: boolean;
+  customCommands: boolean;
+  memories: boolean;
+  chatHistory: boolean;
+}
+
 /**
  * Comprehensive sync service for all user data using user_data table only
  */
@@ -64,6 +74,22 @@ class SyncServiceImpl {
       lastSyncedAt: new Date().toISOString(),
       syncSource: 'local',
       dataVersion: 1
+    };
+  }
+
+  /**
+   * Get sync status for each data type
+   */
+  getSyncStatus(): SyncStatus {
+    const localData = this.loadLocalData();
+    return {
+      modelConfig: !!localData.modelConfig,
+      speechSettings: !!localData.speechSettings,
+      generalSettings: !!localData.generalSettings,
+      integrationSettings: !!localData.integrationSettings,
+      customCommands: !!(localData.customCommands && localData.customCommands.length > 0),
+      memories: !!(localData.memories && localData.memories.length > 0),
+      chatHistory: !!(localData.chatHistory && localData.chatHistory.length > 0)
     };
   }
 
@@ -284,7 +310,7 @@ class SyncServiceImpl {
   }
 
   /**
-   * Save user data to cloud using user_data table only
+   * Save user data to cloud using user_data table only - FIXED VERSION
    */
   async saveCloudData(data: UserData): Promise<boolean> {
     try {
@@ -294,22 +320,42 @@ class SyncServiceImpl {
         return false;
       }
 
+      // Check if record exists first
+      const { data: existingRecord } = await supabase
+        .from('user_data')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
       // Convert data to JSON strings for database storage
       const userData = {
         user_id: user.id,
-        model_config: JSON.stringify(data.modelConfig || {}),
-        speech_settings: JSON.stringify(data.speechSettings || {}),
-        general_settings: JSON.stringify(data.generalSettings || {}),
-        integration_settings: JSON.stringify(data.integrationSettings || {}),
-        custom_commands: JSON.stringify(data.customCommands || []),
-        memories: JSON.stringify(data.memories || []),
-        chat_history: JSON.stringify(data.chatHistory || []),
-        sync_source: 'cloud' as const
+        model_config: data.modelConfig ? JSON.stringify(data.modelConfig) : JSON.stringify({}),
+        speech_settings: data.speechSettings ? JSON.stringify(data.speechSettings) : JSON.stringify({}),
+        general_settings: data.generalSettings ? JSON.stringify(data.generalSettings) : JSON.stringify({}),
+        integration_settings: data.integrationSettings ? JSON.stringify(data.integrationSettings) : JSON.stringify({}),
+        custom_commands: data.customCommands ? JSON.stringify(data.customCommands) : JSON.stringify([]),
+        memories: data.memories ? JSON.stringify(data.memories) : JSON.stringify([]),
+        chat_history: data.chatHistory ? JSON.stringify(data.chatHistory) : JSON.stringify([]),
+        sync_source: 'cloud' as const,
+        last_synced_at: new Date().toISOString()
       };
 
-      const { error } = await supabase
-        .from('user_data')
-        .upsert(userData);
+      let error;
+      if (existingRecord) {
+        // Update existing record
+        const result = await supabase
+          .from('user_data')
+          .update(userData)
+          .eq('user_id', user.id);
+        error = result.error;
+      } else {
+        // Insert new record
+        const result = await supabase
+          .from('user_data')
+          .insert(userData);
+        error = result.error;
+      }
 
       if (error) {
         console.error('Error saving to cloud:', error);

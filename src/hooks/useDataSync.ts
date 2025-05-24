@@ -21,6 +21,9 @@ export const useDataSync = () => {
           setSyncData(result);
           console.log('Data sync completed:', result.syncMetadata);
           
+          // Apply synced data to app immediately
+          applyDataToApp(result);
+          
           if (result.syncMetadata.syncSource === 'cloud') {
             toast({
               title: "Data Synced",
@@ -42,16 +45,56 @@ export const useDataSync = () => {
         console.log('No user, loading local data only');
         const localData = SyncService.loadLocalData();
         const metadata = SyncService.getSyncMetadata();
-        setSyncData({
+        const result = {
           ...localData,
           syncMetadata: metadata
-        });
+        };
+        setSyncData(result);
+        applyDataToApp(result);
         setIsLoading(false);
       }
     };
 
     initializeData();
   }, [user?.id]);
+
+  // Helper function to apply synced data to the app
+  const applyDataToApp = (data: UserDataWithMeta) => {
+    // Apply model config if available
+    if (data.modelConfig) {
+      localStorage.setItem('ai-model-config', JSON.stringify(data.modelConfig));
+    }
+    
+    // Apply speech settings if available
+    if (data.speechSettings) {
+      localStorage.setItem('speech-settings', JSON.stringify(data.speechSettings));
+    }
+    
+    // Apply general settings if available
+    if (data.generalSettings) {
+      localStorage.setItem('general-settings', JSON.stringify(data.generalSettings));
+    }
+    
+    // Apply integration settings if available
+    if (data.integrationSettings) {
+      localStorage.setItem('integration-settings', JSON.stringify(data.integrationSettings));
+    }
+    
+    // Apply custom commands if available
+    if (data.customCommands) {
+      localStorage.setItem('custom-ai-commands', JSON.stringify(data.customCommands));
+    }
+    
+    // Apply memories if available
+    if (data.memories) {
+      localStorage.setItem('ai-memories', JSON.stringify(data.memories));
+    }
+    
+    // Apply chat history if available
+    if (data.chatHistory) {
+      localStorage.setItem('chat-history', JSON.stringify(data.chatHistory));
+    }
+  };
 
   const refreshSync = async () => {
     if (!user) return false;
@@ -60,6 +103,7 @@ export const useDataSync = () => {
     try {
       const result = await SyncService.syncData();
       setSyncData(result);
+      applyDataToApp(result);
       return true;
     } catch (error) {
       console.error('Error refreshing sync:', error);
