@@ -98,10 +98,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      merge_user_settings: {
-        Args: { _user_id: string; _settings_data: Json }
-        Returns: Json
-      }
+      [_ in never]: never
     }
     Enums: {
       [_ in never]: never

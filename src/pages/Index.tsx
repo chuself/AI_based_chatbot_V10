@@ -1,198 +1,512 @@
-
 import React, { useState, useEffect, useContext } from "react";
-import { useNavigate } from "react-router-dom";
+import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
 import MessageInput from "@/components/MessageInput";
-import Header from "@/components/Header";
-import MemorySearch from "@/components/MemorySearch";
-import { ChatMessage, useChatHistory } from "@/hooks/useChatHistory";
+import Changelog from "@/components/Changelog";
+import { Message } from "@/components/MessageItem";
 import { useGemini } from "@/hooks/useGemini";
-import { useGeminiConfig } from "@/hooks/useGeminiConfig";
-import { useToast } from "@/hooks/use-toast";
+import { useSpeech } from "@/hooks/useSpeech";
+import { useToast } from "@/components/ui/use-toast";
+import { App } from '@capacitor/app';
+import { checkGoogleConnection, getEmails, getCalendarEvents, getDriveFiles } from "@/utils/googleService";
+import { MemoryService } from "@/services/memoryService";
+import { useIsMobile } from "@/hooks/use-mobile";
+import getMcpClient from "@/services/mcpService";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import SupabaseSyncStatus from "@/components/SupabaseSyncStatus";
 import { SupabaseContext } from "@/App";
-import { useSettingsSync } from "@/hooks/useSettingsSync";
-import { Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Command, loadCommands } from "@/services/commandsService";
 
-// Convert ChatMessage to Message format for MessageList
-const convertChatMessageToMessage = (chatMessage: ChatMessage, index: number) => ({
-  id: `${chatMessage.timestamp}-${index}`,
-  text: chatMessage.content,
-  isUser: chatMessage.role === "user",
-  timestamp: new Date(chatMessage.timestamp)
-});
+const STORAGE_KEY_COMMANDS = "custom-ai-commands";
+const STORAGE_KEY_SHOW_CHANGELOG = "show-changelog-1.5.0"; // Update with version
+const STORAGE_KEY_SHOW_COMMANDS = "show-mcp-commands"; // For command visibility toggle
+
+interface Command {
+  id: string;
+  name: string;
+  instruction: string;
+  condition?: string;
+}
+
+interface CommandLog {
+  timestamp: Date;
+  tool: string;
+  method: string;
+  params: Record<string, any>;
+}
 
 const Index = () => {
-  const navigate = useNavigate();
-  const { user } = useContext(SupabaseContext);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const { sendMessage, isLoading, error, selectedModel, chatHistory, clearChatHistory } = useGemini();
+  const { speak, autoPlay } = useSpeech();
   const { toast } = useToast();
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [customCommands, setCustomCommands] = useState<Command[]>([]);
+  const [showChangelog, setShowChangelog] = useState(false);
+  const [commandLogs, setCommandLogs] = useState<CommandLog[]>([]);
+  const [showCommandLogs, setShowCommandLogs] = useState(false);
+  const isMobile = useIsMobile();
+  const { user } = useContext(SupabaseContext);
+  const [loadingCommands, setLoadingCommands] = useState(true);
   
-  // Initialize settings sync
-  const { settings, isLoading: settingsLoading, updateModelSettings } = useSettingsSync();
-  
-  // State for UI
-  const [isMemorySearchOpen, setIsMemorySearchOpen] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
-  
-  // Hooks
-  const { modelConfig } = useGeminiConfig();
-  const { 
-    chatHistory, 
-    setChatHistory, 
-    clearChatHistory,
-    loadedFromCloud
-  } = useChatHistory();
-  
-  // Use Gemini hook for AI functionality
-  const { sendMessage, isLoading: isAiLoading, error } = useGemini();
-
-  // Initialize app when user logs in
+  // Load command visibility preference
   useEffect(() => {
-    const initializeApp = async () => {
-      if (!user || isInitialized || settingsLoading) return;
-      
+    const showCommands = localStorage.getItem(STORAGE_KEY_SHOW_COMMANDS);
+    if (showCommands !== null) {
+      setShowCommandLogs(showCommands === 'true');
+    }
+  }, []);
+  
+  // Save command visibility preference when changed
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_SHOW_COMMANDS, showCommandLogs.toString());
+  }, [showCommandLogs]);
+  
+  useEffect(() => {
+    const hasSeenChangelog = localStorage.getItem(STORAGE_KEY_SHOW_CHANGELOG);
+    if (!hasSeenChangelog) {
+      setShowChangelog(true);
+    }
+  }, []);
+  
+  const handleCloseChangelog = () => {
+    localStorage.setItem(STORAGE_KEY_SHOW_CHANGELOG, 'true');
+    setShowChangelog(false);
+  };
+  
+  // Load commands - now using the commands service that syncs with Supabase
+  useEffect(() => {
+    const fetchCommands = async () => {
+      setLoadingCommands(true);
       try {
-        console.log('Initializing app for user login...');
-        
-        // Show loading message briefly
-        toast({
-          title: "Welcome back!",
-          description: "Loading your settings and data...",
-        });
-        
-        // Wait for settings to be loaded
-        if (settings && Object.keys(settings).length > 0) {
-          console.log('Settings loaded:', Object.keys(settings));
-          
-          // Update model config if available in settings
-          if (settings.model) {
-            console.log('Updating model config from synced settings');
-          }
-          
-          setIsInitialized(true);
-          
-          toast({
-            title: "Ready to chat!",
-            description: "Your settings and data have been synchronized.",
-          });
-        }
-      } catch (error) {
-        console.error('Error initializing app:', error);
-        toast({
-          title: "Initialization Error",
-          description: "Some settings may not have loaded properly.",
-          variant: "destructive"
-        });
+        const commands = await loadCommands();
+        setCustomCommands(commands);
+        console.log(`Loaded ${commands.length} commands from storage`);
+      } catch (e) {
+        console.error("Failed to load commands:", e);
+      } finally {
+        setLoadingCommands(false);
       }
     };
-
-    initializeApp();
-  }, [user, settings, settingsLoading, isInitialized, toast]);
-
-  // Handle logout - redirect to auth
+    
+    fetchCommands();
+  }, [user?.id]); // Reload when user changes
+  
   useEffect(() => {
-    if (!user && isInitialized) {
-      console.log('User logged out, redirecting...');
-      navigate("/auth");
-    }
-  }, [user, navigate, isInitialized]);
+    const googleStatus = checkGoogleConnection();
+    setGoogleConnected(googleStatus.gmail || googleStatus.calendar || googleStatus.drive);
+  }, []);
+  
+  useEffect(() => {
+    const backButtonHandler = App.addListener('backButton', (data) => {
+      if (window.location.pathname === '/') {
+        App.exitApp();
+      }
+    });
 
-  const handleSendMessage = async (message: string) => {
-    try {
-      // Use the sendMessage from useGemini hook which handles AI integration
-      await sendMessage(message);
+    return () => {
+      backButtonHandler.then(listener => {
+        listener.remove();
+      }).catch(error => {
+        console.error('Error with back button handler:', error);
+      });
+    };
+  }, []);
+  
+  useEffect(() => {
+    if (chatHistory.length > 0) {
+      const convertedMessages = chatHistory.map((msg) => ({
+        id: msg.timestamp.toString(),
+        text: msg.content,
+        isUser: msg.role === "user",
+        timestamp: new Date(msg.timestamp),
+      }));
       
-      console.log('Message sent and processed by AI');
+      setMessages(convertedMessages);
+    } else if (messages.length === 0) {
+      const welcomeMessage: Message = {
+        id: Date.now().toString(),
+        text: "👋 Hi! I'm your Chuself AI assistant. How can I help you today?",
+        isUser: false,
+        timestamp: new Date(),
+      };
       
-    } catch (error) {
-      console.error('Error sending message:', error);
+      setMessages([welcomeMessage]);
+    }
+  }, [chatHistory, messages.length]);
+  
+  useEffect(() => {
+    if (error) {
       toast({
         title: "Error",
-        description: "Failed to send message. Please try again.",
-        variant: "destructive"
+        description: error,
+        variant: "destructive",
       });
     }
-  };
-
-  const handleNewChat = () => {
-    clearChatHistory();
-    toast({
-      title: "New Chat Started",
-      description: "Chat history has been cleared.",
+  }, [error, toast]);
+  
+  // Monitor MCP calls
+  useEffect(() => {
+    const originalExtractMcpCall = getMcpClient().extractMcpCall;
+    const originalProcessMcpCall = getMcpClient().processMcpCall;
+    
+    // Override the extractMcpCall method to log calls
+    getMcpClient().extractMcpCall = (text: string) => {
+      const mcpCall = originalExtractMcpCall(text);
+      
+      if (mcpCall) {
+        // Log the MCP call
+        const logEntry: CommandLog = {
+          timestamp: new Date(),
+          tool: mcpCall.tool,
+          method: mcpCall.method,
+          params: mcpCall.params
+        };
+        
+        setCommandLogs(prev => [...prev, logEntry]);
+      }
+      
+      return mcpCall;
+    };
+    
+    // We're not actually replacing functionality, just adding logging
+    return () => {
+      getMcpClient().extractMcpCall = originalExtractMcpCall;
+      getMcpClient().processMcpCall = originalProcessMcpCall;
+    };
+  }, []);
+  
+  const getActiveCommands = (): string => {
+    if (loadingCommands) {
+      console.log("Commands still loading, returning empty instructions");
+      return "";
+    }
+    
+    const now = new Date();
+    const currentHour = now.getHours();
+    
+    const activeCommands = customCommands.filter(cmd => {
+      if (!cmd.condition) return true;
+      
+      const condition = cmd.condition.toLowerCase();
+      
+      if (condition.includes('before') && condition.includes('am')) {
+        const timeMatch = condition.match(/before\s+(\d+)(?:am|a\.m\.)/i);
+        if (timeMatch && currentHour < parseInt(timeMatch[1])) {
+          return true;
+        }
+      }
+      
+      if (condition.includes('after') && condition.includes('pm')) {
+        const timeMatch = condition.match(/after\s+(\d+)(?:pm|p\.m\.)/i);
+        if (timeMatch && currentHour > (parseInt(timeMatch[1]) + 12)) {
+          return true;
+        }
+      }
+      
+      if (condition.includes('morning') && currentHour >= 5 && currentHour < 12) {
+        return true;
+      }
+      
+      if (condition.includes('afternoon') && currentHour >= 12 && currentHour < 17) {
+        return true;
+      }
+      
+      if (condition.includes('evening') && currentHour >= 17 && currentHour < 21) {
+        return true;
+      }
+      
+      if (condition.includes('night') && (currentHour >= 21 || currentHour < 5)) {
+        return true;
+      }
+      
+      const hourMatch = condition.match(/at\s+(\d+)(?:am|a\.m\.|pm|p\.m\.)/i);
+      if (hourMatch) {
+        let hour = parseInt(hourMatch[1]);
+        if (condition.includes('pm') && hour < 12) hour += 12;
+        if (currentHour === hour) return true;
+      }
+      
+      return false;
     });
+    
+    return activeCommands.map(cmd => cmd.instruction).join('\n\n');
   };
 
-  const toggleMemorySearch = () => {
-    setIsMemorySearchOpen(prev => !prev);
+  const detectMemoryQuery = (text: string): boolean => {
+    const memoryKeywords = [
+      "remember", "remind me", "what did we talk about", 
+      "what did I tell you", "previous conversation", 
+      "last time", "you told me", "recall", "memory",
+      "we discussed", "you mentioned", "we talked about",
+      "I asked you", "fetch memory", "search memory"
+    ];
+    
+    const lowerText = text.toLowerCase();
+    
+    return memoryKeywords.some(keyword => lowerText.includes(keyword));
   };
+  
+  const handleMemoryQuery = async (query: string): Promise<string> => {
+    const searchParams = MemoryService.parseNaturalLanguageQuery(query);
+    const results = MemoryService.searchMemories({
+      ...searchParams,
+      limit: 5
+    });
+    
+    if (results.length === 0) {
+      return "I don't have any memories matching that query. Could you try a different question or be more specific?";
+    }
+    
+    let response = "I found these memories from our previous conversations:\n\n";
+    
+    results.forEach((result, index) => {
+      const memory = result.entry;
+      const formattedDate = new Date(memory.timestamp).toLocaleString();
+      
+      response += `Memory ${index + 1} (${formattedDate}):\n`;
+      response += `You asked: "${memory.userInput}"\n`;
+      response += `I responded: "${memory.assistantReply}"\n`;
+      
+      if (memory.tags && memory.tags.length > 0) {
+        response += `Tags: ${memory.tags.join(", ")}\n`;
+      }
+      
+      response += "\n";
+    });
+    
+    response += "Is there something specific from these memories you'd like me to elaborate on?";
+    
+    return response;
+  };
+  
+  const detectServiceRequest = (text: string) => {
+    const lowerText = text.toLowerCase();
+    
+    if (lowerText.includes("email") || lowerText.includes("gmail") || lowerText.includes("inbox") || 
+        lowerText.includes("message") || lowerText.includes("mail")) {
+      return "gmail";
+    }
+    
+    if (lowerText.includes("calendar") || lowerText.includes("schedule") || lowerText.includes("meeting") || 
+        lowerText.includes("event") || lowerText.includes("appointment")) {
+      return "calendar";
+    }
+    
+    if (lowerText.includes("drive") || lowerText.includes("file") || lowerText.includes("document") || 
+        lowerText.includes("upload") || lowerText.includes("folder")) {
+      return "drive";
+    }
+    
+    if (lowerText.includes("search") || lowerText.includes("find information") || 
+        lowerText.includes("look up") || lowerText.includes("news") || 
+        lowerText.includes("what is") || lowerText.includes("tell me about")) {
+      return "search";
+    }
+    
+    return null;
+  };
+  
+  const handleEmailRequest = async (query: string) => {
+    try {
+      const emails = await getEmails(5);
+      return `Here are your recent emails:\n\n${emails.map(email => 
+        `From: ${email.sender}\nSubject: ${email.subject}\nDate: ${new Date(email.date).toLocaleString()}\n${email.snippet}\n\n`
+      ).join('---\n\n')}`;
+    } catch (e) {
+      return `Error: ${e instanceof Error ? e.message : 'Could not access your emails'}. Please connect your Gmail account in Settings.`;
+    }
+  };
+  
+  const handleCalendarRequest = async (query: string) => {
+    try {
+      const events = await getCalendarEvents(7);
+      return `Here are your upcoming events:\n\n${events.map(event => 
+        `${event.title}\nWhen: ${new Date(event.start).toLocaleString()} to ${new Date(event.end).toLocaleString()}\nWhere: ${event.location}\n\n`
+      ).join('---\n\n')}`;
+    } catch (e) {
+      return `Error: ${e instanceof Error ? e.message : 'Could not access your calendar'}. Please connect your Google Calendar in Settings.`;
+    }
+  };
+  
+  const handleDriveRequest = async (query: string) => {
+    try {
+      const files = await getDriveFiles(query);
+      return `Here are your files:\n\n${files.map(file => 
+        `${file.name}\nType: ${file.mimeType}\nLast modified: ${new Date(file.lastModified).toLocaleString()}\n\n`
+      ).join('---\n\n')}`;
+    } catch (e) {
+      return `Error: ${e instanceof Error ? e.message : 'Could not access your files'}. Please connect your Google Drive in Settings.`;
+    }
+  };
+  
+  const handleSearchRequest = async (query: string) => {
+    const mcpClient = getMcpClient();
+    try {
+      const mcpCall = {
+        tool: "search",
+        method: "search",
+        params: { query },
+        id: 1
+      };
+      
+      const response = await mcpClient.processMcpCall(mcpCall);
+      if (response.error) {
+        return `Error performing search: ${response.error.message}. Please check your search server configuration in Settings > Integrations.`;
+      }
+      
+      return `Search results for "${query}":\n\n${JSON.stringify(response.result, null, 2)}`;
+    } catch (e) {
+      return `Error: ${e instanceof Error ? e.message : 'Could not perform search'}. Please check your search server configuration in Settings > Integrations.`;
+    }
+  };
+  
+  const handleSendMessage = async (text: string) => {
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      text,
+      isUser: true,
+      timestamp: new Date(),
+    };
+    
+    setMessages((prevMessages) => [...prevMessages, userMessage]);
+    
+    const loadingMessageId = (Date.now() + 1).toString();
+    const loadingMessage: Message = {
+      id: loadingMessageId,
+      text: "",
+      isUser: false,
+      timestamp: new Date(),
+      isLoading: true,
+    };
+    
+    setMessages((prevMessages) => [...prevMessages, loadingMessage]);
 
-  // Show loading state while settings are being loaded
-  if (settingsLoading || !isInitialized) {
-    return (
-      <div className="flex h-screen bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50">
-        <div className="flex items-center justify-center w-full">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
-            <p className="text-purple-600">Loading your settings...</p>
-          </div>
-        </div>
-      </div>
+    const commandInstructions = getActiveCommands();
+    
+    const isExplicitMemoryQuery = detectMemoryQuery(text);
+    let response;
+    
+    if (isExplicitMemoryQuery) {
+      response = await handleMemoryQuery(text);
+    } else {
+      const serviceType = detectServiceRequest(text);
+      
+      if (googleConnected && serviceType) {
+        switch(serviceType) {
+          case "gmail":
+            response = await handleEmailRequest(text);
+            break;
+          case "calendar":
+            response = await handleCalendarRequest(text);
+            break;
+          case "drive":
+            response = await handleDriveRequest(text);
+            break;
+          case "search":
+            response = await handleSearchRequest(text);
+            break;
+          default:
+            response = await sendMessage(text, commandInstructions);
+        }
+      } else {
+        response = await sendMessage(text, commandInstructions);
+      }
+    }
+    
+    MemoryService.saveMemory(text, response);
+    
+    if (autoPlay && response) {
+      speak(response);
+    }
+    
+    setMessages((prevMessages) => 
+      prevMessages
+        .filter(msg => msg.id !== loadingMessageId)
+        .concat({
+          id: (Date.now() + 2).toString(),
+          text: response,
+          isUser: false,
+          timestamp: new Date(),
+        })
     );
-  }
-
-  // Convert ChatMessage to Message format for MessageList
-  const messagesForDisplay = chatHistory.map((msg, index) => 
-    convertChatMessageToMessage(msg, index)
-  );
+  };
+  
+  // Clear command logs
+  const clearCommandLogs = () => {
+    setCommandLogs([]);
+  };
 
   return (
-    <div className="flex h-screen bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50">
-      <div className="flex flex-col w-full">
-        <Header 
-          modelName={modelConfig?.modelName?.split('/').pop()}
-        />
-        
-        <div className="absolute top-4 right-4 z-10 flex items-center space-x-2">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={toggleMemorySearch}
-            className="rounded-full bg-white shadow-sm hover:bg-gray-100"
-          >
-            <Search className="h-5 w-5 text-gray-700" />
-          </Button>
-        </div>
-        
-        <div className="flex-1 flex flex-col pt-16 pb-20">
-          <MessageList 
-            messages={messagesForDisplay}
-          />
-          <MessageInput 
-            onSendMessage={handleSendMessage}
-            isLoading={isAiLoading}
-          />
-        </div>
-
-        {isMemorySearchOpen && (
-          <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg w-full max-w-3xl max-h-[80vh] overflow-hidden shadow-xl">
-              <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-                <h3 className="text-lg font-semibold">Search Memories</h3>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => setIsMemorySearchOpen(false)}
-                >
-                  Close
-                </Button>
-              </div>
-              <div className="p-4 overflow-y-auto">
-                <MemorySearch />
-              </div>
+    <div className="flex flex-col h-screen bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50 overscroll-none">
+      <Header modelName={selectedModel} />
+      
+      {showCommandLogs && commandLogs.length > 0 && (
+        <div className="fixed top-16 left-0 right-0 z-10 bg-black/80 text-green-400 p-2 max-h-40 overflow-y-auto font-mono text-xs">
+          <div className="flex justify-between items-center mb-1">
+            <h4>MCP Command Logs</h4>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={clearCommandLogs}
+                className="px-2 py-0.5 bg-red-900/50 text-red-300 rounded text-xs"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => setShowCommandLogs(false)}
+                className="px-2 py-0.5 bg-gray-700/50 text-gray-300 rounded text-xs"
+              >
+                Hide
+              </button>
             </div>
           </div>
-        )}
+          {commandLogs.map((log, i) => (
+            <div key={i} className="border-t border-green-900/50 pt-1 mt-1">
+              <div className="text-green-200">
+                [{log.timestamp.toLocaleTimeString()}] {log.tool}.{log.method}
+              </div>
+              <div className="pl-2">
+                {JSON.stringify(log.params, null, 2)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      
+      <div className="flex-1 overflow-hidden pt-16 pb-16">
+        <MessageList messages={messages} />
       </div>
+      
+      <div className="fixed bottom-0 left-0 right-0 w-full">
+        <div className="bg-white/80 backdrop-blur-sm flex items-center justify-between px-2 py-1 text-xs text-gray-500">
+          <SupabaseSyncStatus className="ml-1" />
+          
+          <div className="flex items-center space-x-2">
+            <Switch 
+              id="show-commands"
+              checked={showCommandLogs}
+              onCheckedChange={setShowCommandLogs}
+              aria-label="Toggle command logs"
+            />
+            <Label htmlFor="show-commands">Show MCP Commands</Label>
+          </div>
+        </div>
+        <MessageInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+      </div>
+      
+      <div className={`fixed ${isMobile ? 'bottom-24 left-4' : 'bottom-20 right-4'} z-10 opacity-60 hover:opacity-100 transition-opacity`}>
+        <a 
+          href="https://lovable.ai" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="text-xs text-gray-500 flex items-center"
+        >
+          Made with Lovable
+        </a>
+      </div>
+      
+      <Changelog isOpen={showChangelog} onClose={handleCloseChangelog} />
     </div>
   );
 };

@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState, createContext } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import Index from "./pages/Index";
@@ -21,13 +21,13 @@ export const SupabaseContext = createContext<{
   user: any;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string) => Promise<{ error: any }>;
-  signOut: () => Promise<{ error: any; redirected: boolean }>;
+  signOut: () => Promise<{ error: any }>;
 }>({
   session: null,
   user: null,
   signIn: async () => ({ error: null }),
   signUp: async () => ({ error: null }),
-  signOut: async () => ({ error: null, redirected: false }),
+  signOut: async () => ({ error: null }),
 });
 
 const App = () => {
@@ -45,9 +45,10 @@ const App = () => {
         
         if (event === 'SIGNED_OUT') {
           console.log('User signed out');
-          // Don't clear local storage session data, let Supabase handle it
+          localStorage.removeItem('supabase.auth.token');
         } else if (event === 'SIGNED_IN') {
           console.log('User signed in:', session?.user?.id);
+          // We don't need to set localStorage here as Supabase handles this
         }
         
         if (loading) {
@@ -71,22 +72,28 @@ const App = () => {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
-      password
+      password,
     });
     
-    if (!error) {
-      console.log('Sign in successful, session established with persistence');
+    if (!error && data.session) {
+      console.log('Sign in successful, session established');
     }
     
     return { error };
   };
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
-      password
+      password,
+      options: {
+        // Set session persistence to true explicitly for all sign ups
+        data: {
+          persistent_session: true
+        }
+      }
     });
     
     return { error };
@@ -97,9 +104,7 @@ const App = () => {
       // Setting scope to 'local' ensures we only sign out on this device
       scope: 'local'
     });
-    
-    // Return additional info about redirection
-    return { error, redirected: true };
+    return { error };
   };
 
   if (loading) {
@@ -121,7 +126,7 @@ const App = () => {
               <Routes>
                 <Route 
                   path="/" 
-                  element={user ? <Index /> : <Navigate to="/auth" />}
+                  element={<Index />}
                 />
                 <Route 
                   path="/auth" 
@@ -129,15 +134,15 @@ const App = () => {
                 />
                 <Route 
                   path="/settings" 
-                  element={user ? <Settings /> : <Navigate to="/auth" />}
+                  element={<Settings />}
                 />
                 <Route 
                   path="/commands" 
-                  element={user ? <Commands /> : <Navigate to="/auth" />}
+                  element={<Commands />}
                 />
                 <Route 
                   path="/memories" 
-                  element={user ? <Memories /> : <Navigate to="/auth" />}
+                  element={<Memories />}
                 />
                 <Route path="*" element={<NotFound />} />
               </Routes>

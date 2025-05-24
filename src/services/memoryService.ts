@@ -1,4 +1,3 @@
-
 // Services to manage the memory storage and retrieval
 import { MemoryEntry, MemorySearchParams, MemorySearchResult } from '@/types/memory';
 import { syncMemories, fetchMemories } from '@/services/supabaseService';
@@ -75,30 +74,6 @@ class MemoryServiceImpl {
         }
       }
       this.isLoaded = true;
-    }
-  }
-
-  /**
-   * Reload memories from cloud
-   * Useful when user logs in on a new device
-   */
-  async reloadMemoriesFromCloud(): Promise<boolean> {
-    try {
-      const cloudMemories = await fetchMemories();
-      
-      if (cloudMemories && cloudMemories.length > 0) {
-        this.memories = cloudMemories;
-        console.log(`Reloaded ${cloudMemories.length} memories from cloud`);
-        
-        // Update local storage with cloud data
-        localStorage.setItem(MEMORY_STORAGE_KEY, JSON.stringify(this.memories));
-        return true;
-      }
-      
-      return false;
-    } catch (e) {
-      console.error('Error reloading memories from cloud:', e);
-      return false;
     }
   }
 

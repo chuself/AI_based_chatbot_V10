@@ -22,19 +22,9 @@ const getSessionId = (): string => {
 
 /**
  * Convert ChatMessage[] to Json type for Supabase
- * Ensuring we properly serialize the data as a plain object
  */
 const convertChatMessagesToJson = (messages: ChatMessage[]): Json => {
-  // We need to create a new plain object array
-  // that can be properly serialized and stored in Supabase
-  const jsonMessages = messages.map(msg => ({
-    role: msg.role,
-    content: msg.content,
-    timestamp: msg.timestamp,
-    isMcpResult: msg.isMcpResult || false
-  }));
-  
-  return jsonMessages as Json;
+  return JSON.parse(JSON.stringify(messages)) as Json;
 };
 
 /**
