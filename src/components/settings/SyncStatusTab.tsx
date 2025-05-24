@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +12,7 @@ import { useNavigate } from "react-router-dom";
 const SyncStatusTab = () => {
   const [syncMetadata, setSyncMetadata] = useState<SyncMetadata | null>(null);
   const [cloudVersions, setCloudVersions] = useState<CloudDataVersion[]>([]);
-  const [selectedVersion, setSelectedVersion] = useState<string>("");
+  const [selectedVersion, setSelectedVersion] = useState<string>("latest");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -88,7 +87,7 @@ const SyncStatusTab = () => {
   const handleDownload = async () => {
     setIsLoading(true);
     try {
-      const versionId = selectedVersion || undefined;
+      const versionId = selectedVersion === "latest" ? undefined : selectedVersion;
       const success = await SyncService.downloadFromCloud(versionId);
       if (success) {
         toast({
@@ -121,7 +120,7 @@ const SyncStatusTab = () => {
   const handleFullSync = async () => {
     setIsLoading(true);
     try {
-      const versionId = selectedVersion || undefined;
+      const versionId = selectedVersion === "latest" ? undefined : selectedVersion;
       const result = await SyncService.syncData(versionId);
       toast({
         title: "Sync Complete",
@@ -224,21 +223,20 @@ const SyncStatusTab = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {cloudVersions.length > 0 ? (
-            <Select value={selectedVersion} onValueChange={setSelectedVersion}>
-              <SelectTrigger>
-                <SelectValue placeholder="Latest version (default)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">Latest version (default)</SelectItem>
-                {cloudVersions.map((version) => (
-                  <SelectItem key={version.id} value={version.id}>
-                    v{version.dataVersion} - {new Date(version.lastSyncedAt).toLocaleString()}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
+          <Select value={selectedVersion} onValueChange={setSelectedVersion}>
+            <SelectTrigger>
+              <SelectValue placeholder="Latest version (default)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="latest">Latest version (default)</SelectItem>
+              {cloudVersions.map((version) => (
+                <SelectItem key={version.id} value={version.id}>
+                  v{version.dataVersion} - {new Date(version.lastSyncedAt).toLocaleString()}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {cloudVersions.length === 0 && (
             <p className="text-sm text-gray-500">No cloud versions available</p>
           )}
         </CardContent>
