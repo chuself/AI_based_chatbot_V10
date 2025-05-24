@@ -26,6 +26,13 @@ export interface UserDataWithMeta extends UserData {
   syncMetadata: SyncMetadata;
 }
 
+export interface CloudDataVersion {
+  id: string;
+  lastSyncedAt: string;
+  dataVersion: number;
+  syncSource: string;
+}
+
 /**
  * Comprehensive sync service for all user data
  */
@@ -181,9 +188,40 @@ class SyncServiceImpl {
   }
 
   /**
-   * Fetch user data from cloud
+   * Get all cloud data versions for selection
    */
-  async fetchCloudData(): Promise<UserDataWithMeta | null> {
+  async getCloudVersions(): Promise<CloudDataVersion[]> {
+    try {
+      const user = await getCurrentUser();
+      if (!user) return [];
+
+      const { data, error } = await supabase
+        .from('user_data')
+        .select('id, last_synced_at, data_version, sync_source')
+        .eq('user_id', user.id)
+        .order('last_synced_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching cloud versions:', error);
+        return [];
+      }
+
+      return data.map(item => ({
+        id: item.id,
+        lastSyncedAt: item.last_synced_at,
+        dataVersion: item.data_version,
+        syncSource: item.sync_source || 'cloud'
+      }));
+    } catch (error) {
+      console.error('Error in getCloudVersions:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch specific version of user data from cloud
+   */
+  async fetchCloudData(versionId?: string): Promise<UserDataWithMeta | null> {
     try {
       const user = await getCurrentUser();
       if (!user) {
@@ -191,11 +229,18 @@ class SyncServiceImpl {
         return null;
       }
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('user_data')
         .select('*')
-        .eq('user_id', user.id)
-        .single();
+        .eq('user_id', user.id);
+
+      if (versionId) {
+        query = query.eq('id', versionId);
+      } else {
+        query = query.order('last_synced_at', { ascending: false }).limit(1);
+      }
+
+      const { data, error } = await query.single();
 
       if (error) {
         if (error.code !== 'PGRST116') { // Not found is acceptable
@@ -205,22 +250,36 @@ class SyncServiceImpl {
       }
 
       return {
-        modelConfig: data.model_config || undefined,
-        speechSettings: data.speech_settings || undefined,
-        generalSettings: data.general_settings || undefined,
-        integrationSettings: data.integration_settings || undefined,
-        customCommands: data.custom_commands || undefined,
-        memories: data.memories || undefined,
-        chatHistory: data.chat_history || undefined,
+        modelConfig: this.parseJsonField(data.model_config),
+        speechSettings: this.parseJsonField(data.speech_settings),
+        generalSettings: this.parseJsonField(data.general_settings),
+        integrationSettings: this.parseJsonField(data.integration_settings),
+        customCommands: this.parseJsonField(data.custom_commands),
+        memories: this.parseJsonField(data.memories),
+        chatHistory: this.parseJsonField(data.chat_history),
         syncMetadata: {
           lastSyncedAt: data.last_synced_at,
-          syncSource: data.sync_source || 'cloud',
+          syncSource: (data.sync_source as 'local' | 'cloud' | 'merged') || 'cloud',
           dataVersion: data.data_version || 1
         }
       };
     } catch (error) {
       console.error('Error in fetchCloudData:', error);
       return null;
+    }
+  }
+
+  /**
+   * Helper to safely parse JSON fields
+   */
+  private parseJsonField(field: any): any {
+    if (!field) return undefined;
+    if (typeof field === 'object') return field;
+    try {
+      return JSON.parse(field);
+    } catch (e) {
+      console.error('Failed to parse JSON field:', e);
+      return undefined;
     }
   }
 
@@ -235,15 +294,16 @@ class SyncServiceImpl {
         return false;
       }
 
+      // Convert data to JSON strings for database storage
       const userData = {
         user_id: user.id,
-        model_config: data.modelConfig || {},
-        speech_settings: data.speechSettings || {},
-        general_settings: data.generalSettings || {},
-        integration_settings: data.integrationSettings || {},
-        custom_commands: data.customCommands || [],
-        memories: data.memories || [],
-        chat_history: data.chatHistory || [],
+        model_config: JSON.stringify(data.modelConfig || {}),
+        speech_settings: JSON.stringify(data.speechSettings || {}),
+        general_settings: JSON.stringify(data.generalSettings || {}),
+        integration_settings: JSON.stringify(data.integrationSettings || {}),
+        custom_commands: JSON.stringify(data.customCommands || []),
+        memories: JSON.stringify(data.memories || []),
+        chat_history: JSON.stringify(data.chatHistory || []),
         sync_source: 'cloud' as const
       };
 
@@ -272,11 +332,11 @@ class SyncServiceImpl {
   /**
    * Comprehensive sync: load from cloud if available, fallback to local
    */
-  async syncData(): Promise<UserDataWithMeta> {
+  async syncData(versionId?: string): Promise<UserDataWithMeta> {
     console.log('Starting comprehensive data sync...');
 
     // Try to load from cloud first
-    const cloudData = await this.fetchCloudData();
+    const cloudData = await this.fetchCloudData(versionId);
     
     if (cloudData) {
       console.log('Loaded data from cloud, updating local storage');
@@ -308,16 +368,28 @@ class SyncServiceImpl {
    */
   async uploadToCloud(): Promise<boolean> {
     const localData = this.loadLocalData();
-    return await this.saveCloudData(localData);
+    const success = await this.saveCloudData(localData);
+    if (success) {
+      this.updateSyncMetadata({
+        lastSyncedAt: new Date().toISOString(),
+        syncSource: 'cloud'
+      });
+    }
+    return success;
   }
 
   /**
    * Force download cloud data to local
    */
-  async downloadFromCloud(): Promise<boolean> {
-    const cloudData = await this.fetchCloudData();
+  async downloadFromCloud(versionId?: string): Promise<boolean> {
+    const cloudData = await this.fetchCloudData(versionId);
     if (cloudData) {
       this.saveLocalData(cloudData);
+      this.updateSyncMetadata({
+        lastSyncedAt: cloudData.syncMetadata.lastSyncedAt,
+        syncSource: 'cloud',
+        dataVersion: cloudData.syncMetadata.dataVersion
+      });
       return true;
     }
     return false;

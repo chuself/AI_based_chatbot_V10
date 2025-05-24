@@ -35,7 +35,7 @@ export const syncCommandsToCloud = async (commands: Command[]): Promise<boolean>
     // Update the commands field
     settingsData = {
       ...settingsData,
-      commands: JSON.parse(JSON.stringify(commands))
+      commands: commands
     };
     
     if (existingSettings) {
@@ -101,7 +101,8 @@ export const fetchCommandsFromCloud = async (): Promise<Command[] | null> => {
     }
     
     // Return the commands from settings or null if not found
-    return data?.settings_data?.commands || null;
+    const settingsData = data?.settings_data as any;
+    return settingsData?.commands || null;
   } catch (error) {
     console.error('Error in fetchCommandsFromCloud:', error);
     return null;

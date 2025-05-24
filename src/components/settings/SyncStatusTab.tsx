@@ -3,19 +3,56 @@ import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
-import { SyncService, SyncMetadata } from "@/services/syncService";
-import { Cloud, Download, Upload, RefreshCw, HardDrive, Wifi, WifiOff } from "lucide-react";
+import { SyncService, SyncMetadata, CloudDataVersion } from "@/services/syncService";
+import { Cloud, Download, Upload, RefreshCw, HardDrive, Wifi, WifiOff, LogOut } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
 
 const SyncStatusTab = () => {
   const [syncMetadata, setSyncMetadata] = useState<SyncMetadata | null>(null);
+  const [cloudVersions, setCloudVersions] = useState<CloudDataVersion[]>([]);
+  const [selectedVersion, setSelectedVersion] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const metadata = SyncService.getSyncMetadata();
     setSyncMetadata(metadata);
+    loadCloudVersions();
   }, []);
+
+  const loadCloudVersions = async () => {
+    try {
+      const versions = await SyncService.getCloudVersions();
+      setCloudVersions(versions);
+    } catch (error) {
+      console.error('Error loading cloud versions:', error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      
+      toast({
+        title: "Logged Out",
+        description: "You have been successfully logged out",
+      });
+      
+      navigate("/auth");
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast({
+        title: "Logout Error",
+        description: "Failed to logout. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleUpload = async () => {
     setIsLoading(true);
@@ -28,6 +65,7 @@ const SyncStatusTab = () => {
         });
         const metadata = SyncService.getSyncMetadata();
         setSyncMetadata(metadata);
+        await loadCloudVersions();
       } else {
         toast({
           title: "Upload Failed",
@@ -50,7 +88,8 @@ const SyncStatusTab = () => {
   const handleDownload = async () => {
     setIsLoading(true);
     try {
-      const success = await SyncService.downloadFromCloud();
+      const versionId = selectedVersion || undefined;
+      const success = await SyncService.downloadFromCloud(versionId);
       if (success) {
         toast({
           title: "Download Successful",
@@ -82,12 +121,14 @@ const SyncStatusTab = () => {
   const handleFullSync = async () => {
     setIsLoading(true);
     try {
-      const result = await SyncService.syncData();
+      const versionId = selectedVersion || undefined;
+      const result = await SyncService.syncData(versionId);
       toast({
         title: "Sync Complete",
         description: `Data synced from ${result.syncMetadata.syncSource}`,
       });
       setSyncMetadata(result.syncMetadata);
+      await loadCloudVersions();
     } catch (error) {
       console.error('Sync error:', error);
       toast({
@@ -177,6 +218,34 @@ const SyncStatusTab = () => {
 
       <Card>
         <CardHeader>
+          <CardTitle>Cloud Version Selection</CardTitle>
+          <CardDescription>
+            Select a specific cloud backup version to download
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {cloudVersions.length > 0 ? (
+            <Select value={selectedVersion} onValueChange={setSelectedVersion}>
+              <SelectTrigger>
+                <SelectValue placeholder="Latest version (default)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Latest version (default)</SelectItem>
+                {cloudVersions.map((version) => (
+                  <SelectItem key={version.id} value={version.id}>
+                    v{version.dataVersion} - {new Date(version.lastSyncedAt).toLocaleString()}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <p className="text-sm text-gray-500">No cloud versions available</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Sync Actions</CardTitle>
           <CardDescription>
             Manually control data synchronization between devices
@@ -212,6 +281,25 @@ const SyncStatusTab = () => {
               Download from Cloud
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Account Management</CardTitle>
+          <CardDescription>
+            Manage your account and authentication
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={handleLogout}
+            variant="destructive"
+            className="w-full"
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Logout
+          </Button>
         </CardContent>
       </Card>
 
