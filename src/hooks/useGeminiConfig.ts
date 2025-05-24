@@ -45,16 +45,8 @@ export const useGeminiConfig = () => {
           setSelectedModel(defaultConfig.modelName);
           console.log("Created default model config with stored API key");
         } else {
-          // Set a placeholder default
-          const fallbackConfig: ModelConfig = {
-            modelName: "models/gemini-1.5-flash-latest",
-            provider: "gemini",
-            apiKey: "AIzaSyDApo1EqSX0Mq3ZePA9OM_yD0hnmoz_s-Q",
-            endpoint: ""
-          };
-          setModelConfig(fallbackConfig);
-          setSelectedModel(fallbackConfig.modelName);
-          console.log("Using fallback model config");
+          // Set a placeholder default - user should configure this
+          console.log("No model configuration found, user needs to set up API key");
         }
       }
     };

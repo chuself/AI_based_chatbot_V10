@@ -34,7 +34,7 @@ export interface CloudDataVersion {
 }
 
 /**
- * Comprehensive sync service for all user data
+ * Comprehensive sync service for all user data using user_data table only
  */
 class SyncServiceImpl {
   private readonly LOCAL_KEYS = {
@@ -219,7 +219,7 @@ class SyncServiceImpl {
   }
 
   /**
-   * Fetch specific version of user data from cloud
+   * Fetch specific version of user data from cloud using user_data table only
    */
   async fetchCloudData(versionId?: string): Promise<UserDataWithMeta | null> {
     try {
@@ -284,7 +284,7 @@ class SyncServiceImpl {
   }
 
   /**
-   * Save user data to cloud
+   * Save user data to cloud using user_data table only
    */
   async saveCloudData(data: UserData): Promise<boolean> {
     try {

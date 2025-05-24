@@ -12,7 +12,7 @@ export interface Command {
 const LOCAL_STORAGE_KEY = "custom-ai-commands";
 
 /**
- * Sync commands to Supabase user settings
+ * Sync commands to Supabase user_data table
  */
 export const syncCommandsToCloud = async (commands: Command[]): Promise<boolean> => {
   try {
@@ -23,46 +23,44 @@ export const syncCommandsToCloud = async (commands: Command[]): Promise<boolean>
       return false;
     }
     
-    // Store commands in user_settings table, in a commands field
-    const { data: existingSettings } = await supabase
-      .from('user_settings')
-      .select('settings_data')
+    // Get existing user data
+    const { data: existingData } = await supabase
+      .from('user_data')
+      .select('*')
       .eq('user_id', user.id)
       .single();
     
-    let settingsData = existingSettings?.settings_data || {};
-    
-    // Update the commands field
-    settingsData = {
-      ...settingsData,
-      commands: commands
+    const userData = {
+      user_id: user.id,
+      custom_commands: JSON.stringify(commands),
+      model_config: existingData?.model_config || '{}',
+      speech_settings: existingData?.speech_settings || '{}',
+      general_settings: existingData?.general_settings || '{}',
+      integration_settings: existingData?.integration_settings || '{}',
+      memories: existingData?.memories || '[]',
+      chat_history: existingData?.chat_history || '[]',
+      sync_source: 'cloud' as const
     };
-    
-    if (existingSettings) {
-      // Update existing settings
+
+    if (existingData) {
+      // Update existing data
       const { error } = await supabase
-        .from('user_settings')
-        .update({
-          settings_data: settingsData,
-          updated_at: new Date().toISOString()
-        })
+        .from('user_data')
+        .update(userData)
         .eq('user_id', user.id);
       
       if (error) {
-        console.error('Error updating commands in settings:', error);
+        console.error('Error updating commands:', error);
         return false;
       }
     } else {
-      // Create new settings
+      // Create new data
       const { error } = await supabase
-        .from('user_settings')
-        .insert({
-          user_id: user.id,
-          settings_data: settingsData
-        });
+        .from('user_data')
+        .insert(userData);
       
       if (error) {
-        console.error('Error inserting commands in settings:', error);
+        console.error('Error inserting commands:', error);
         return false;
       }
     }
@@ -76,7 +74,7 @@ export const syncCommandsToCloud = async (commands: Command[]): Promise<boolean>
 };
 
 /**
- * Fetch commands from Supabase
+ * Fetch commands from Supabase user_data table
  */
 export const fetchCommandsFromCloud = async (): Promise<Command[] | null> => {
   try {
@@ -88,8 +86,8 @@ export const fetchCommandsFromCloud = async (): Promise<Command[] | null> => {
     }
     
     const { data, error } = await supabase
-      .from('user_settings')
-      .select('settings_data')
+      .from('user_data')
+      .select('custom_commands')
       .eq('user_id', user.id)
       .single();
     
@@ -100,9 +98,16 @@ export const fetchCommandsFromCloud = async (): Promise<Command[] | null> => {
       return null;
     }
     
-    // Return the commands from settings or null if not found
-    const settingsData = data?.settings_data as any;
-    return settingsData?.commands || null;
+    // Parse the commands from JSON string
+    try {
+      const commands = typeof data.custom_commands === 'string' 
+        ? JSON.parse(data.custom_commands) 
+        : data.custom_commands;
+      return commands || [];
+    } catch (parseError) {
+      console.error('Error parsing commands:', parseError);
+      return null;
+    }
   } catch (error) {
     console.error('Error in fetchCommandsFromCloud:', error);
     return null;

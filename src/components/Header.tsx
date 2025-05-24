@@ -62,9 +62,11 @@ const Header: React.FC<HeaderProps> = ({ modelName = "AI Assistant" }) => {
         </div>
       </header>
 
-      <MemorySearch 
-        onClose={() => setIsMemorySearchOpen(false)} 
-      />
+      {isMemorySearchOpen && (
+        <MemorySearch 
+          onClose={() => setIsMemorySearchOpen(false)} 
+        />
+      )}
     </>
   );
 };
