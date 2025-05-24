@@ -17,17 +17,10 @@ import { Label } from "@/components/ui/label";
 import SupabaseSyncStatus from "@/components/SupabaseSyncStatus";
 import { SupabaseContext } from "@/App";
 import { Command, loadCommands } from "@/services/commandsService";
+import { useDataSync } from "@/hooks/useDataSync";
 
-const STORAGE_KEY_COMMANDS = "custom-ai-commands";
-const STORAGE_KEY_SHOW_CHANGELOG = "show-changelog-1.5.0"; // Update with version
+const STORAGE_KEY_SHOW_CHANGELOG = "show-changelog-1.6.0"; // Update with version
 const STORAGE_KEY_SHOW_COMMANDS = "show-mcp-commands"; // For command visibility toggle
-
-interface Command {
-  id: string;
-  name: string;
-  instruction: string;
-  condition?: string;
-}
 
 interface CommandLog {
   timestamp: Date;
@@ -37,8 +30,9 @@ interface CommandLog {
 }
 
 const Index = () => {
+  // Current session messages (starts fresh each login)
   const [messages, setMessages] = useState<Message[]>([]);
-  const { sendMessage, isLoading, error, selectedModel, chatHistory, clearChatHistory } = useGemini();
+  const { sendMessage, isLoading, error, selectedModel } = useGemini();
   const { speak, autoPlay } = useSpeech();
   const { toast } = useToast();
   const [googleConnected, setGoogleConnected] = useState(false);
@@ -49,6 +43,9 @@ const Index = () => {
   const isMobile = useIsMobile();
   const { user } = useContext(SupabaseContext);
   const [loadingCommands, setLoadingCommands] = useState(true);
+  
+  // Use the new data sync hook
+  const { syncData, isLoading: syncLoading } = useDataSync();
   
   // Load command visibility preference
   useEffect(() => {
@@ -75,23 +72,30 @@ const Index = () => {
     setShowChangelog(false);
   };
   
-  // Load commands - now using the commands service that syncs with Supabase
+  // Load commands from synced data
   useEffect(() => {
-    const fetchCommands = async () => {
-      setLoadingCommands(true);
-      try {
-        const commands = await loadCommands();
-        setCustomCommands(commands);
-        console.log(`Loaded ${commands.length} commands from storage`);
-      } catch (e) {
-        console.error("Failed to load commands:", e);
-      } finally {
-        setLoadingCommands(false);
-      }
-    };
-    
-    fetchCommands();
-  }, [user?.id]); // Reload when user changes
+    if (syncData?.customCommands) {
+      setCustomCommands(syncData.customCommands);
+      setLoadingCommands(false);
+      console.log(`Loaded ${syncData.customCommands.length} commands from synced data`);
+    } else if (!syncLoading) {
+      // Fallback to legacy loading if no synced data
+      const fetchCommands = async () => {
+        setLoadingCommands(true);
+        try {
+          const commands = await loadCommands();
+          setCustomCommands(commands);
+          console.log(`Loaded ${commands.length} commands from legacy storage`);
+        } catch (e) {
+          console.error("Failed to load commands:", e);
+        } finally {
+          setLoadingCommands(false);
+        }
+      };
+      
+      fetchCommands();
+    }
+  }, [syncData, syncLoading]);
   
   useEffect(() => {
     const googleStatus = checkGoogleConnection();
@@ -114,17 +118,9 @@ const Index = () => {
     };
   }, []);
   
+  // Initialize with welcome message only (fresh start each session)
   useEffect(() => {
-    if (chatHistory.length > 0) {
-      const convertedMessages = chatHistory.map((msg) => ({
-        id: msg.timestamp.toString(),
-        text: msg.content,
-        isUser: msg.role === "user",
-        timestamp: new Date(msg.timestamp),
-      }));
-      
-      setMessages(convertedMessages);
-    } else if (messages.length === 0) {
+    if (messages.length === 0) {
       const welcomeMessage: Message = {
         id: Date.now().toString(),
         text: "👋 Hi! I'm your Chuself AI assistant. How can I help you today?",
@@ -134,7 +130,7 @@ const Index = () => {
       
       setMessages([welcomeMessage]);
     }
-  }, [chatHistory, messages.length]);
+  }, [messages.length]);
   
   useEffect(() => {
     if (error) {
@@ -149,7 +145,6 @@ const Index = () => {
   // Monitor MCP calls
   useEffect(() => {
     const originalExtractMcpCall = getMcpClient().extractMcpCall;
-    const originalProcessMcpCall = getMcpClient().processMcpCall;
     
     // Override the extractMcpCall method to log calls
     getMcpClient().extractMcpCall = (text: string) => {
@@ -170,10 +165,8 @@ const Index = () => {
       return mcpCall;
     };
     
-    // We're not actually replacing functionality, just adding logging
     return () => {
       getMcpClient().extractMcpCall = originalExtractMcpCall;
-      getMcpClient().processMcpCall = originalProcessMcpCall;
     };
   }, []);
   
@@ -391,28 +384,9 @@ const Index = () => {
     if (isExplicitMemoryQuery) {
       response = await handleMemoryQuery(text);
     } else {
-      const serviceType = detectServiceRequest(text);
-      
-      if (googleConnected && serviceType) {
-        switch(serviceType) {
-          case "gmail":
-            response = await handleEmailRequest(text);
-            break;
-          case "calendar":
-            response = await handleCalendarRequest(text);
-            break;
-          case "drive":
-            response = await handleDriveRequest(text);
-            break;
-          case "search":
-            response = await handleSearchRequest(text);
-            break;
-          default:
-            response = await sendMessage(text, commandInstructions);
-        }
-      } else {
-        response = await sendMessage(text, commandInstructions);
-      }
+      // Pass chat history from synced data (background context) but don't display it
+      const backgroundHistory = syncData?.chatHistory || [];
+      response = await sendMessage(text, commandInstructions, backgroundHistory);
     }
     
     MemoryService.saveMemory(text, response);

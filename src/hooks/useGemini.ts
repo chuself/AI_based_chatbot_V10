@@ -1,226 +1,198 @@
-
-import { useState } from "react";
-import { useGeminiConfig } from "./useGeminiConfig";
-import { useChatHistory, ChatMessage } from "./useChatHistory";
-import { callGeminiApi, callOpenRouterApi, callGroqApi, prepareMessageHistory } from "@/services/aiProviders";
-import getMcpClient from "@/services/mcpService";
-import { MemoryService } from "@/services/memoryService";
-
-// Export types with the 'export type' syntax for isolatedModules compatibility
-export type { ChatMessage } from "./useChatHistory";
-export type { ModelConfig } from "./useGeminiConfig";
+import { useState, useEffect } from "react";
+import { ModelConfig, useGeminiConfig } from "./useGeminiConfig";
+import { useChatHistory, ChatMessage, MAX_HISTORY_LENGTH } from "./useChatHistory";
 
 export const useGemini = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mcpResult, setMcpResult] = useState<any | null>(null);
+  const { modelConfig, selectedModel } = useGeminiConfig();
   const { chatHistory, setChatHistory, clearChatHistory } = useChatHistory();
-  const { availableModels, selectedModel, modelConfig, setSelectedModel } = useGeminiConfig();
-  const mcpClient = getMcpClient();
 
-  /**
-   * Check if a message might reference previous conversations
-   */
-  const detectReferenceToMemory = (text: string): boolean => {
-    const referenceKeywords = [
-      "you said", "we talked about", "we discussed", "you mentioned", 
-      "previously", "earlier", "before", "last time", "remember when",
-      "as I mentioned", "like I said", "as we discussed", "recall"
-    ];
-    
-    const lowerText = text.toLowerCase();
-    return referenceKeywords.some(keyword => lowerText.includes(keyword));
-  };
-
-  /**
-   * Retrieve relevant memories to provide context
-   */
-  const getMemoryContext = (message: string): string => {
-    // Use the search functionality to find relevant memories
-    const searchParams = MemoryService.parseNaturalLanguageQuery(message);
-    const results = MemoryService.searchMemories({
-      ...searchParams,
-      limit: 3 // Limit to top 3 most relevant memories
-    });
-    
-    if (results.length === 0) return "";
-    
-    // Format memories as context
-    let context = "Here are some relevant memories from our previous conversations that might help with this question:\n\n";
-    
-    results.forEach((result, index) => {
-      const memory = result.entry;
-      const date = new Date(memory.timestamp).toLocaleDateString();
-      
-      context += `Memory ${index + 1} (${date}):\n`;
-      context += `You: ${memory.userInput}\n`;
-      context += `Me: ${memory.assistantReply}\n\n`;
-    });
-    
-    context += "Please use these memories to inform your response to the current question.\n\n";
-    
-    return context;
-  };
-
-  /**
-   * Send a message to the selected AI model
-   */
-  const sendMessage = async (message: string, customInstructions?: string): Promise<string> => {
-    if (!modelConfig) {
-      setError("No model configuration available. Please set up your model in settings.");
-      return "Sorry, no AI model is currently available. Please configure your model in settings.";
+  const sendMessage = async (
+    message: string, 
+    customInstructions?: string,
+    backgroundHistory?: ChatMessage[]
+  ): Promise<string> => {
+    if (!modelConfig?.apiKey) {
+      throw new Error("No API key configured. Please configure your model settings.");
     }
 
     setIsLoading(true);
     setError(null);
-    setMcpResult(null);
 
     try {
-      // Create message history with system message first if provided
-      const messageHistory = [...chatHistory];
+      // Use background history if provided, otherwise use current chat history
+      const historyToUse = backgroundHistory || chatHistory;
       
-      // Add MCP server information to the system message with detailed instructions
-      const mcpInstructions = `You have access to an MCP server at https://cloud-connect-mcp-server.onrender.com/.
-When you need to use Gmail, Calendar, Drive, or Search tools, emit exactly:
-{ "mcp_call": { "tool": "<toolName>", "method": "<methodName>", "params": { ... }, "id": 1 } }
-
-Available tools:
-- gmail: For reading and sending emails
-- calendar: For managing calendar events
-- drive: For file management
-- search: For web search
-
-Example of MCP call for Gmail:
-{ "mcp_call": { "tool": "gmail", "method": "listMessages", "params": { "maxResults": 5 }, "id": 1 } }`;
-      
-      // Check if the message might be referencing previous conversations
-      const mightReferenceMemory = detectReferenceToMemory(message);
-      let memoryContext = "";
-      
-      if (mightReferenceMemory) {
-        memoryContext = getMemoryContext(message);
-      }
-      
-      // Combine all instructions
-      let systemInstructions = mcpInstructions;
-      
-      if (memoryContext) {
-        systemInstructions = `${memoryContext}\n\n${systemInstructions}`;
-      }
-      
-      if (customInstructions && customInstructions.trim()) {
-        systemInstructions = `${customInstructions}\n\n${systemInstructions}`;
-      }
-      
-      // Only add system message if it doesn't exist or is different
-      const existingSystemMessage = messageHistory.find(msg => 
-        msg.role === "system" && msg.content === systemInstructions
-      );
-      
-      if (!existingSystemMessage) {
-        // Remove any previous system messages to avoid conflicting instructions
-        const filteredHistory = messageHistory.filter(msg => msg.role !== "system");
-        
-        // Add the new system message at the beginning
-        filteredHistory.unshift({
-          role: "system",
-          content: systemInstructions,
-          timestamp: Date.now() - 10000, // Add slightly before user message
-        });
-        
-        // Update the history
-        messageHistory.length = 0;
-        messageHistory.push(...filteredHistory);
-      }
-      
-      // Add user message to chat history
+      // Combine current chat history with new message
       const userMessage: ChatMessage = {
         role: "user",
         content: message,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       };
-      
-      const updatedHistory = [...messageHistory, userMessage];
-      setChatHistory(updatedHistory);
 
-      // Use smart token management to prepare history
-      const recentHistory = prepareMessageHistory(updatedHistory);
-      
-      let responseText = "";
-      
-      // Handle different providers
-      switch(modelConfig.provider) {
-        case "gemini":
-          responseText = await callGeminiApi(recentHistory, message, modelConfig);
-          break;
-        case "openrouter":
-          responseText = await callOpenRouterApi(recentHistory, message, modelConfig);
-          break;
-        case "groq":
-          responseText = await callGroqApi(recentHistory, message, modelConfig);
-          break;
-        default:
-          throw new Error(`Unsupported provider: ${modelConfig.provider}`);
+      const updatedHistory = [...historyToUse, userMessage];
+
+      // Prepare messages for the API call
+      let messages = updatedHistory.slice(-MAX_HISTORY_LENGTH).map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+
+      if (customInstructions) {
+        messages.unshift({
+          role: "system",
+          content: customInstructions
+        });
       }
+
+      console.log('Sending request to:', modelConfig.provider);
+      console.log('Using model:', modelConfig.modelName);
+      console.log('Message count:', messages.length);
+
+      let response;
       
-      // Check if the response contains an MCP call
-      if (mcpClient.hasMcpCall(responseText)) {
-        const mcpCall = mcpClient.extractMcpCall(responseText);
-        if (mcpCall) {
-          // Add AI message with MCP call request
-          const aiRequestMessage: ChatMessage = {
-            role: "assistant",
-            content: `I'll help you with that using ${mcpCall.tool}.`,
-            timestamp: Date.now()
-          };
-          
-          setChatHistory(prevHistory => [...prevHistory, aiRequestMessage]);
-          
-          // Process the MCP call - this will trigger the active connection indicators
-          const mcpResponse = await mcpClient.processMcpCall(mcpCall);
-          setMcpResult(mcpResponse);
-          
-          // Add MCP result message
-          let resultMessage = "";
-          
-          if (mcpResponse.error) {
-            resultMessage = `Error: ${mcpResponse.error.message}`;
-          } else {
-            resultMessage = JSON.stringify(mcpResponse.result, null, 2);
-          }
-          
-          // Add a new AI message with the result
-          const aiResultMessage: ChatMessage = {
-            role: "assistant",
-            content: resultMessage,
-            timestamp: Date.now() + 1000,
-            isMcpResult: true
-          };
-          
-          setChatHistory(prevHistory => [...prevHistory, aiResultMessage]);
-          
-          return resultMessage;
-        }
+      if (modelConfig.provider === "gemini") {
+        response = await sendGeminiRequest(messages, modelConfig);
+      } else if (modelConfig.provider === "groq") {
+        response = await sendGroqRequest(messages, modelConfig);
+      } else if (modelConfig.provider === "openrouter") {
+        response = await sendOpenRouterRequest(messages, modelConfig);
+      } else {
+        throw new Error(`Unsupported provider: ${modelConfig.provider}`);
       }
-      
-      // Add AI response to chat history for normal responses
-      const aiMessage: ChatMessage = {
+
+      // Add assistant response to history
+      const assistantMessage: ChatMessage = {
         role: "assistant",
-        content: responseText,
-        timestamp: Date.now()
+        content: response,
+        timestamp: Date.now(),
       };
-      
-      setChatHistory(prevHistory => [...prevHistory, aiMessage]);
-      
-      return responseText;
+
+      // Update the actual chat history (not background history)
+      const newHistory = [...chatHistory, userMessage, assistantMessage];
+      setChatHistory(newHistory);
+
+      return response;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error occurred";
+      console.error('Error in sendMessage:', err);
+      const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred";
       setError(errorMessage);
-      console.error("Error calling AI API:", errorMessage);
-      
-      return "Sorry, I encountered an error processing your request.";
+      throw new Error(errorMessage);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const sendGeminiRequest = async (messages: { role: string; content: string; }[], modelConfig: ModelConfig): Promise<string> => {
+    try {
+      const geminiURL = `https://generativelanguage.googleapis.com/v1beta/models/${modelConfig.modelName}:generateContent?key=${modelConfig.apiKey}`;
+      const data = {
+        contents: messages
+      };
+
+      const response = await fetch(geminiURL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        console.error('Gemini API error:', response.status, response.statusText, await response.text());
+        throw new Error(`Gemini API request failed with status ${response.status}`);
+      }
+
+      const json = await response.json();
+      const responseText = json.candidates[0].content.parts[0].text;
+      return responseText;
+
+    } catch (error) {
+      console.error('Error calling Gemini API:', error);
+      throw new Error(`Failed to get response from Gemini: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const sendGroqRequest = async (messages: { role: string; content: string; }[], modelConfig: ModelConfig): Promise<string> => {
+    try {
+      const groqURL = `https://api.groq.com/openai/v1/chat/completions`;
+      const data = {
+        model: modelConfig.modelName,
+        messages: messages,
+        temperature: 0.7,
+        top_p: 1,
+        n: 1,
+        stream: false,
+        max_tokens: 1024,
+        presence_penalty: 0,
+        frequency_penalty: 0,
+        stop: null
+      };
+
+      const response = await fetch(groqURL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${modelConfig.apiKey}`
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        console.error('Groq API error:', response.status, response.statusText, await response.text());
+        throw new Error(`Groq API request failed with status ${response.status}`);
+      }
+
+      const json = await response.json();
+      const responseText = json.choices[0].message.content;
+      return responseText;
+
+    } catch (error) {
+      console.error('Error calling Groq API:', error);
+      throw new Error(`Failed to get response from Groq: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const sendOpenRouterRequest = async (messages: { role: string; content: string; }[], modelConfig: ModelConfig): Promise<string> => {
+    try {
+      const openRouterURL = `https://openrouter.ai/api/v1/chat/completions`;
+      const data = {
+        model: modelConfig.modelName,
+        messages: messages,
+        temperature: 0.7,
+        top_p: 1,
+        n: 1,
+        stream: false,
+        max_tokens: 1024,
+        presence_penalty: 0,
+        frequency_penalty: 0,
+        stop: null
+      };
+
+      const response = await fetch(openRouterURL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${modelConfig.apiKey}`,
+          'HTTP-Referer': 'https://lovable.ai', // Replace with your actual site URL
+          'X-Title': 'Chuself AI' // Replace with your actual app name
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        console.error('OpenRouter API error:', response.status, response.statusText, await response.text());
+        throw new Error(`OpenRouter API request failed with status ${response.status}`);
+      }
+
+      const json = await response.json();
+      const responseText = json.choices[0].message.content;
+      return responseText;
+
+    } catch (error) {
+      console.error('Error calling OpenRouter API:', error);
+      throw new Error(`Failed to get response from OpenRouter: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -228,11 +200,8 @@ Example of MCP call for Gmail:
     sendMessage,
     isLoading,
     error,
-    mcpResult,
-    availableModels,
     selectedModel,
-    setSelectedModel,
     chatHistory,
-    clearChatHistory
+    clearChatHistory,
   };
 };

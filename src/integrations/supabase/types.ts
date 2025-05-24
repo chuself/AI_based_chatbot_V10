@@ -75,6 +75,57 @@ export type Database = {
         }
         Relationships: []
       }
+      user_data: {
+        Row: {
+          chat_history: Json | null
+          created_at: string
+          custom_commands: Json | null
+          data_version: number | null
+          general_settings: Json | null
+          id: string
+          integration_settings: Json | null
+          last_synced_at: string | null
+          memories: Json | null
+          model_config: Json | null
+          speech_settings: Json | null
+          sync_source: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          chat_history?: Json | null
+          created_at?: string
+          custom_commands?: Json | null
+          data_version?: number | null
+          general_settings?: Json | null
+          id?: string
+          integration_settings?: Json | null
+          last_synced_at?: string | null
+          memories?: Json | null
+          model_config?: Json | null
+          speech_settings?: Json | null
+          sync_source?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          chat_history?: Json | null
+          created_at?: string
+          custom_commands?: Json | null
+          data_version?: number | null
+          general_settings?: Json | null
+          id?: string
+          integration_settings?: Json | null
+          last_synced_at?: string | null
+          memories?: Json | null
+          model_config?: Json | null
+          speech_settings?: Json | null
+          sync_source?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_settings: {
         Row: {
           settings_data: Json | null
@@ -98,7 +149,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      merge_user_settings: {
+        Args: { _user_id: string; _settings_data: Json }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

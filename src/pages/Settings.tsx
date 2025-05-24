@@ -4,7 +4,8 @@ import {
   SettingsIcon,
   Cpu,
   Volume2, 
-  Globe
+  Globe,
+  RefreshCw
 } from "lucide-react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import MemorySearch from "@/components/MemorySearch";
@@ -14,6 +15,7 @@ import GeneralSettings from "@/components/settings/GeneralSettings";
 import ModelSettingsTab from "@/components/settings/ModelSettings";
 import SpeechSettingsTab from "@/components/settings/SpeechSettingsTab";
 import IntegrationsTab from "@/components/settings/IntegrationsTab";
+import SyncStatusTab from "@/components/settings/SyncStatusTab";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const Settings = () => {
@@ -25,7 +27,8 @@ const Settings = () => {
     { id: "general", label: "General", icon: <SettingsIcon className="h-5 w-5" /> },
     { id: "models", label: "Models", icon: <Cpu className="h-5 w-5" /> },
     { id: "speech", label: "Speech", icon: <Volume2 className="h-5 w-5" /> },
-    { id: "integrations", label: "Integrations", icon: <Globe className="h-5 w-5" /> }
+    { id: "integrations", label: "Integrations", icon: <Globe className="h-5 w-5" /> },
+    { id: "sync", label: "Sync Status", icon: <RefreshCw className="h-5 w-5" /> }
   ];
 
   // Function to render the content based on the active tab
@@ -39,6 +42,8 @@ const Settings = () => {
         return <SpeechSettingsTab />;
       case "integrations":
         return <IntegrationsTab />;
+      case "sync":
+        return <SyncStatusTab />;
       default:
         return <GeneralSettings />;
     }
