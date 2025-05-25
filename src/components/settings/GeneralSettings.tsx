@@ -2,9 +2,10 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Brain, Command, Search, Trash2 } from "lucide-react";
+import { Brain, Command, Search, Trash2, Terminal } from "lucide-react";
 import { useGemini } from "@/hooks/useGemini";
 import { useToast } from "@/components/ui/use-toast";
+import { MCPStatusIndicator } from "@/components/MCPStatusIndicator";
 
 const GeneralSettings = () => {
   const navigate = useNavigate();
@@ -88,6 +89,14 @@ const GeneralSettings = () => {
           </Button>
         </div>
       </div>
+
+      <div className="space-y-2 p-4 rounded-lg border border-white/10 bg-white/5 transition-all hover:bg-white/10 duration-200">
+        <h3 className="text-md font-medium">MCP Server Status</h3>
+        <p className="text-sm text-gray-400 mb-4">
+          Monitor the status of MCP server integrations
+        </p>
+        <MCPStatusIndicator />
+      </div>
       
       <div className="space-y-2 p-4 rounded-lg border border-white/10 bg-white/5 transition-all hover:bg-white/10 duration-200">
         <h3 className="text-md font-medium">Conversation Memory</h3>
@@ -110,7 +119,17 @@ const Changelog = () => (
   <div className="space-y-2 p-4 rounded-lg border border-white/10 bg-white/5 mt-6 transition-all hover:bg-white/10 duration-200">
     <h3 className="text-md font-medium">Changelog</h3>
     <div className="text-xs text-gray-300">
-      <p className="font-semibold">Version 1.6.0 (2025-04-17)</p>
+      <p className="font-semibold">Version 1.7.0 (2025-01-25)</p>
+      <ul className="list-disc pl-5 space-y-1 mt-1">
+        <li>Fixed model response fetching issues with improved error handling</li>
+        <li>Added versioning support for cloud data - each upload creates a new version</li>
+        <li>Enhanced sync status display with detailed breakdown of synced components</li>
+        <li>Moved MCP server status indicator to General Settings page</li>
+        <li>Improved cloud version selection to show all available backup versions</li>
+        <li>Fixed Gemini API message formatting for better compatibility</li>
+      </ul>
+      
+      <p className="font-semibold mt-2">Version 1.6.0 (2025-04-17)</p>
       <ul className="list-disc pl-5 space-y-1 mt-1">
         <li>Added MCP server integration for Gmail, Calendar, and Drive</li>
         <li>Implemented Gmail OAuth connection in the integrations tab</li>

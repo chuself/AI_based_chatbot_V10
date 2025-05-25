@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { ModelConfig, useGeminiConfig } from "./useGeminiConfig";
 import { useChatHistory, ChatMessage, MAX_HISTORY_LENGTH } from "./useChatHistory";
@@ -13,8 +14,18 @@ export const useGemini = () => {
     customInstructions?: string,
     backgroundHistory?: ChatMessage[]
   ): Promise<string> => {
+    console.log('sendMessage called with:', { message, modelConfig });
+    
     if (!modelConfig?.apiKey) {
-      throw new Error("No API key configured. Please configure your model settings.");
+      const errorMsg = "No API key configured. Please configure your model settings.";
+      console.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+
+    if (!modelConfig?.modelName) {
+      const errorMsg = "No model selected. Please select a model in settings.";
+      console.error(errorMsg);
+      throw new Error(errorMsg);
     }
 
     setIsLoading(true);
@@ -49,6 +60,7 @@ export const useGemini = () => {
       console.log('Sending request to:', modelConfig.provider);
       console.log('Using model:', modelConfig.modelName);
       console.log('Message count:', messages.length);
+      console.log('Full model config:', modelConfig);
 
       let response;
       
@@ -62,16 +74,19 @@ export const useGemini = () => {
         throw new Error(`Unsupported provider: ${modelConfig.provider}`);
       }
 
-      // Add assistant response to history
-      const assistantMessage: ChatMessage = {
-        role: "assistant",
-        content: response,
-        timestamp: Date.now(),
-      };
+      console.log('Received response:', response);
 
-      // Update the actual chat history (not background history)
-      const newHistory = [...chatHistory, userMessage, assistantMessage];
-      setChatHistory(newHistory);
+      // Add assistant response to history (only if not using background history)
+      if (!backgroundHistory) {
+        const assistantMessage: ChatMessage = {
+          role: "assistant",
+          content: response,
+          timestamp: Date.now(),
+        };
+
+        const newHistory = [...chatHistory, userMessage, assistantMessage];
+        setChatHistory(newHistory);
+      }
 
       return response;
     } catch (err) {
@@ -86,9 +101,20 @@ export const useGemini = () => {
 
   const sendGeminiRequest = async (messages: { role: string; content: string; }[], modelConfig: ModelConfig): Promise<string> => {
     try {
-      const geminiURL = `https://generativelanguage.googleapis.com/v1beta/models/${modelConfig.modelName}:generateContent?key=${modelConfig.apiKey}`;
-      const data = {
-        contents: messages
+      // Format messages for Gemini API
+      const formattedMessages = messages.map(msg => ({
+        role: msg.role === "assistant" ? "model" : msg.role === "system" ? "user" : msg.role,
+        parts: [{ text: msg.content }]
+      }));
+
+      const modelName = modelConfig.modelName.includes('/') ? modelConfig.modelName : `models/${modelConfig.modelName}`;
+      const geminiURL = `https://generativelanguage.googleapis.com/v1beta/${modelName}:generateContent?key=${modelConfig.apiKey}`;
+      
+      console.log('Gemini API URL:', geminiURL);
+      console.log('Formatted messages:', formattedMessages);
+
+      const requestBody = {
+        contents: formattedMessages
       };
 
       const response = await fetch(geminiURL, {
@@ -96,16 +122,25 @@ export const useGemini = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify(requestBody),
       });
 
+      console.log('Gemini response status:', response.status);
+
       if (!response.ok) {
-        console.error('Gemini API error:', response.status, response.statusText, await response.text());
-        throw new Error(`Gemini API request failed with status ${response.status}`);
+        const errorText = await response.text();
+        console.error('Gemini API error:', response.status, response.statusText, errorText);
+        throw new Error(`Gemini API request failed with status ${response.status}: ${errorText}`);
       }
 
       const json = await response.json();
-      const responseText = json.candidates[0].content.parts[0].text;
+      console.log('Gemini response data:', json);
+      
+      const responseText = json.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!responseText) {
+        throw new Error('No response content from Gemini API');
+      }
+      
       return responseText;
 
     } catch (error) {
@@ -130,6 +165,8 @@ export const useGemini = () => {
         stop: null
       };
 
+      console.log('Groq request data:', data);
+
       const response = await fetch(groqURL, {
         method: 'POST',
         headers: {
@@ -140,12 +177,18 @@ export const useGemini = () => {
       });
 
       if (!response.ok) {
-        console.error('Groq API error:', response.status, response.statusText, await response.text());
-        throw new Error(`Groq API request failed with status ${response.status}`);
+        const errorText = await response.text();
+        console.error('Groq API error:', response.status, response.statusText, errorText);
+        throw new Error(`Groq API request failed with status ${response.status}: ${errorText}`);
       }
 
       const json = await response.json();
-      const responseText = json.choices[0].message.content;
+      const responseText = json.choices?.[0]?.message?.content;
+      
+      if (!responseText) {
+        throw new Error('No response content from Groq API');
+      }
+      
       return responseText;
 
     } catch (error) {
@@ -175,19 +218,25 @@ export const useGemini = () => {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${modelConfig.apiKey}`,
-          'HTTP-Referer': 'https://lovable.ai', // Replace with your actual site URL
-          'X-Title': 'Chuself AI' // Replace with your actual app name
+          'HTTP-Referer': 'https://lovable.ai',
+          'X-Title': 'Chuself AI'
         },
         body: JSON.stringify(data),
       });
 
       if (!response.ok) {
-        console.error('OpenRouter API error:', response.status, response.statusText, await response.text());
-        throw new Error(`OpenRouter API request failed with status ${response.status}`);
+        const errorText = await response.text();
+        console.error('OpenRouter API error:', response.status, response.statusText, errorText);
+        throw new Error(`OpenRouter API request failed with status ${response.status}: ${errorText}`);
       }
 
       const json = await response.json();
-      const responseText = json.choices[0].message.content;
+      const responseText = json.choices?.[0]?.message?.content;
+      
+      if (!responseText) {
+        throw new Error('No response content from OpenRouter API');
+      }
+      
       return responseText;
 
     } catch (error) {

@@ -17,6 +17,30 @@ interface ChangelogProps {
 
 const changelogData: ChangelogEntry[] = [
   {
+    version: "1.7.0",
+    date: "2025-01-25",
+    changes: [
+      "Fixed model response fetching issues with improved error handling and logging",
+      "Added versioning support for cloud data - each upload creates a new version instead of overwriting",
+      "Enhanced sync status display with detailed breakdown of synced components",
+      "Moved MCP server status indicator from chat page to General Settings page",
+      "Improved cloud version selection to show all available backup versions",
+      "Fixed Gemini API message formatting for better compatibility",
+      "Added comprehensive error logging for debugging model API calls"
+    ]
+  },
+  {
+    version: "1.6.0",
+    date: "2025-04-17",
+    changes: [
+      "Added MCP server integration for Gmail, Calendar, and Drive",
+      "Implemented Gmail OAuth connection in the integrations tab",
+      "Added formatted display of Gmail data in chat responses",
+      "Improved handling of API responses in the chat interface",
+      "Fixed text-to-speech issues with more natural voice patterns"
+    ]
+  },
+  {
     version: "1.5.0",
     date: "2025-04-16",
     changes: [
@@ -28,7 +52,7 @@ const changelogData: ChangelogEntry[] = [
     ]
   },
   {
-    version: "1.4.0",
+    version: "1.4.0", 
     date: "2025-04-14",
     changes: [
       "Added support for multiple AI model providers",
@@ -38,8 +62,8 @@ const changelogData: ChangelogEntry[] = [
     ]
   },
   {
-    version: "1.3.0",
-    date: "2025-04-01",
+    version: "1.3.0", 
+    date: "2025-03-15",
     changes: [
       "Added conversation history to maintain context between messages",
       "Added ability to clear conversation history",

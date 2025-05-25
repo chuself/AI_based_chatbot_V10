@@ -44,7 +44,7 @@ export interface SyncStatus {
 }
 
 /**
- * Comprehensive sync service for all user data using user_data table only
+ * Comprehensive sync service for all user data using user_data table with versioning
  */
 class SyncServiceImpl {
   private readonly LOCAL_KEYS = {
@@ -83,10 +83,10 @@ class SyncServiceImpl {
   getSyncStatus(): SyncStatus {
     const localData = this.loadLocalData();
     return {
-      modelConfig: !!localData.modelConfig,
-      speechSettings: !!localData.speechSettings,
-      generalSettings: !!localData.generalSettings,
-      integrationSettings: !!localData.integrationSettings,
+      modelConfig: !!(localData.modelConfig && Object.keys(localData.modelConfig).length > 0),
+      speechSettings: !!(localData.speechSettings && Object.keys(localData.speechSettings).length > 0),
+      generalSettings: !!(localData.generalSettings && Object.keys(localData.generalSettings).length > 0),
+      integrationSettings: !!(localData.integrationSettings && Object.keys(localData.integrationSettings).length > 0),
       customCommands: !!(localData.customCommands && localData.customCommands.length > 0),
       memories: !!(localData.memories && localData.memories.length > 0),
       chatHistory: !!(localData.chatHistory && localData.chatHistory.length > 0)
@@ -112,7 +112,10 @@ class SyncServiceImpl {
     const modelConfigStr = localStorage.getItem(this.LOCAL_KEYS.MODEL_CONFIG);
     if (modelConfigStr) {
       try {
-        data.modelConfig = JSON.parse(modelConfigStr);
+        const parsed = JSON.parse(modelConfigStr);
+        if (parsed && typeof parsed === 'object') {
+          data.modelConfig = parsed;
+        }
       } catch (e) {
         console.error('Failed to parse model config:', e);
       }
@@ -122,7 +125,10 @@ class SyncServiceImpl {
     const speechStr = localStorage.getItem(this.LOCAL_KEYS.SPEECH_SETTINGS);
     if (speechStr) {
       try {
-        data.speechSettings = JSON.parse(speechStr);
+        const parsed = JSON.parse(speechStr);
+        if (parsed && typeof parsed === 'object') {
+          data.speechSettings = parsed;
+        }
       } catch (e) {
         console.error('Failed to parse speech settings:', e);
       }
@@ -132,7 +138,10 @@ class SyncServiceImpl {
     const generalStr = localStorage.getItem(this.LOCAL_KEYS.GENERAL_SETTINGS);
     if (generalStr) {
       try {
-        data.generalSettings = JSON.parse(generalStr);
+        const parsed = JSON.parse(generalStr);
+        if (parsed && typeof parsed === 'object') {
+          data.generalSettings = parsed;
+        }
       } catch (e) {
         console.error('Failed to parse general settings:', e);
       }
@@ -142,7 +151,10 @@ class SyncServiceImpl {
     const integrationStr = localStorage.getItem(this.LOCAL_KEYS.INTEGRATION_SETTINGS);
     if (integrationStr) {
       try {
-        data.integrationSettings = JSON.parse(integrationStr);
+        const parsed = JSON.parse(integrationStr);
+        if (parsed && typeof parsed === 'object') {
+          data.integrationSettings = parsed;
+        }
       } catch (e) {
         console.error('Failed to parse integration settings:', e);
       }
@@ -152,7 +164,10 @@ class SyncServiceImpl {
     const commandsStr = localStorage.getItem(this.LOCAL_KEYS.CUSTOM_COMMANDS);
     if (commandsStr) {
       try {
-        data.customCommands = JSON.parse(commandsStr);
+        const parsed = JSON.parse(commandsStr);
+        if (Array.isArray(parsed)) {
+          data.customCommands = parsed;
+        }
       } catch (e) {
         console.error('Failed to parse custom commands:', e);
       }
@@ -162,7 +177,10 @@ class SyncServiceImpl {
     const memoriesStr = localStorage.getItem(this.LOCAL_KEYS.MEMORIES);
     if (memoriesStr) {
       try {
-        data.memories = JSON.parse(memoriesStr);
+        const parsed = JSON.parse(memoriesStr);
+        if (Array.isArray(parsed)) {
+          data.memories = parsed;
+        }
       } catch (e) {
         console.error('Failed to parse memories:', e);
       }
@@ -172,7 +190,10 @@ class SyncServiceImpl {
     const historyStr = localStorage.getItem(this.LOCAL_KEYS.CHAT_HISTORY);
     if (historyStr) {
       try {
-        data.chatHistory = JSON.parse(historyStr);
+        const parsed = JSON.parse(historyStr);
+        if (Array.isArray(parsed)) {
+          data.chatHistory = parsed;
+        }
       } catch (e) {
         console.error('Failed to parse chat history:', e);
       }
@@ -223,9 +244,9 @@ class SyncServiceImpl {
 
       const { data, error } = await supabase
         .from('user_data')
-        .select('id, last_synced_at, data_version, sync_source')
+        .select('id, last_synced_at, data_version, sync_source, created_at')
         .eq('user_id', user.id)
-        .order('last_synced_at', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error fetching cloud versions:', error);
@@ -234,7 +255,7 @@ class SyncServiceImpl {
 
       return data.map(item => ({
         id: item.id,
-        lastSyncedAt: item.last_synced_at,
+        lastSyncedAt: item.last_synced_at || item.created_at,
         dataVersion: item.data_version,
         syncSource: item.sync_source || 'cloud'
       }));
@@ -263,7 +284,7 @@ class SyncServiceImpl {
       if (versionId) {
         query = query.eq('id', versionId);
       } else {
-        query = query.order('last_synced_at', { ascending: false }).limit(1);
+        query = query.order('created_at', { ascending: false }).limit(1);
       }
 
       const { data, error } = await query.single();
@@ -284,7 +305,7 @@ class SyncServiceImpl {
         memories: this.parseJsonField(data.memories),
         chatHistory: this.parseJsonField(data.chat_history),
         syncMetadata: {
-          lastSyncedAt: data.last_synced_at,
+          lastSyncedAt: data.last_synced_at || data.created_at,
           syncSource: (data.sync_source as 'local' | 'cloud' | 'merged') || 'cloud',
           dataVersion: data.data_version || 1
         }
@@ -310,7 +331,7 @@ class SyncServiceImpl {
   }
 
   /**
-   * Save user data to cloud using user_data table only - FIXED VERSION
+   * Save user data to cloud using user_data table - ALWAYS CREATE NEW VERSION
    */
   async saveCloudData(data: UserData): Promise<boolean> {
     try {
@@ -320,52 +341,49 @@ class SyncServiceImpl {
         return false;
       }
 
-      // Check if record exists first
-      const { data: existingRecord } = await supabase
+      // Get current highest version number
+      const { data: existingVersions } = await supabase
         .from('user_data')
-        .select('id')
+        .select('data_version')
         .eq('user_id', user.id)
-        .single();
+        .order('data_version', { ascending: false })
+        .limit(1);
 
-      // Convert data to JSON strings for database storage
+      const nextVersion = existingVersions && existingVersions.length > 0 
+        ? (existingVersions[0].data_version || 0) + 1 
+        : 1;
+
+      // Always insert a new record (create new version)
       const userData = {
         user_id: user.id,
-        model_config: data.modelConfig ? JSON.stringify(data.modelConfig) : JSON.stringify({}),
-        speech_settings: data.speechSettings ? JSON.stringify(data.speechSettings) : JSON.stringify({}),
-        general_settings: data.generalSettings ? JSON.stringify(data.generalSettings) : JSON.stringify({}),
-        integration_settings: data.integrationSettings ? JSON.stringify(data.integrationSettings) : JSON.stringify({}),
-        custom_commands: data.customCommands ? JSON.stringify(data.customCommands) : JSON.stringify([]),
-        memories: data.memories ? JSON.stringify(data.memories) : JSON.stringify([]),
-        chat_history: data.chatHistory ? JSON.stringify(data.chatHistory) : JSON.stringify([]),
+        model_config: data.modelConfig ? JSON.stringify(data.modelConfig) : null,
+        speech_settings: data.speechSettings ? JSON.stringify(data.speechSettings) : null,
+        general_settings: data.generalSettings ? JSON.stringify(data.generalSettings) : null,
+        integration_settings: data.integrationSettings ? JSON.stringify(data.integrationSettings) : null,
+        custom_commands: data.customCommands ? JSON.stringify(data.customCommands) : null,
+        memories: data.memories ? JSON.stringify(data.memories) : null,
+        chat_history: data.chatHistory ? JSON.stringify(data.chatHistory) : null,
         sync_source: 'cloud' as const,
-        last_synced_at: new Date().toISOString()
+        last_synced_at: new Date().toISOString(),
+        data_version: nextVersion
       };
 
-      let error;
-      if (existingRecord) {
-        // Update existing record
-        const result = await supabase
-          .from('user_data')
-          .update(userData)
-          .eq('user_id', user.id);
-        error = result.error;
-      } else {
-        // Insert new record
-        const result = await supabase
-          .from('user_data')
-          .insert(userData);
-        error = result.error;
-      }
+      console.log('Uploading data to cloud with version:', nextVersion);
+
+      const { error } = await supabase
+        .from('user_data')
+        .insert(userData);
 
       if (error) {
         console.error('Error saving to cloud:', error);
         return false;
       }
 
-      console.log('Successfully synced data to cloud');
+      console.log('Successfully synced data to cloud with version', nextVersion);
       this.updateSyncMetadata({
         lastSyncedAt: new Date().toISOString(),
-        syncSource: 'cloud'
+        syncSource: 'cloud',
+        dataVersion: nextVersion
       });
 
       return true;
@@ -415,12 +433,6 @@ class SyncServiceImpl {
   async uploadToCloud(): Promise<boolean> {
     const localData = this.loadLocalData();
     const success = await this.saveCloudData(localData);
-    if (success) {
-      this.updateSyncMetadata({
-        lastSyncedAt: new Date().toISOString(),
-        syncSource: 'cloud'
-      });
-    }
     return success;
   }
 
