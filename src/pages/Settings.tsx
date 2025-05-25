@@ -8,7 +8,6 @@ import {
   RefreshCw
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import MemorySearch from "@/components/MemorySearch";
 import SettingsHeader from "@/components/settings/SettingsHeader";
 import GeneralSettings from "@/components/settings/GeneralSettings";
 import ModelSettingsTab from "@/components/settings/ModelSettings";
@@ -17,10 +16,8 @@ import IntegrationsTab from "@/components/settings/IntegrationsTab";
 import SyncStatusTab from "@/components/settings/SyncStatusTab";
 
 const Settings = () => {
-  const [isMemorySearchOpen, setIsMemorySearchOpen] = useState(false);
-
   return (
-    <div className="flex flex-col h-screen w-full bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50">
+    <div className="flex flex-col h-screen w-full bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <SettingsHeader />
 
       <div className="flex-1 pt-20 overflow-hidden">
@@ -73,10 +70,6 @@ const Settings = () => {
           </Tabs>
         </div>
       </div>
-
-      {isMemorySearchOpen && (
-        <MemorySearch onClose={() => setIsMemorySearchOpen(false)} />
-      )}
     </div>
   );
 };

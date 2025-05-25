@@ -43,9 +43,6 @@ export interface SyncStatus {
   chatHistory: boolean;
 }
 
-/**
- * Comprehensive sync service for all user data using user_data table with versioning
- */
 class SyncServiceImpl {
   private readonly LOCAL_KEYS = {
     MODEL_CONFIG: 'ai-model-config',
@@ -58,9 +55,6 @@ class SyncServiceImpl {
     SYNC_METADATA: 'sync-metadata'
   };
 
-  /**
-   * Get current sync metadata
-   */
   getSyncMetadata(): SyncMetadata {
     const stored = localStorage.getItem(this.LOCAL_KEYS.SYNC_METADATA);
     if (stored) {
@@ -77,9 +71,6 @@ class SyncServiceImpl {
     };
   }
 
-  /**
-   * Get sync status for each data type
-   */
   getSyncStatus(): SyncStatus {
     const localData = this.loadLocalData();
     return {
@@ -93,155 +84,121 @@ class SyncServiceImpl {
     };
   }
 
-  /**
-   * Update sync metadata
-   */
   private updateSyncMetadata(metadata: Partial<SyncMetadata>) {
     const current = this.getSyncMetadata();
     const updated = { ...current, ...metadata };
     localStorage.setItem(this.LOCAL_KEYS.SYNC_METADATA, JSON.stringify(updated));
   }
 
-  /**
-   * Load all user data from local storage
-   */
   loadLocalData(): UserData {
     const data: UserData = {};
 
-    // Load model config
-    const modelConfigStr = localStorage.getItem(this.LOCAL_KEYS.MODEL_CONFIG);
-    if (modelConfigStr) {
-      try {
+    try {
+      const modelConfigStr = localStorage.getItem(this.LOCAL_KEYS.MODEL_CONFIG);
+      if (modelConfigStr) {
         const parsed = JSON.parse(modelConfigStr);
         if (parsed && typeof parsed === 'object') {
           data.modelConfig = parsed;
         }
-      } catch (e) {
-        console.error('Failed to parse model config:', e);
       }
-    }
 
-    // Load speech settings
-    const speechStr = localStorage.getItem(this.LOCAL_KEYS.SPEECH_SETTINGS);
-    if (speechStr) {
-      try {
+      const speechStr = localStorage.getItem(this.LOCAL_KEYS.SPEECH_SETTINGS);
+      if (speechStr) {
         const parsed = JSON.parse(speechStr);
         if (parsed && typeof parsed === 'object') {
           data.speechSettings = parsed;
         }
-      } catch (e) {
-        console.error('Failed to parse speech settings:', e);
       }
-    }
 
-    // Load general settings
-    const generalStr = localStorage.getItem(this.LOCAL_KEYS.GENERAL_SETTINGS);
-    if (generalStr) {
-      try {
+      const generalStr = localStorage.getItem(this.LOCAL_KEYS.GENERAL_SETTINGS);
+      if (generalStr) {
         const parsed = JSON.parse(generalStr);
         if (parsed && typeof parsed === 'object') {
           data.generalSettings = parsed;
         }
-      } catch (e) {
-        console.error('Failed to parse general settings:', e);
       }
-    }
 
-    // Load integration settings
-    const integrationStr = localStorage.getItem(this.LOCAL_KEYS.INTEGRATION_SETTINGS);
-    if (integrationStr) {
-      try {
+      const integrationStr = localStorage.getItem(this.LOCAL_KEYS.INTEGRATION_SETTINGS);
+      if (integrationStr) {
         const parsed = JSON.parse(integrationStr);
         if (parsed && typeof parsed === 'object') {
           data.integrationSettings = parsed;
         }
-      } catch (e) {
-        console.error('Failed to parse integration settings:', e);
       }
-    }
 
-    // Load custom commands
-    const commandsStr = localStorage.getItem(this.LOCAL_KEYS.CUSTOM_COMMANDS);
-    if (commandsStr) {
-      try {
+      const commandsStr = localStorage.getItem(this.LOCAL_KEYS.CUSTOM_COMMANDS);
+      if (commandsStr) {
         const parsed = JSON.parse(commandsStr);
         if (Array.isArray(parsed)) {
           data.customCommands = parsed;
         }
-      } catch (e) {
-        console.error('Failed to parse custom commands:', e);
       }
-    }
 
-    // Load memories
-    const memoriesStr = localStorage.getItem(this.LOCAL_KEYS.MEMORIES);
-    if (memoriesStr) {
-      try {
+      const memoriesStr = localStorage.getItem(this.LOCAL_KEYS.MEMORIES);
+      if (memoriesStr) {
         const parsed = JSON.parse(memoriesStr);
         if (Array.isArray(parsed)) {
           data.memories = parsed;
         }
-      } catch (e) {
-        console.error('Failed to parse memories:', e);
       }
-    }
 
-    // Load chat history
-    const historyStr = localStorage.getItem(this.LOCAL_KEYS.CHAT_HISTORY);
-    if (historyStr) {
-      try {
+      const historyStr = localStorage.getItem(this.LOCAL_KEYS.CHAT_HISTORY);
+      if (historyStr) {
         const parsed = JSON.parse(historyStr);
         if (Array.isArray(parsed)) {
           data.chatHistory = parsed;
         }
-      } catch (e) {
-        console.error('Failed to parse chat history:', e);
       }
+    } catch (error) {
+      console.error("Error loading local data:", error);
     }
 
     return data;
   }
 
-  /**
-   * Save data to local storage
-   */
   saveLocalData(data: UserData) {
-    if (data.modelConfig) {
-      localStorage.setItem(this.LOCAL_KEYS.MODEL_CONFIG, JSON.stringify(data.modelConfig));
-    }
-    if (data.speechSettings) {
-      localStorage.setItem(this.LOCAL_KEYS.SPEECH_SETTINGS, JSON.stringify(data.speechSettings));
-    }
-    if (data.generalSettings) {
-      localStorage.setItem(this.LOCAL_KEYS.GENERAL_SETTINGS, JSON.stringify(data.generalSettings));
-    }
-    if (data.integrationSettings) {
-      localStorage.setItem(this.LOCAL_KEYS.INTEGRATION_SETTINGS, JSON.stringify(data.integrationSettings));
-    }
-    if (data.customCommands) {
-      localStorage.setItem(this.LOCAL_KEYS.CUSTOM_COMMANDS, JSON.stringify(data.customCommands));
-    }
-    if (data.memories) {
-      localStorage.setItem(this.LOCAL_KEYS.MEMORIES, JSON.stringify(data.memories));
-    }
-    if (data.chatHistory) {
-      localStorage.setItem(this.LOCAL_KEYS.CHAT_HISTORY, JSON.stringify(data.chatHistory));
-    }
+    try {
+      if (data.modelConfig) {
+        localStorage.setItem(this.LOCAL_KEYS.MODEL_CONFIG, JSON.stringify(data.modelConfig));
+      }
+      if (data.speechSettings) {
+        localStorage.setItem(this.LOCAL_KEYS.SPEECH_SETTINGS, JSON.stringify(data.speechSettings));
+      }
+      if (data.generalSettings) {
+        localStorage.setItem(this.LOCAL_KEYS.GENERAL_SETTINGS, JSON.stringify(data.generalSettings));
+      }
+      if (data.integrationSettings) {
+        localStorage.setItem(this.LOCAL_KEYS.INTEGRATION_SETTINGS, JSON.stringify(data.integrationSettings));
+      }
+      if (data.customCommands) {
+        localStorage.setItem(this.LOCAL_KEYS.CUSTOM_COMMANDS, JSON.stringify(data.customCommands));
+      }
+      if (data.memories) {
+        localStorage.setItem(this.LOCAL_KEYS.MEMORIES, JSON.stringify(data.memories));
+      }
+      if (data.chatHistory) {
+        localStorage.setItem(this.LOCAL_KEYS.CHAT_HISTORY, JSON.stringify(data.chatHistory));
+      }
 
-    this.updateSyncMetadata({
-      lastSyncedAt: new Date().toISOString(),
-      syncSource: 'local'
-    });
+      this.updateSyncMetadata({
+        lastSyncedAt: new Date().toISOString(),
+        syncSource: 'local'
+      });
+    } catch (error) {
+      console.error("Error saving local data:", error);
+      throw error;
+    }
   }
 
-  /**
-   * Get all cloud data versions for selection
-   */
   async getCloudVersions(): Promise<CloudDataVersion[]> {
     try {
       const user = await getCurrentUser();
-      if (!user) return [];
+      if (!user) {
+        console.log("No user found for cloud versions");
+        return [];
+      }
 
+      console.log("Fetching cloud versions for user:", user.id);
       const { data, error } = await supabase
         .from('user_data')
         .select('id, last_synced_at, data_version, sync_source, created_at')
@@ -253,21 +210,19 @@ class SyncServiceImpl {
         return [];
       }
 
-      return data.map(item => ({
+      console.log("Found cloud versions:", data?.length || 0);
+      return data?.map(item => ({
         id: item.id,
         lastSyncedAt: item.last_synced_at || item.created_at,
-        dataVersion: item.data_version,
+        dataVersion: item.data_version || 1,
         syncSource: item.sync_source || 'cloud'
-      }));
+      })) || [];
     } catch (error) {
       console.error('Error in getCloudVersions:', error);
       return [];
     }
   }
 
-  /**
-   * Fetch specific version of user data from cloud using user_data table only
-   */
   async fetchCloudData(versionId?: string): Promise<UserDataWithMeta | null> {
     try {
       const user = await getCurrentUser();
@@ -275,6 +230,8 @@ class SyncServiceImpl {
         console.warn('No authenticated user for cloud sync');
         return null;
       }
+
+      console.log("Fetching cloud data for user:", user.id, "version:", versionId);
 
       let query = supabase
         .from('user_data')
@@ -290,12 +247,15 @@ class SyncServiceImpl {
       const { data, error } = await query.single();
 
       if (error) {
-        if (error.code !== 'PGRST116') { // Not found is acceptable
+        if (error.code !== 'PGRST116') {
           console.error('Error fetching cloud data:', error);
+        } else {
+          console.log("No cloud data found for user");
         }
         return null;
       }
 
+      console.log("Successfully fetched cloud data");
       return {
         modelConfig: this.parseJsonField(data.model_config),
         speechSettings: this.parseJsonField(data.speech_settings),
@@ -316,9 +276,6 @@ class SyncServiceImpl {
     }
   }
 
-  /**
-   * Helper to safely parse JSON fields
-   */
   private parseJsonField(field: any): any {
     if (!field) return undefined;
     if (typeof field === 'object') return field;
@@ -330,30 +287,33 @@ class SyncServiceImpl {
     }
   }
 
-  /**
-   * Save user data to cloud using user_data table - ALWAYS CREATE NEW VERSION
-   */
   async saveCloudData(data: UserData): Promise<boolean> {
     try {
       const user = await getCurrentUser();
       if (!user) {
-        console.log('No authenticated user, saving locally only');
+        console.log('No authenticated user, cannot save to cloud');
         return false;
       }
 
+      console.log("Starting cloud data upload for user:", user.id);
+
       // Get current highest version number
-      const { data: existingVersions } = await supabase
+      const { data: existingVersions, error: versionError } = await supabase
         .from('user_data')
         .select('data_version')
         .eq('user_id', user.id)
         .order('data_version', { ascending: false })
         .limit(1);
 
+      if (versionError && versionError.code !== 'PGRST116') {
+        console.error('Error fetching version data:', versionError);
+        return false;
+      }
+
       const nextVersion = existingVersions && existingVersions.length > 0 
         ? (existingVersions[0].data_version || 0) + 1 
         : 1;
 
-      // Always insert a new record (create new version)
       const userData = {
         user_id: user.id,
         model_config: data.modelConfig ? JSON.stringify(data.modelConfig) : null,
@@ -370,12 +330,12 @@ class SyncServiceImpl {
 
       console.log('Uploading data to cloud with version:', nextVersion);
 
-      const { error } = await supabase
+      const { error: insertError } = await supabase
         .from('user_data')
         .insert(userData);
 
-      if (error) {
-        console.error('Error saving to cloud:', error);
+      if (insertError) {
+        console.error('Error saving to cloud:', insertError);
         return false;
       }
 
@@ -393,73 +353,91 @@ class SyncServiceImpl {
     }
   }
 
-  /**
-   * Comprehensive sync: load from cloud if available, fallback to local
-   */
   async syncData(versionId?: string): Promise<UserDataWithMeta> {
     console.log('Starting comprehensive data sync...');
 
-    // Try to load from cloud first
-    const cloudData = await this.fetchCloudData(versionId);
-    
-    if (cloudData) {
-      console.log('Loaded data from cloud, updating local storage');
-      this.saveLocalData(cloudData);
-      this.updateSyncMetadata({
-        lastSyncedAt: cloudData.syncMetadata.lastSyncedAt,
-        syncSource: 'cloud',
-        dataVersion: cloudData.syncMetadata.dataVersion
-      });
-      return cloudData;
+    try {
+      const cloudData = await this.fetchCloudData(versionId);
+      
+      if (cloudData) {
+        console.log('Loaded data from cloud, updating local storage');
+        this.saveLocalData(cloudData);
+        this.updateSyncMetadata({
+          lastSyncedAt: cloudData.syncMetadata.lastSyncedAt,
+          syncSource: 'cloud',
+          dataVersion: cloudData.syncMetadata.dataVersion
+        });
+        return cloudData;
+      }
+
+      console.log('No cloud data found, using local data');
+      const localData = this.loadLocalData();
+      const syncMetadata = this.getSyncMetadata();
+
+      const uploadSuccess = await this.saveCloudData(localData);
+      if (uploadSuccess) {
+        console.log('Successfully uploaded local data to cloud');
+      } else {
+        console.warn('Failed to upload local data to cloud');
+      }
+
+      return {
+        ...localData,
+        syncMetadata
+      };
+    } catch (error) {
+      console.error('Error during data sync:', error);
+      
+      // Fallback to local data
+      const localData = this.loadLocalData();
+      const syncMetadata = this.getSyncMetadata();
+      
+      return {
+        ...localData,
+        syncMetadata
+      };
     }
-
-    // Fallback to local data
-    console.log('No cloud data found, using local data');
-    const localData = this.loadLocalData();
-    const syncMetadata = this.getSyncMetadata();
-
-    // Try to sync local data to cloud
-    await this.saveCloudData(localData);
-
-    return {
-      ...localData,
-      syncMetadata
-    };
   }
 
-  /**
-   * Force upload local data to cloud
-   */
   async uploadToCloud(): Promise<boolean> {
-    const localData = this.loadLocalData();
-    const success = await this.saveCloudData(localData);
-    return success;
-  }
-
-  /**
-   * Force download cloud data to local
-   */
-  async downloadFromCloud(versionId?: string): Promise<boolean> {
-    const cloudData = await this.fetchCloudData(versionId);
-    if (cloudData) {
-      this.saveLocalData(cloudData);
-      this.updateSyncMetadata({
-        lastSyncedAt: cloudData.syncMetadata.lastSyncedAt,
-        syncSource: 'cloud',
-        dataVersion: cloudData.syncMetadata.dataVersion
-      });
-      return true;
+    try {
+      const localData = this.loadLocalData();
+      const success = await this.saveCloudData(localData);
+      return success;
+    } catch (error) {
+      console.error('Error uploading to cloud:', error);
+      return false;
     }
-    return false;
   }
 
-  /**
-   * Clear all local data
-   */
+  async downloadFromCloud(versionId?: string): Promise<boolean> {
+    try {
+      const cloudData = await this.fetchCloudData(versionId);
+      if (cloudData) {
+        this.saveLocalData(cloudData);
+        this.updateSyncMetadata({
+          lastSyncedAt: cloudData.syncMetadata.lastSyncedAt,
+          syncSource: 'cloud',
+          dataVersion: cloudData.syncMetadata.dataVersion
+        });
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error downloading from cloud:', error);
+      return false;
+    }
+  }
+
   clearLocalData() {
-    Object.values(this.LOCAL_KEYS).forEach(key => {
-      localStorage.removeItem(key);
-    });
+    try {
+      Object.values(this.LOCAL_KEYS).forEach(key => {
+        localStorage.removeItem(key);
+      });
+      console.log("Local data cleared successfully");
+    } catch (error) {
+      console.error("Error clearing local data:", error);
+    }
   }
 }
 
