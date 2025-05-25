@@ -7,66 +7,77 @@ import {
   Globe,
   RefreshCw
 } from "lucide-react";
-import { SidebarProvider } from "@/components/ui/sidebar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import MemorySearch from "@/components/MemorySearch";
 import SettingsHeader from "@/components/settings/SettingsHeader";
-import SettingsSidebar from "@/components/settings/SettingsSidebar";
 import GeneralSettings from "@/components/settings/GeneralSettings";
 import ModelSettingsTab from "@/components/settings/ModelSettings";
 import SpeechSettingsTab from "@/components/settings/SpeechSettingsTab";
 import IntegrationsTab from "@/components/settings/IntegrationsTab";
 import SyncStatusTab from "@/components/settings/SyncStatusTab";
-import { useIsMobile } from "@/hooks/use-mobile";
 
 const Settings = () => {
   const [isMemorySearchOpen, setIsMemorySearchOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("general");
-  const isMobile = useIsMobile();
-
-  const tabs = [
-    { id: "general", label: "General", icon: <SettingsIcon className="h-5 w-5" /> },
-    { id: "models", label: "Models", icon: <Cpu className="h-5 w-5" /> },
-    { id: "speech", label: "Speech", icon: <Volume2 className="h-5 w-5" /> },
-    { id: "integrations", label: "Integrations", icon: <Globe className="h-5 w-5" /> },
-    { id: "sync", label: "Sync Status", icon: <RefreshCw className="h-5 w-5" /> }
-  ];
-
-  // Function to render the content based on the active tab
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case "general":
-        return <GeneralSettings />;
-      case "models":
-        return <ModelSettingsTab />;
-      case "speech":
-        return <SpeechSettingsTab />;
-      case "integrations":
-        return <IntegrationsTab />;
-      case "sync":
-        return <SyncStatusTab />;
-      default:
-        return <GeneralSettings />;
-    }
-  };
 
   return (
-    <SidebarProvider>
-      <div className="flex flex-col h-screen w-full bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50">
-        <SettingsHeader />
+    <div className="flex flex-col h-screen w-full bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50">
+      <SettingsHeader />
 
-        <div className={`flex flex-1 ${isMobile ? 'flex-col' : ''} ${isMobile ? 'pt-16' : 'pt-28'} overflow-hidden`}>
-          <div className={`${isMobile ? 'w-full sticky top-16 bg-white/70 backdrop-blur-md z-10' : 'min-w-[240px]'}`}>
-            <SettingsSidebar tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} />
-          </div>
+      <div className="flex-1 pt-20 overflow-hidden">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <Tabs defaultValue="general" className="w-full">
+            <TabsList className="grid w-full grid-cols-5 mb-6">
+              <TabsTrigger value="general" className="flex items-center gap-2">
+                <SettingsIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">General</span>
+              </TabsTrigger>
+              <TabsTrigger value="models" className="flex items-center gap-2">
+                <Cpu className="h-4 w-4" />
+                <span className="hidden sm:inline">Models</span>
+              </TabsTrigger>
+              <TabsTrigger value="speech" className="flex items-center gap-2">
+                <Volume2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Speech</span>
+              </TabsTrigger>
+              <TabsTrigger value="integrations" className="flex items-center gap-2">
+                <Globe className="h-4 w-4" />
+                <span className="hidden sm:inline">Integrations</span>
+              </TabsTrigger>
+              <TabsTrigger value="sync" className="flex items-center gap-2">
+                <RefreshCw className="h-4 w-4" />
+                <span className="hidden sm:inline">Sync</span>
+              </TabsTrigger>
+            </TabsList>
 
-          <div className={`flex-1 overflow-y-auto px-3 sm:px-6 pb-16 ${isMobile ? 'pt-2' : 'pt-4'}`}>
-            <div className="max-w-2xl mx-auto animate-in fade-in-50 duration-500 slide-in-from-bottom-5">
-              {renderTabContent()}
+            <div className="overflow-y-auto max-h-[calc(100vh-200px)]">
+              <TabsContent value="general">
+                <GeneralSettings />
+              </TabsContent>
+
+              <TabsContent value="models">
+                <ModelSettingsTab />
+              </TabsContent>
+
+              <TabsContent value="speech">
+                <SpeechSettingsTab />
+              </TabsContent>
+
+              <TabsContent value="integrations">
+                <IntegrationsTab />
+              </TabsContent>
+
+              <TabsContent value="sync">
+                <SyncStatusTab />
+              </TabsContent>
             </div>
-          </div>
+          </Tabs>
         </div>
       </div>
-    </SidebarProvider>
+
+      {isMemorySearchOpen && (
+        <MemorySearch onClose={() => setIsMemorySearchOpen(false)} />
+      )}
+    </div>
   );
 };
 
