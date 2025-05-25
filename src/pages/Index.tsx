@@ -12,15 +12,12 @@ import { checkGoogleConnection, getEmails, getCalendarEvents, getDriveFiles } fr
 import { MemoryService } from "@/services/memoryService";
 import { useIsMobile } from "@/hooks/use-mobile";
 import getMcpClient from "@/services/mcpService";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import SupabaseSyncStatus from "@/components/SupabaseSyncStatus";
 import { SupabaseContext } from "@/App";
 import { Command, loadCommands } from "@/services/commandsService";
 import { useDataSync } from "@/hooks/useDataSync";
 
-const STORAGE_KEY_SHOW_CHANGELOG = "show-changelog-1.6.0"; // Update with version
-const STORAGE_KEY_SHOW_COMMANDS = "show-mcp-commands"; // For command visibility toggle
+const STORAGE_KEY_SHOW_CHANGELOG = "show-changelog-1.8.0"; // Update with version
 
 interface CommandLog {
   timestamp: Date;
@@ -47,18 +44,30 @@ const Index = () => {
   // Use the new data sync hook
   const { syncData, isLoading: syncLoading } = useDataSync();
   
-  // Load command visibility preference
+  // Load command visibility preference from localStorage
   useEffect(() => {
-    const showCommands = localStorage.getItem(STORAGE_KEY_SHOW_COMMANDS);
-    if (showCommands !== null) {
+    const showCommands = localStorage.getItem('show-mcp-commands');
+    setShowCommandLogs(showCommands === 'true');
+    
+    // Listen for changes to this setting
+    const handleStorageChange = () => {
+      const showCommands = localStorage.getItem('show-mcp-commands');
       setShowCommandLogs(showCommands === 'true');
-    }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also listen for manual changes within the same tab
+    const interval = setInterval(() => {
+      const showCommands = localStorage.getItem('show-mcp-commands');
+      setShowCommandLogs(showCommands === 'true');
+    }, 1000);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
   }, []);
-  
-  // Save command visibility preference when changed
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_SHOW_COMMANDS, showCommandLogs.toString());
-  }, [showCommandLogs]);
   
   useEffect(() => {
     const hasSeenChangelog = localStorage.getItem(STORAGE_KEY_SHOW_CHANGELOG);
@@ -453,18 +462,8 @@ const Index = () => {
       </div>
       
       <div className="fixed bottom-0 left-0 right-0 w-full">
-        <div className="bg-white/80 backdrop-blur-sm flex items-center justify-between px-2 py-1 text-xs text-gray-500">
+        <div className="bg-white/80 backdrop-blur-sm flex items-center justify-center px-2 py-1 text-xs text-gray-500">
           <SupabaseSyncStatus className="ml-1" />
-          
-          <div className="flex items-center space-x-2">
-            <Switch 
-              id="show-commands"
-              checked={showCommandLogs}
-              onCheckedChange={setShowCommandLogs}
-              aria-label="Toggle command logs"
-            />
-            <Label htmlFor="show-commands">Show MCP Commands</Label>
-          </div>
         </div>
         <MessageInput onSendMessage={handleSendMessage} isLoading={isLoading} />
       </div>

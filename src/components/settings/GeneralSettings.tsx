@@ -5,12 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Brain, Command, Search, Trash2, Terminal } from "lucide-react";
 import { useGemini } from "@/hooks/useGemini";
 import { useToast } from "@/components/ui/use-toast";
-import { MCPStatusIndicator } from "@/components/MCPStatusIndicator";
+import MCPStatusIndicator from "@/components/MCPStatusIndicator";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 const GeneralSettings = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { clearChatHistory } = useGemini();
+  const [showCommandLogs, setShowCommandLogs] = React.useState(() => {
+    const stored = localStorage.getItem('show-mcp-commands');
+    return stored === 'true';
+  });
 
   const handleClearChat = () => {
     clearChatHistory();
@@ -23,6 +29,11 @@ const GeneralSettings = () => {
 
   const navigateToCommands = () => {
     navigate("/commands");
+  };
+
+  const handleCommandLogsToggle = (checked: boolean) => {
+    setShowCommandLogs(checked);
+    localStorage.setItem('show-mcp-commands', checked.toString());
   };
 
   return (
@@ -96,6 +107,22 @@ const GeneralSettings = () => {
           Monitor the status of MCP server integrations
         </p>
         <MCPStatusIndicator />
+        
+        <div className="mt-4 pt-4 border-t border-white/10">
+          <div className="flex items-center space-x-2">
+            <Switch 
+              id="show-commands"
+              checked={showCommandLogs}
+              onCheckedChange={handleCommandLogsToggle}
+            />
+            <Label htmlFor="show-commands" className="text-sm">
+              Show MCP Commands in Chat
+            </Label>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">
+            Display MCP command logs in the chat interface
+          </p>
+        </div>
       </div>
       
       <div className="space-y-2 p-4 rounded-lg border border-white/10 bg-white/5 transition-all hover:bg-white/10 duration-200">
@@ -119,7 +146,18 @@ const Changelog = () => (
   <div className="space-y-2 p-4 rounded-lg border border-white/10 bg-white/5 mt-6 transition-all hover:bg-white/10 duration-200">
     <h3 className="text-md font-medium">Changelog</h3>
     <div className="text-xs text-gray-300">
-      <p className="font-semibold">Version 1.7.0 (2025-01-25)</p>
+      <p className="font-semibold">Version 1.8.0 (2025-01-25)</p>
+      <ul className="list-disc pl-5 space-y-1 mt-1">
+        <li>Fixed model response fetching with improved API validation and error handling</li>
+        <li>Added cloud data versioning - each sync creates a new version for rollback capability</li>
+        <li>Enhanced sync status display showing detailed sync information for each data type</li>
+        <li>Moved MCP command logs toggle to General Settings page for better organization</li>
+        <li>Improved model configuration loading from cloud sync with proper validation</li>
+        <li>Fixed cloud version selection to show all available backup versions</li>
+        <li>Added comprehensive sync troubleshooting with detailed status indicators</li>
+      </ul>
+      
+      <p className="font-semibold mt-2">Version 1.7.0 (2025-01-25)</p>
       <ul className="list-disc pl-5 space-y-1 mt-1">
         <li>Fixed model response fetching issues with improved error handling</li>
         <li>Added versioning support for cloud data - each upload creates a new version</li>

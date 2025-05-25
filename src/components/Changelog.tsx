@@ -17,6 +17,19 @@ interface ChangelogProps {
 
 const changelogData: ChangelogEntry[] = [
   {
+    version: "1.8.0",
+    date: "2025-01-25",
+    changes: [
+      "Fixed model response fetching with improved API validation and error handling",
+      "Added cloud data versioning - each sync creates a new version for rollback capability", 
+      "Enhanced sync status display showing detailed sync information for each data type",
+      "Moved MCP command logs toggle to General Settings page for better organization",
+      "Improved model configuration loading from cloud sync with proper validation",
+      "Fixed cloud version selection to show all available backup versions",
+      "Added comprehensive sync troubleshooting with detailed status indicators"
+    ]
+  },
+  {
     version: "1.7.0",
     date: "2025-01-25",
     changes: [

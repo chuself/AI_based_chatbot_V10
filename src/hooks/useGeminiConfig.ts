@@ -16,6 +16,7 @@ export const useGeminiConfig = () => {
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [modelConfig, setModelConfig] = useState<ModelConfig | null>(null);
+  const [isValidated, setIsValidated] = useState(false);
 
   // Load model configuration
   useEffect(() => {
@@ -24,12 +25,22 @@ export const useGeminiConfig = () => {
       if (storedConfig) {
         try {
           const config = JSON.parse(storedConfig) as ModelConfig;
-          setModelConfig(config);
-          setSelectedModel(config.modelName);
-          console.log("Using stored model config:", config.provider, config.modelName);
+          console.log("Loading model config:", config);
+          
+          // Validate the config before using it
+          if (config.apiKey && config.modelName && config.provider) {
+            setModelConfig(config);
+            setSelectedModel(config.modelName);
+            setIsValidated(true);
+            console.log("Using validated model config:", config.provider, config.modelName);
+          } else {
+            console.warn("Invalid model config found, missing required fields:", config);
+            setIsValidated(false);
+          }
         } catch (e) {
           console.error("Failed to parse model config:", e);
           localStorage.removeItem(LOCAL_STORAGE_MODEL_CONFIG);
+          setIsValidated(false);
         }
       } else {
         // Fallback to use API key directly if no model config is found
@@ -43,15 +54,41 @@ export const useGeminiConfig = () => {
           };
           setModelConfig(defaultConfig);
           setSelectedModel(defaultConfig.modelName);
+          setIsValidated(true);
           console.log("Created default model config with stored API key");
         } else {
           // Set a placeholder default - user should configure this
           console.log("No model configuration found, user needs to set up API key");
+          setIsValidated(false);
         }
       }
     };
 
     loadModelConfig();
+    
+    // Listen for storage changes to reload config when it's updated
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === LOCAL_STORAGE_MODEL_CONFIG) {
+        console.log("Model config updated, reloading...");
+        loadModelConfig();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also check for updates periodically (for same-tab updates)
+    const interval = setInterval(() => {
+      const currentConfig = localStorage.getItem(LOCAL_STORAGE_MODEL_CONFIG);
+      const currentConfigStr = JSON.stringify(modelConfig);
+      if (currentConfig !== currentConfigStr) {
+        loadModelConfig();
+      }
+    }, 2000);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
   }, []);
 
   const updateModelConfig = (model: string) => {
@@ -60,6 +97,37 @@ export const useGeminiConfig = () => {
       const updatedConfig = { ...modelConfig, modelName: model };
       setModelConfig(updatedConfig);
       localStorage.setItem(LOCAL_STORAGE_MODEL_CONFIG, JSON.stringify(updatedConfig));
+      console.log("Updated model config:", updatedConfig);
+    }
+  };
+
+  const validateApiConnection = async (config: ModelConfig): Promise<boolean> => {
+    try {
+      console.log("Validating API connection for:", config.provider);
+      
+      switch (config.provider) {
+        case "gemini":
+          const geminiResponse = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models?key=${config.apiKey}`
+          );
+          return geminiResponse.ok;
+          
+        case "openrouter":
+          const openRouterResponse = await fetch("https://openrouter.ai/api/v1/models", {
+            headers: { Authorization: `Bearer ${config.apiKey}` }
+          });
+          return openRouterResponse.ok;
+          
+        case "groq":
+          // Groq doesn't have a simple validation endpoint, assume valid if key exists
+          return !!config.apiKey;
+          
+        default:
+          return false;
+      }
+    } catch (error) {
+      console.error("API validation failed:", error);
+      return false;
     }
   };
 
@@ -67,6 +135,8 @@ export const useGeminiConfig = () => {
     availableModels,
     selectedModel,
     modelConfig,
-    setSelectedModel: updateModelConfig
+    isValidated,
+    setSelectedModel: updateModelConfig,
+    validateApiConnection
   };
 };
