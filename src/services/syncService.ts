@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentUser } from "./supabaseService";
 import { ChatMessage } from "@/hooks/useChatHistory";
@@ -194,11 +193,11 @@ class SyncServiceImpl {
     try {
       const user = await getCurrentUser();
       if (!user) {
-        console.log("No user found for cloud versions");
+        console.log("❌ No user found for cloud versions");
         return [];
       }
 
-      console.log("Fetching cloud versions for user:", user.id);
+      console.log("🔍 Fetching cloud versions for user:", user.id);
       const { data, error } = await supabase
         .from('user_data')
         .select('id, last_synced_at, data_version, sync_source, created_at')
@@ -206,11 +205,11 @@ class SyncServiceImpl {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error fetching cloud versions:', error);
+        console.error('❌ Error fetching cloud versions:', error.message, error.details);
         return [];
       }
 
-      console.log("Found cloud versions:", data?.length || 0);
+      console.log("✅ Found cloud versions:", data?.length || 0);
       return data?.map(item => ({
         id: item.id,
         lastSyncedAt: item.last_synced_at || item.created_at,
@@ -218,7 +217,7 @@ class SyncServiceImpl {
         syncSource: item.sync_source || 'cloud'
       })) || [];
     } catch (error) {
-      console.error('Error in getCloudVersions:', error);
+      console.error('❌ Network error in getCloudVersions:', error);
       return [];
     }
   }
@@ -227,11 +226,11 @@ class SyncServiceImpl {
     try {
       const user = await getCurrentUser();
       if (!user) {
-        console.warn('No authenticated user for cloud sync');
+        console.warn('❌ No authenticated user for cloud sync');
         return null;
       }
 
-      console.log("Fetching cloud data for user:", user.id, "version:", versionId);
+      console.log("📥 Fetching cloud data for user:", user.id, "version:", versionId || 'latest');
 
       let query = supabase
         .from('user_data')
@@ -244,18 +243,19 @@ class SyncServiceImpl {
         query = query.order('created_at', { ascending: false }).limit(1);
       }
 
-      const { data, error } = await query.single();
+      const { data, error } = await query.maybeSingle();
 
       if (error) {
-        if (error.code !== 'PGRST116') {
-          console.error('Error fetching cloud data:', error);
-        } else {
-          console.log("No cloud data found for user");
-        }
+        console.error('❌ Error fetching cloud data:', error.message, error.details);
         return null;
       }
 
-      console.log("Successfully fetched cloud data");
+      if (!data) {
+        console.log("ℹ️ No cloud data found for user");
+        return null;
+      }
+
+      console.log("✅ Successfully fetched cloud data");
       return {
         modelConfig: this.parseJsonField(data.model_config),
         speechSettings: this.parseJsonField(data.speech_settings),
@@ -271,7 +271,7 @@ class SyncServiceImpl {
         }
       };
     } catch (error) {
-      console.error('Error in fetchCloudData:', error);
+      console.error('❌ Network error in fetchCloudData:', error);
       return null;
     }
   }
@@ -282,7 +282,7 @@ class SyncServiceImpl {
     try {
       return JSON.parse(field);
     } catch (e) {
-      console.error('Failed to parse JSON field:', e);
+      console.error('❌ Failed to parse JSON field:', e);
       return undefined;
     }
   }
@@ -291,13 +291,20 @@ class SyncServiceImpl {
     try {
       const user = await getCurrentUser();
       if (!user) {
-        console.log('No authenticated user, cannot save to cloud');
+        console.log('❌ No authenticated user, cannot save to cloud');
         return false;
       }
 
-      console.log("Starting cloud data upload for user:", user.id);
+      console.log("📤 Starting cloud data upload for user:", user.id);
 
-      // Get current highest version number
+      // Validate data before upload
+      const dataSize = JSON.stringify(data).length;
+      if (dataSize > 1024 * 1024) { // 1MB limit
+        console.error('❌ Data too large for upload:', dataSize, 'bytes');
+        return false;
+      }
+
+      // Get current highest version number with better error handling
       const { data: existingVersions, error: versionError } = await supabase
         .from('user_data')
         .select('data_version')
@@ -306,7 +313,7 @@ class SyncServiceImpl {
         .limit(1);
 
       if (versionError && versionError.code !== 'PGRST116') {
-        console.error('Error fetching version data:', versionError);
+        console.error('❌ Error fetching version data:', versionError.message, versionError.details);
         return false;
       }
 
@@ -316,30 +323,33 @@ class SyncServiceImpl {
 
       const userData = {
         user_id: user.id,
-        model_config: data.modelConfig ? JSON.stringify(data.modelConfig) : null,
-        speech_settings: data.speechSettings ? JSON.stringify(data.speechSettings) : null,
-        general_settings: data.generalSettings ? JSON.stringify(data.generalSettings) : null,
-        integration_settings: data.integrationSettings ? JSON.stringify(data.integrationSettings) : null,
-        custom_commands: data.customCommands ? JSON.stringify(data.customCommands) : null,
-        memories: data.memories ? JSON.stringify(data.memories) : null,
-        chat_history: data.chatHistory ? JSON.stringify(data.chatHistory) : null,
+        model_config: data.modelConfig ? JSON.stringify(data.modelConfig) : '{}',
+        speech_settings: data.speechSettings ? JSON.stringify(data.speechSettings) : '{}',
+        general_settings: data.generalSettings ? JSON.stringify(data.generalSettings) : '{}',
+        integration_settings: data.integrationSettings ? JSON.stringify(data.integrationSettings) : '{}',
+        custom_commands: data.customCommands ? JSON.stringify(data.customCommands) : '[]',
+        memories: data.memories ? JSON.stringify(data.memories) : '[]',
+        chat_history: data.chatHistory ? JSON.stringify(data.chatHistory) : '[]',
         sync_source: 'cloud' as const,
         last_synced_at: new Date().toISOString(),
         data_version: nextVersion
       };
 
-      console.log('Uploading data to cloud with version:', nextVersion);
+      console.log('📤 Uploading data to cloud with version:', nextVersion);
 
       const { error: insertError } = await supabase
         .from('user_data')
         .insert(userData);
 
       if (insertError) {
-        console.error('Error saving to cloud:', insertError);
+        console.error('❌ Error saving to cloud:', insertError.message, insertError.details);
+        if (insertError.code === '23505') {
+          console.error('❌ Duplicate key error - version conflict');
+        }
         return false;
       }
 
-      console.log('Successfully synced data to cloud with version', nextVersion);
+      console.log('✅ Successfully synced data to cloud with version', nextVersion);
       this.updateSyncMetadata({
         lastSyncedAt: new Date().toISOString(),
         syncSource: 'cloud',
@@ -348,19 +358,19 @@ class SyncServiceImpl {
 
       return true;
     } catch (error) {
-      console.error('Error in saveCloudData:', error);
+      console.error('❌ Network error in saveCloudData:', error);
       return false;
     }
   }
 
   async syncData(versionId?: string): Promise<UserDataWithMeta> {
-    console.log('Starting comprehensive data sync...');
+    console.log('🔄 Starting comprehensive data sync...');
 
     try {
       const cloudData = await this.fetchCloudData(versionId);
       
       if (cloudData) {
-        console.log('Loaded data from cloud, updating local storage');
+        console.log('☁️ Loaded data from cloud, updating local storage');
         this.saveLocalData(cloudData);
         this.updateSyncMetadata({
           lastSyncedAt: cloudData.syncMetadata.lastSyncedAt,
@@ -370,15 +380,15 @@ class SyncServiceImpl {
         return cloudData;
       }
 
-      console.log('No cloud data found, using local data');
+      console.log('💾 No cloud data found, using local data');
       const localData = this.loadLocalData();
       const syncMetadata = this.getSyncMetadata();
 
       const uploadSuccess = await this.saveCloudData(localData);
       if (uploadSuccess) {
-        console.log('Successfully uploaded local data to cloud');
+        console.log('✅ Successfully uploaded local data to cloud');
       } else {
-        console.warn('Failed to upload local data to cloud');
+        console.warn('⚠️ Failed to upload local data to cloud');
       }
 
       return {
@@ -386,7 +396,7 @@ class SyncServiceImpl {
         syncMetadata
       };
     } catch (error) {
-      console.error('Error during data sync:', error);
+      console.error('❌ Error during data sync:', error);
       
       // Fallback to local data
       const localData = this.loadLocalData();
@@ -401,17 +411,26 @@ class SyncServiceImpl {
 
   async uploadToCloud(): Promise<boolean> {
     try {
+      console.log('📤 Manual upload to cloud initiated');
       const localData = this.loadLocalData();
       const success = await this.saveCloudData(localData);
+      
+      if (success) {
+        console.log('✅ Manual upload successful');
+      } else {
+        console.log('❌ Manual upload failed');
+      }
+      
       return success;
     } catch (error) {
-      console.error('Error uploading to cloud:', error);
+      console.error('❌ Error in manual upload:', error);
       return false;
     }
   }
 
   async downloadFromCloud(versionId?: string): Promise<boolean> {
     try {
+      console.log('📥 Manual download from cloud initiated');
       const cloudData = await this.fetchCloudData(versionId);
       if (cloudData) {
         this.saveLocalData(cloudData);
@@ -420,11 +439,13 @@ class SyncServiceImpl {
           syncSource: 'cloud',
           dataVersion: cloudData.syncMetadata.dataVersion
         });
+        console.log('✅ Manual download successful');
         return true;
       }
+      console.log('❌ No cloud data to download');
       return false;
     } catch (error) {
-      console.error('Error downloading from cloud:', error);
+      console.error('❌ Error in manual download:', error);
       return false;
     }
   }
@@ -434,9 +455,9 @@ class SyncServiceImpl {
       Object.values(this.LOCAL_KEYS).forEach(key => {
         localStorage.removeItem(key);
       });
-      console.log("Local data cleared successfully");
+      console.log("✅ Local data cleared successfully");
     } catch (error) {
-      console.error("Error clearing local data:", error);
+      console.error("❌ Error clearing local data:", error);
     }
   }
 }

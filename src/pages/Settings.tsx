@@ -17,53 +17,68 @@ import SyncStatusTab from "@/components/settings/SyncStatusTab";
 
 const Settings = () => {
   return (
-    <div className="flex flex-col h-screen w-full bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+    <div className="min-h-screen w-full bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-slate-900 dark:via-blue-900 dark:to-indigo-900">
       <SettingsHeader />
 
-      <div className="flex-1 pt-20 overflow-hidden">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="pt-20 pb-8">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <Tabs defaultValue="general" className="w-full">
-            <TabsList className="grid w-full grid-cols-5 mb-6">
-              <TabsTrigger value="general" className="flex items-center gap-2">
+            <TabsList className="glass-card grid w-full grid-cols-5 mb-8 p-1">
+              <TabsTrigger 
+                value="general" 
+                className="flex items-center gap-2 glass-button data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
+              >
                 <SettingsIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">General</span>
               </TabsTrigger>
-              <TabsTrigger value="models" className="flex items-center gap-2">
+              <TabsTrigger 
+                value="models" 
+                className="flex items-center gap-2 glass-button data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
+              >
                 <Cpu className="h-4 w-4" />
                 <span className="hidden sm:inline">Models</span>
               </TabsTrigger>
-              <TabsTrigger value="speech" className="flex items-center gap-2">
+              <TabsTrigger 
+                value="speech" 
+                className="flex items-center gap-2 glass-button data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
+              >
                 <Volume2 className="h-4 w-4" />
                 <span className="hidden sm:inline">Speech</span>
               </TabsTrigger>
-              <TabsTrigger value="integrations" className="flex items-center gap-2">
+              <TabsTrigger 
+                value="integrations" 
+                className="flex items-center gap-2 glass-button data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
+              >
                 <Globe className="h-4 w-4" />
                 <span className="hidden sm:inline">Integrations</span>
               </TabsTrigger>
-              <TabsTrigger value="sync" className="flex items-center gap-2">
+              <TabsTrigger 
+                value="sync" 
+                className="flex items-center gap-2 glass-button data-[state=active]:bg-primary/20 data-[state=active]:text-primary"
+              >
                 <RefreshCw className="h-4 w-4" />
                 <span className="hidden sm:inline">Sync</span>
               </TabsTrigger>
             </TabsList>
 
-            <div className="overflow-y-auto max-h-[calc(100vh-200px)]">
-              <TabsContent value="general">
+            <div className="space-y-6">
+              <TabsContent value="general" className="animate-fade-in">
                 <GeneralSettings />
               </TabsContent>
 
-              <TabsContent value="models">
+              <TabsContent value="models" className="animate-fade-in">
                 <ModelSettingsTab />
               </TabsContent>
 
-              <TabsContent value="speech">
+              <TabsContent value="speech" className="animate-fade-in">
                 <SpeechSettingsTab />
               </TabsContent>
 
-              <TabsContent value="integrations">
+              <TabsContent value="integrations" className="animate-fade-in">
                 <IntegrationsTab />
               </TabsContent>
 
-              <TabsContent value="sync">
+              <TabsContent value="sync" className="animate-fade-in">
                 <SyncStatusTab />
               </TabsContent>
             </div>

@@ -6,19 +6,30 @@ export type Theme = 'light' | 'dark';
 export const useTheme = () => {
   const [theme, setTheme] = useState<Theme>(() => {
     const stored = localStorage.getItem('app-theme');
-    return (stored as Theme) || 'light';
+    if (stored === 'light' || stored === 'dark') {
+      return stored;
+    }
+    // Default to system preference
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
 
   useEffect(() => {
     const root = document.documentElement;
     
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
+    // Remove both classes first
+    root.classList.remove('light', 'dark');
     
+    // Add the current theme class
+    root.classList.add(theme);
+    
+    // Store the preference
     localStorage.setItem('app-theme', theme);
+    
+    // Update meta theme-color for mobile browsers
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    if (metaThemeColor) {
+      metaThemeColor.setAttribute('content', theme === 'dark' ? '#0f172a' : '#f8fafc');
+    }
   }, [theme]);
 
   const toggleTheme = () => {
