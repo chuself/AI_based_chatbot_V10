@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useContext } from "react";
 import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
@@ -86,9 +87,6 @@ const Index = () => {
     };
     setMessages([welcomeMessage]);
   };
-  
-  // Use the new data sync hook
-  const { syncData, isLoading: syncLoading } = useDataSync();
   
   // Load command visibility preference from localStorage
   useEffect(() => {
