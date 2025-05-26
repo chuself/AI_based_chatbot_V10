@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentUser } from "./supabaseService";
 import { ChatMessage } from "@/hooks/useChatHistory";
@@ -14,6 +13,7 @@ export interface UserData {
   customCommands?: Command[];
   memories?: MemoryEntry[];
   chatHistory?: ChatMessage[];
+  _lastManualSync?: string; // For forcing new versions
 }
 
 export interface SyncMetadata {
@@ -298,28 +298,48 @@ class SyncServiceImpl {
 
       console.log("📤 TROUBLESHOOT: Starting cloud data upload for user:", user.id);
 
-      // Step 1: Validate and prepare data
+      // Step 1: Validate and prepare data (preserve existing data when doing individual uploads)
       console.log("🔍 TROUBLESHOOT: Step 1 - Validating and preparing data");
-      const preparedData = {
-        model_config: data.modelConfig ? JSON.stringify(data.modelConfig) : JSON.stringify({}),
-        speech_settings: data.speechSettings ? JSON.stringify(data.speechSettings) : JSON.stringify({}),
-        general_settings: data.generalSettings ? JSON.stringify(data.generalSettings) : JSON.stringify({}),
-        integration_settings: data.integrationSettings ? JSON.stringify(data.integrationSettings) : JSON.stringify({}),
-        custom_commands: data.customCommands ? JSON.stringify(data.customCommands) : JSON.stringify([]),
-        memories: data.memories ? JSON.stringify(data.memories) : JSON.stringify([]),
-        chat_history: data.chatHistory ? JSON.stringify(data.chatHistory) : JSON.stringify([])
+      
+      // Get current cloud data to merge with
+      const currentCloudData = await this.fetchCloudData();
+      const currentLocalData = this.loadLocalData();
+      
+      // Merge current cloud data with local data, then override with new data
+      const mergedData = {
+        model_config: data.modelConfig ? JSON.stringify(data.modelConfig) : 
+                     (currentCloudData?.modelConfig ? JSON.stringify(currentCloudData.modelConfig) : 
+                      (currentLocalData.modelConfig ? JSON.stringify(currentLocalData.modelConfig) : JSON.stringify({}))),
+        speech_settings: data.speechSettings ? JSON.stringify(data.speechSettings) : 
+                        (currentCloudData?.speechSettings ? JSON.stringify(currentCloudData.speechSettings) : 
+                         (currentLocalData.speechSettings ? JSON.stringify(currentLocalData.speechSettings) : JSON.stringify({}))),
+        general_settings: data.generalSettings ? JSON.stringify(data.generalSettings) : 
+                         (currentCloudData?.generalSettings ? JSON.stringify(currentCloudData.generalSettings) : 
+                          (currentLocalData.generalSettings ? JSON.stringify(currentLocalData.generalSettings) : JSON.stringify({}))),
+        integration_settings: data.integrationSettings ? JSON.stringify(data.integrationSettings) : 
+                             (currentCloudData?.integrationSettings ? JSON.stringify(currentCloudData.integrationSettings) : 
+                              (currentLocalData.integrationSettings ? JSON.stringify(currentLocalData.integrationSettings) : JSON.stringify({}))),
+        custom_commands: data.customCommands ? JSON.stringify(data.customCommands) : 
+                        (currentCloudData?.customCommands ? JSON.stringify(currentCloudData.customCommands) : 
+                         (currentLocalData.customCommands ? JSON.stringify(currentLocalData.customCommands) : JSON.stringify([]))),
+        memories: data.memories ? JSON.stringify(data.memories) : 
+                 (currentCloudData?.memories ? JSON.stringify(currentCloudData.memories) : 
+                  (currentLocalData.memories ? JSON.stringify(currentLocalData.memories) : JSON.stringify([]))),
+        chat_history: data.chatHistory ? JSON.stringify(data.chatHistory) : 
+                     (currentCloudData?.chatHistory ? JSON.stringify(currentCloudData.chatHistory) : 
+                      (currentLocalData.chatHistory ? JSON.stringify(currentLocalData.chatHistory) : JSON.stringify([])))
       };
 
       // Step 2: Validate data size
       console.log("🔍 TROUBLESHOOT: Step 2 - Checking data size");
-      const dataSize = JSON.stringify(preparedData).length;
+      const dataSize = JSON.stringify(mergedData).length;
       console.log("📊 TROUBLESHOOT: Data size:", dataSize, "bytes");
       if (dataSize > 2 * 1024 * 1024) { // 2MB limit
         console.error('❌ TROUBLESHOOT: Data too large for upload:', dataSize, 'bytes');
         throw new Error('Data size exceeds 2MB limit');
       }
 
-      // Step 3: Check if user already has data (this is the key fix!)
+      // Step 3: Check if user already has data
       console.log("🔍 TROUBLESHOOT: Step 3 - Checking for existing user data");
       const { data: existingData, error: checkError } = await supabase
         .from('user_data')
@@ -335,15 +355,14 @@ class SyncServiceImpl {
       }
 
       const timestamp = new Date().toISOString();
-      let result;
 
       if (existingData) {
-        // UPDATE existing record - this fixes the duplicate key error!
+        // UPDATE existing record - always increment version for individual uploads
         console.log("🔄 TROUBLESHOOT: Step 4a - Updating existing record ID:", existingData.id);
         const nextVersion = (existingData.data_version || 0) + 1;
         
         const updateData = {
-          ...preparedData,
+          ...mergedData,
           sync_source: 'cloud' as const,
           last_synced_at: timestamp,
           data_version: nextVersion,
@@ -375,7 +394,7 @@ class SyncServiceImpl {
         
         const insertData = {
           user_id: user.id,
-          ...preparedData,
+          ...mergedData,
           sync_source: 'cloud' as const,
           last_synced_at: timestamp,
           data_version: 1
