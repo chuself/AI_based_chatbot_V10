@@ -17,7 +17,8 @@ import { SupabaseContext } from "@/App";
 import { Command, loadCommands } from "@/services/commandsService";
 import { useDataSync } from "@/hooks/useDataSync";
 
-const STORAGE_KEY_SHOW_CHANGELOG = "show-changelog-1.8.0"; // Update with version
+const STORAGE_KEY_SHOW_CHANGELOG = "show-changelog-1.9.0";
+const STORAGE_KEY_SESSION_MESSAGES = "session-messages";
 
 interface CommandLog {
   timestamp: Date;
@@ -27,7 +28,7 @@ interface CommandLog {
 }
 
 const Index = () => {
-  // Current session messages (starts fresh each login)
+  // Session messages (preserved during navigation, cleared on logout)
   const [messages, setMessages] = useState<Message[]>([]);
   const { sendMessage, isLoading, error, selectedModel } = useGemini();
   const { speak, autoPlay } = useSpeech();
@@ -40,6 +41,51 @@ const Index = () => {
   const isMobile = useIsMobile();
   const { user } = useContext(SupabaseContext);
   const [loadingCommands, setLoadingCommands] = useState(true);
+  
+  const { syncData, isLoading: syncLoading } = useDataSync();
+  
+  // Load and save session messages (separate from persistent chat history)
+  useEffect(() => {
+    const savedMessages = localStorage.getItem(STORAGE_KEY_SESSION_MESSAGES);
+    if (savedMessages) {
+      try {
+        const parsedMessages = JSON.parse(savedMessages) as Message[];
+        setMessages(parsedMessages);
+      } catch (error) {
+        console.error("Failed to parse saved session messages:", error);
+        // Initialize with welcome message if parsing fails
+        initializeWelcomeMessage();
+      }
+    } else {
+      initializeWelcomeMessage();
+    }
+  }, []);
+
+  // Save session messages on change
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem(STORAGE_KEY_SESSION_MESSAGES, JSON.stringify(messages));
+    }
+  }, [messages]);
+
+  // Clear session messages on logout
+  useEffect(() => {
+    if (!user) {
+      setMessages([]);
+      localStorage.removeItem(STORAGE_KEY_SESSION_MESSAGES);
+      initializeWelcomeMessage();
+    }
+  }, [user]);
+
+  const initializeWelcomeMessage = () => {
+    const welcomeMessage: Message = {
+      id: Date.now().toString(),
+      text: "👋 Hi! I'm your Chuself AI assistant. How can I help you today?",
+      isUser: false,
+      timestamp: new Date(),
+    };
+    setMessages([welcomeMessage]);
+  };
   
   // Use the new data sync hook
   const { syncData, isLoading: syncLoading } = useDataSync();
@@ -422,7 +468,7 @@ const Index = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-b from-pink-50 via-purple-50 to-indigo-50 overscroll-none">
+    <div className="flex flex-col h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-slate-800 dark:via-slate-900 dark:to-indigo-900 overscroll-none">
       <Header modelName={selectedModel} />
       
       {showCommandLogs && commandLogs.length > 0 && (
@@ -432,13 +478,13 @@ const Index = () => {
             <div className="flex items-center gap-2">
               <button 
                 onClick={clearCommandLogs}
-                className="px-2 py-0.5 bg-red-900/50 text-red-300 rounded text-xs"
+                className="px-2 py-0.5 bg-red-900/50 text-red-300 rounded text-xs hover:bg-red-800/50"
               >
                 Clear
               </button>
               <button
                 onClick={() => setShowCommandLogs(false)}
-                className="px-2 py-0.5 bg-gray-700/50 text-gray-300 rounded text-xs"
+                className="px-2 py-0.5 bg-gray-700/50 text-gray-300 rounded text-xs hover:bg-gray-600/50"
               >
                 Hide
               </button>
@@ -462,7 +508,7 @@ const Index = () => {
       </div>
       
       <div className="fixed bottom-0 left-0 right-0 w-full">
-        <div className="bg-white/80 backdrop-blur-sm flex items-center justify-center px-2 py-1 text-xs text-gray-500">
+        <div className="glass border-t border-white/20 dark:border-slate-700/50 flex items-center justify-center px-2 py-1 text-xs text-gray-600 dark:text-gray-400">
           <SupabaseSyncStatus className="ml-1" />
         </div>
         <MessageInput onSendMessage={handleSendMessage} isLoading={isLoading} />
@@ -473,7 +519,7 @@ const Index = () => {
           href="https://lovable.ai" 
           target="_blank" 
           rel="noopener noreferrer" 
-          className="text-xs text-gray-500 flex items-center"
+          className="text-xs text-gray-500 flex items-center hover:text-blue-600 dark:hover:text-blue-400"
         >
           Made with Lovable
         </a>

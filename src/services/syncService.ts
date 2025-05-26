@@ -297,14 +297,25 @@ class SyncServiceImpl {
 
       console.log("📤 Starting cloud data upload for user:", user.id);
 
-      // Validate data before upload
-      const dataSize = JSON.stringify(data).length;
-      if (dataSize > 1024 * 1024) { // 1MB limit
+      // Validate and prepare data
+      const preparedData = {
+        model_config: data.modelConfig ? JSON.stringify(data.modelConfig) : JSON.stringify({}),
+        speech_settings: data.speechSettings ? JSON.stringify(data.speechSettings) : JSON.stringify({}),
+        general_settings: data.generalSettings ? JSON.stringify(data.generalSettings) : JSON.stringify({}),
+        integration_settings: data.integrationSettings ? JSON.stringify(data.integrationSettings) : JSON.stringify({}),
+        custom_commands: data.customCommands ? JSON.stringify(data.customCommands) : JSON.stringify([]),
+        memories: data.memories ? JSON.stringify(data.memories) : JSON.stringify([]),
+        chat_history: data.chatHistory ? JSON.stringify(data.chatHistory) : JSON.stringify([])
+      };
+
+      // Validate data size
+      const dataSize = JSON.stringify(preparedData).length;
+      if (dataSize > 2 * 1024 * 1024) { // 2MB limit
         console.error('❌ Data too large for upload:', dataSize, 'bytes');
-        return false;
+        throw new Error('Data size exceeds 2MB limit');
       }
 
-      // Get current highest version number with better error handling
+      // Get current highest version number
       const { data: existingVersions, error: versionError } = await supabase
         .from('user_data')
         .select('data_version')
@@ -313,8 +324,8 @@ class SyncServiceImpl {
         .limit(1);
 
       if (versionError && versionError.code !== 'PGRST116') {
-        console.error('❌ Error fetching version data:', versionError.message, versionError.details);
-        return false;
+        console.error('❌ Error fetching version data:', versionError.message);
+        throw new Error(`Version fetch error: ${versionError.message}`);
       }
 
       const nextVersion = existingVersions && existingVersions.length > 0 
@@ -323,13 +334,7 @@ class SyncServiceImpl {
 
       const userData = {
         user_id: user.id,
-        model_config: data.modelConfig ? JSON.stringify(data.modelConfig) : '{}',
-        speech_settings: data.speechSettings ? JSON.stringify(data.speechSettings) : '{}',
-        general_settings: data.generalSettings ? JSON.stringify(data.generalSettings) : '{}',
-        integration_settings: data.integrationSettings ? JSON.stringify(data.integrationSettings) : '{}',
-        custom_commands: data.customCommands ? JSON.stringify(data.customCommands) : '[]',
-        memories: data.memories ? JSON.stringify(data.memories) : '[]',
-        chat_history: data.chatHistory ? JSON.stringify(data.chatHistory) : '[]',
+        ...preparedData,
         sync_source: 'cloud' as const,
         last_synced_at: new Date().toISOString(),
         data_version: nextVersion
@@ -343,10 +348,7 @@ class SyncServiceImpl {
 
       if (insertError) {
         console.error('❌ Error saving to cloud:', insertError.message, insertError.details);
-        if (insertError.code === '23505') {
-          console.error('❌ Duplicate key error - version conflict');
-        }
-        return false;
+        throw new Error(`Cloud save error: ${insertError.message}`);
       }
 
       console.log('✅ Successfully synced data to cloud with version', nextVersion);
@@ -358,7 +360,7 @@ class SyncServiceImpl {
 
       return true;
     } catch (error) {
-      console.error('❌ Network error in saveCloudData:', error);
+      console.error('❌ Error in saveCloudData:', error);
       return false;
     }
   }
@@ -413,6 +415,20 @@ class SyncServiceImpl {
     try {
       console.log('📤 Manual upload to cloud initiated');
       const localData = this.loadLocalData();
+      
+      // Ensure we have some data to upload
+      const hasData = Object.values(localData).some(value => 
+        value && (
+          (Array.isArray(value) && value.length > 0) || 
+          (typeof value === 'object' && Object.keys(value).length > 0)
+        )
+      );
+
+      if (!hasData) {
+        console.log('ℹ️ No local data to upload');
+        return false;
+      }
+
       const success = await this.saveCloudData(localData);
       
       if (success) {

@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useContext } from "react";
 import { syncChatHistory, fetchChatHistory } from "@/services/supabaseService";
 import { SupabaseContext } from "@/App";
@@ -24,61 +23,77 @@ export const useChatHistory = () => {
   useEffect(() => {
     const loadChatHistory = async () => {
       try {
-        // Only try to load from Supabase if the user is logged in
+        // Always start with local storage to prevent chat loss
+        const localHistory = loadFromLocalStorage();
+        
+        if (localHistory.length > 0) {
+          setChatHistory(localHistory);
+          console.info(`Loaded chat history from localStorage: ${localHistory.length} messages`);
+        }
+
+        // If user is logged in, try to sync with cloud
         if (user) {
           console.log("Fetching chat history from Supabase");
           const cloudHistory = await fetchChatHistory();
           
           if (cloudHistory && cloudHistory.length > 0) {
-            console.info(`Loaded chat history from cloud: ${cloudHistory.length} messages`);
-            setChatHistory(cloudHistory);
+            // Only update if cloud has more recent data
+            const localTimestamp = localHistory.length > 0 ? localHistory[localHistory.length - 1].timestamp : 0;
+            const cloudTimestamp = cloudHistory.length > 0 ? cloudHistory[cloudHistory.length - 1].timestamp : 0;
             
-            // Save to localStorage as backup
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cloudHistory));
-          } else {
-            console.info("No cloud history found, loading from local storage");
-            // Fall back to local storage if cloud fetch fails or returns empty
-            loadFromLocalStorage();
+            if (cloudTimestamp > localTimestamp) {
+              console.info(`Loaded newer chat history from cloud: ${cloudHistory.length} messages`);
+              setChatHistory(cloudHistory);
+              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cloudHistory));
+            }
           }
-        } else {
-          console.info("Not logged in, loading from local storage only");
-          // User is not logged in, load from local storage only
-          loadFromLocalStorage();
         }
       } catch (error) {
         console.error("Error loading chat history:", error);
-        loadFromLocalStorage();
+        // Keep local data if cloud fails
+        const localHistory = loadFromLocalStorage();
+        if (localHistory.length > 0) {
+          setChatHistory(localHistory);
+        }
       } finally {
         setIsInitialLoad(false);
       }
     };
 
-    const loadFromLocalStorage = () => {
+    const loadFromLocalStorage = (): ChatMessage[] => {
       const storedHistory = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (storedHistory) {
         try {
           const parsedHistory = JSON.parse(storedHistory) as ChatMessage[];
-          setChatHistory(parsedHistory);
-          console.info(`Loaded chat history from localStorage: ${parsedHistory.length} messages`);
+          // Deduplicate messages based on timestamp and content
+          const uniqueHistory = parsedHistory.filter((message, index, arr) => 
+            index === arr.findIndex(m => 
+              m.timestamp === message.timestamp && 
+              m.content === message.content && 
+              m.role === message.role
+            )
+          );
+          return uniqueHistory;
         } catch (error) {
           console.error("Failed to parse chat history from localStorage:", error);
           localStorage.removeItem(LOCAL_STORAGE_KEY);
         }
       }
+      return [];
     };
 
     loadChatHistory();
-  }, [user]);
+  }, [user?.id]); // Only reload when user ID changes, not on every navigation
 
   // Save to both localStorage and cloud when history changes
   useEffect(() => {
     if (chatHistory.length > 0 && !isInitialLoad) {
       console.log("Saving chat history", { length: chatHistory.length, isLoggedIn: !!user });
       
-      // Always save to localStorage for offline access
+      // Always save to localStorage immediately for offline access
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(chatHistory));
       
-      // Sync with cloud if user is logged in
+      // Sync with cloud if user is logged in (but don't block on it)
       if (user) {
         console.log("Syncing chat history with cloud");
         syncChatHistory(chatHistory).then(success => {
@@ -87,10 +102,12 @@ export const useChatHistory = () => {
           } else {
             console.log("Successfully synced chat history with cloud");
           }
+        }).catch(error => {
+          console.error("Error syncing chat history:", error);
         });
       }
     }
-  }, [chatHistory, isInitialLoad, user]);
+  }, [chatHistory, isInitialLoad, user?.id]);
 
   const clearChatHistory = () => {
     setChatHistory([]);
