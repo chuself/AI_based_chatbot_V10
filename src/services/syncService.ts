@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentUser } from "./supabaseService";
 import { ChatMessage } from "@/hooks/useChatHistory";
@@ -291,13 +292,14 @@ class SyncServiceImpl {
     try {
       const user = await getCurrentUser();
       if (!user) {
-        console.log('❌ No authenticated user, cannot save to cloud');
+        console.log('❌ TROUBLESHOOT: No authenticated user, cannot save to cloud');
         return false;
       }
 
-      console.log("📤 Starting cloud data upload for user:", user.id);
+      console.log("📤 TROUBLESHOOT: Starting cloud data upload for user:", user.id);
 
-      // Validate and prepare data
+      // Step 1: Validate and prepare data
+      console.log("🔍 TROUBLESHOOT: Step 1 - Validating and preparing data");
       const preparedData = {
         model_config: data.modelConfig ? JSON.stringify(data.modelConfig) : JSON.stringify({}),
         speech_settings: data.speechSettings ? JSON.stringify(data.speechSettings) : JSON.stringify({}),
@@ -308,59 +310,98 @@ class SyncServiceImpl {
         chat_history: data.chatHistory ? JSON.stringify(data.chatHistory) : JSON.stringify([])
       };
 
-      // Validate data size
+      // Step 2: Validate data size
+      console.log("🔍 TROUBLESHOOT: Step 2 - Checking data size");
       const dataSize = JSON.stringify(preparedData).length;
+      console.log("📊 TROUBLESHOOT: Data size:", dataSize, "bytes");
       if (dataSize > 2 * 1024 * 1024) { // 2MB limit
-        console.error('❌ Data too large for upload:', dataSize, 'bytes');
+        console.error('❌ TROUBLESHOOT: Data too large for upload:', dataSize, 'bytes');
         throw new Error('Data size exceeds 2MB limit');
       }
 
-      // Get current highest version number
-      const { data: existingVersions, error: versionError } = await supabase
+      // Step 3: Check if user already has data (this is the key fix!)
+      console.log("🔍 TROUBLESHOOT: Step 3 - Checking for existing user data");
+      const { data: existingData, error: checkError } = await supabase
         .from('user_data')
-        .select('data_version')
+        .select('id, data_version')
         .eq('user_id', user.id)
-        .order('data_version', { ascending: false })
-        .limit(1);
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (versionError && versionError.code !== 'PGRST116') {
-        console.error('❌ Error fetching version data:', versionError.message);
-        throw new Error(`Version fetch error: ${versionError.message}`);
+      if (checkError) {
+        console.error('❌ TROUBLESHOOT: Error checking existing data:', checkError.message);
+        return false;
       }
 
-      const nextVersion = existingVersions && existingVersions.length > 0 
-        ? (existingVersions[0].data_version || 0) + 1 
-        : 1;
+      const timestamp = new Date().toISOString();
+      let result;
 
-      const userData = {
-        user_id: user.id,
-        ...preparedData,
-        sync_source: 'cloud' as const,
-        last_synced_at: new Date().toISOString(),
-        data_version: nextVersion
-      };
+      if (existingData) {
+        // UPDATE existing record - this fixes the duplicate key error!
+        console.log("🔄 TROUBLESHOOT: Step 4a - Updating existing record ID:", existingData.id);
+        const nextVersion = (existingData.data_version || 0) + 1;
+        
+        const updateData = {
+          ...preparedData,
+          sync_source: 'cloud' as const,
+          last_synced_at: timestamp,
+          data_version: nextVersion,
+          updated_at: timestamp
+        };
 
-      console.log('📤 Uploading data to cloud with version:', nextVersion);
+        const { error: updateError } = await supabase
+          .from('user_data')
+          .update(updateData)
+          .eq('id', existingData.id);
 
-      const { error: insertError } = await supabase
-        .from('user_data')
-        .insert(userData);
+        if (updateError) {
+          console.error('❌ TROUBLESHOOT: Error updating existing data:', updateError.message, updateError.details);
+          return false;
+        }
 
-      if (insertError) {
-        console.error('❌ Error saving to cloud:', insertError.message, insertError.details);
-        throw new Error(`Cloud save error: ${insertError.message}`);
+        console.log('✅ TROUBLESHOOT: Successfully updated existing data with version', nextVersion);
+        
+        this.updateSyncMetadata({
+          lastSyncedAt: timestamp,
+          syncSource: 'cloud',
+          dataVersion: nextVersion
+        });
+
+        return true;
+      } else {
+        // INSERT new record
+        console.log("➕ TROUBLESHOOT: Step 4b - Creating new record for user");
+        
+        const insertData = {
+          user_id: user.id,
+          ...preparedData,
+          sync_source: 'cloud' as const,
+          last_synced_at: timestamp,
+          data_version: 1
+        };
+
+        const { error: insertError } = await supabase
+          .from('user_data')
+          .insert(insertData);
+
+        if (insertError) {
+          console.error('❌ TROUBLESHOOT: Error inserting new data:', insertError.message, insertError.details);
+          return false;
+        }
+
+        console.log('✅ TROUBLESHOOT: Successfully created new data with version 1');
+        
+        this.updateSyncMetadata({
+          lastSyncedAt: timestamp,
+          syncSource: 'cloud',
+          dataVersion: 1
+        });
+
+        return true;
       }
-
-      console.log('✅ Successfully synced data to cloud with version', nextVersion);
-      this.updateSyncMetadata({
-        lastSyncedAt: new Date().toISOString(),
-        syncSource: 'cloud',
-        dataVersion: nextVersion
-      });
-
-      return true;
     } catch (error) {
-      console.error('❌ Error in saveCloudData:', error);
+      console.error('❌ TROUBLESHOOT: Critical error in saveCloudData:', error);
       return false;
     }
   }
@@ -413,10 +454,10 @@ class SyncServiceImpl {
 
   async uploadToCloud(): Promise<boolean> {
     try {
-      console.log('📤 Manual upload to cloud initiated');
+      console.log('📤 TROUBLESHOOT: Manual upload to cloud initiated');
       const localData = this.loadLocalData();
       
-      // Ensure we have some data to upload
+      // Check if we have data to upload
       const hasData = Object.values(localData).some(value => 
         value && (
           (Array.isArray(value) && value.length > 0) || 
@@ -425,21 +466,28 @@ class SyncServiceImpl {
       );
 
       if (!hasData) {
-        console.log('ℹ️ No local data to upload');
+        console.log('ℹ️ TROUBLESHOOT: No local data to upload');
         return false;
       }
+
+      console.log('📊 TROUBLESHOOT: Local data summary:', {
+        hasModelConfig: !!localData.modelConfig,
+        hasCommands: !!(localData.customCommands && localData.customCommands.length > 0),
+        hasMemories: !!(localData.memories && localData.memories.length > 0),
+        hasChatHistory: !!(localData.chatHistory && localData.chatHistory.length > 0)
+      });
 
       const success = await this.saveCloudData(localData);
       
       if (success) {
-        console.log('✅ Manual upload successful');
+        console.log('✅ TROUBLESHOOT: Manual upload successful');
       } else {
-        console.log('❌ Manual upload failed');
+        console.log('❌ TROUBLESHOOT: Manual upload failed');
       }
       
       return success;
     } catch (error) {
-      console.error('❌ Error in manual upload:', error);
+      console.error('❌ TROUBLESHOOT: Error in manual upload:', error);
       return false;
     }
   }
