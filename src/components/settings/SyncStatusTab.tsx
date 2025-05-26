@@ -4,8 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
-import { SyncService, SyncMetadata, CloudDataVersion, SyncStatus } from "@/services/syncService";
-import { Cloud, Download, Upload, RefreshCw, HardDrive, Wifi, WifiOff, LogOut, CheckCircle, XCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { SyncService, SyncMetadata, CloudDataVersion, SyncStatus, DataComparisonResult } from "@/services/syncService";
+import { Cloud, Download, Upload, RefreshCw, HardDrive, Wifi, WifiOff, LogOut, CheckCircle, XCircle, ChevronDown, ChevronUp, AlertCircle, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -78,6 +78,7 @@ const SyncStatusTab = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [itemLoadingStates, setItemLoadingStates] = useState<Record<string, boolean>>({});
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+  const [dataComparisons, setDataComparisons] = useState<Record<string, DataComparisonResult>>({});
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -87,6 +88,7 @@ const SyncStatusTab = () => {
     setSyncMetadata(metadata);
     setSyncStatus(status);
     loadCloudVersions();
+    loadDataComparisons();
   }, []);
 
   const loadCloudVersions = async () => {
@@ -95,6 +97,18 @@ const SyncStatusTab = () => {
       setCloudVersions(versions);
     } catch (error) {
       console.error('Error loading cloud versions:', error);
+    }
+  };
+
+  const loadDataComparisons = async () => {
+    try {
+      const comparisons: Record<string, DataComparisonResult> = {};
+      for (const item of SYNC_ITEMS) {
+        comparisons[item.key] = await SyncService.compareDataWithCloud(item.key);
+      }
+      setDataComparisons(comparisons);
+    } catch (error) {
+      console.error('Error loading data comparisons:', error);
     }
   };
 
@@ -136,6 +150,18 @@ const SyncStatusTab = () => {
     try {
       console.log(`📤 Uploading ${item.label}...`);
       
+      // Check if data is identical before uploading
+      const comparison = dataComparisons[item.key];
+      if (comparison?.isIdentical) {
+        toast({
+          title: "No Changes Detected",
+          description: `${item.label} is already up to date in the cloud`,
+          variant: "default",
+        });
+        setItemLoading(item.key, false);
+        return;
+      }
+      
       // Get current local data
       const localData = SyncService.loadLocalData();
       
@@ -166,13 +192,7 @@ const SyncStatusTab = () => {
           break;
       }
       
-      // Always force a new version by updating the current data with a timestamp
-      const timestampedData = {
-        ...itemData,
-        _lastManualSync: new Date().toISOString()
-      };
-      
-      const success = await SyncService.saveCloudData(timestampedData);
+      const success = await SyncService.saveCloudData(itemData);
       
       if (success) {
         toast({
@@ -180,12 +200,13 @@ const SyncStatusTab = () => {
           description: `${item.label} has been uploaded to the cloud`,
         });
         
-        // Refresh metadata and status
+        // Refresh metadata, status, and comparisons
         const metadata = SyncService.getSyncMetadata();
         const status = SyncService.getSyncStatus();
         setSyncMetadata(metadata);
         setSyncStatus(status);
         await loadCloudVersions();
+        await loadDataComparisons();
       } else {
         toast({
           title: "Upload Failed",
@@ -258,9 +279,10 @@ const SyncStatusTab = () => {
           description: `${item.label} has been downloaded from the cloud`,
         });
         
-        // Refresh status
+        // Refresh status and comparisons
         const status = SyncService.getSyncStatus();
         setSyncStatus(status);
+        await loadDataComparisons();
         
         // Reload page for chat history to take effect immediately
         if (item.key === 'chatHistory') {
@@ -286,12 +308,21 @@ const SyncStatusTab = () => {
   };
 
   const getItemStatusIndicator = (item: IndividualSyncItem) => {
-    if (!syncStatus) return <div className="w-3 h-3 bg-gray-400 rounded-full" />;
+    const comparison = dataComparisons[item.key];
     
-    const isLatest = syncStatus[item.key];
-    return (
-      <div className={`w-3 h-3 rounded-full ${isLatest ? 'bg-green-500' : 'bg-red-500'}`} />
-    );
+    if (!comparison) {
+      return <div className="w-3 h-3 bg-gray-400 rounded-full" title="Loading..." />;
+    }
+    
+    if (comparison.isIdentical) {
+      return <Check className="w-4 h-4 text-green-500" title="Data is synchronized" />;
+    }
+    
+    if (!comparison.hasLocalData && !comparison.hasCloudData) {
+      return <div className="w-3 h-3 bg-gray-400 rounded-full" title="No data" />;
+    }
+    
+    return <AlertCircle className="w-4 h-4 text-yellow-500" title="Data differs between local and cloud" />;
   };
 
   const handleLogout = async () => {
@@ -329,6 +360,7 @@ const SyncStatusTab = () => {
         setSyncMetadata(metadata);
         setSyncStatus(status);
         await loadCloudVersions();
+        await loadDataComparisons();
       } else {
         toast({
           title: "Upload Failed",
@@ -395,6 +427,7 @@ const SyncStatusTab = () => {
       const status = SyncService.getSyncStatus();
       setSyncStatus(status);
       await loadCloudVersions();
+      await loadDataComparisons();
     } catch (error) {
       console.error('Sync error:', error);
       toast({
@@ -486,77 +519,90 @@ const SyncStatusTab = () => {
         <CardHeader>
           <CardTitle>Individual Item Sync Control</CardTitle>
           <CardDescription>
-            Manually sync specific data items. Green indicator = latest version, Red = needs sync
+            Manually sync specific data items. ✓ = synchronized, ⚠ = differs, ○ = no data
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {SYNC_ITEMS.map((item) => (
-            <div key={item.key} className="border rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  {getItemStatusIndicator(item)}
-                  {item.icon}
-                  <div>
-                    <h4 className="font-medium text-sm">{item.label}</h4>
-                    <p className="text-xs text-gray-500">{item.description}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={hasLocalData(item) ? "default" : "secondary"} className="text-xs">
-                    {hasLocalData(item) ? "Has Data" : "No Data"}
-                  </Badge>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => toggleExpanded(item.key)}
-                  >
-                    {expandedItems[item.key] ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-              
-              <Collapsible open={expandedItems[item.key]} onOpenChange={() => toggleExpanded(item.key)}>
-                <CollapsibleContent className="space-y-3">
-                  <div className="flex gap-2 pt-2 border-t">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => uploadIndividualItem(item)}
-                      disabled={itemLoadingStates[item.key]}
-                      className="flex-1"
-                    >
-                      <Upload className="h-3 w-3 mr-2" />
-                      {itemLoadingStates[item.key] ? 'Uploading...' : 'Upload'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => downloadIndividualItem(item)}
-                      disabled={itemLoadingStates[item.key]}
-                      className="flex-1"
-                    >
-                      <Download className="h-3 w-3 mr-2" />
-                      {itemLoadingStates[item.key] ? 'Downloading...' : 'Download'}
-                    </Button>
-                  </div>
-                  
-                  {hasLocalData(item) && (
-                    <div className="text-xs text-gray-500 bg-gray-50 dark:bg-gray-800 p-2 rounded">
-                      <strong>Local Data Preview:</strong>
-                      <pre className="mt-1 max-h-20 overflow-auto">
-                        {JSON.stringify(getItemData(item), null, 2).substring(0, 200)}
-                        {JSON.stringify(getItemData(item), null, 2).length > 200 ? '...' : ''}
-                      </pre>
+          {SYNC_ITEMS.map((item) => {
+            const comparison = dataComparisons[item.key];
+            return (
+              <div key={item.key} className="border rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    {getItemStatusIndicator(item)}
+                    {item.icon}
+                    <div>
+                      <h4 className="font-medium text-sm">{item.label}</h4>
+                      <p className="text-xs text-gray-500">{item.description}</p>
+                      {comparison && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          {comparison.isIdentical 
+                            ? "✓ Local and cloud data match" 
+                            : comparison.hasLocalData || comparison.hasCloudData
+                              ? "⚠ Data differs between local and cloud"
+                              : "○ No data available"
+                          }
+                        </p>
+                      )}
                     </div>
-                  )}
-                </CollapsibleContent>
-              </Collapsible>
-            </div>
-          ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={hasLocalData(item) ? "default" : "secondary"} className="text-xs">
+                      {hasLocalData(item) ? "Has Data" : "No Data"}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleExpanded(item.key)}
+                    >
+                      {expandedItems[item.key] ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                
+                <Collapsible open={expandedItems[item.key]} onOpenChange={() => toggleExpanded(item.key)}>
+                  <CollapsibleContent className="space-y-3">
+                    <div className="flex gap-2 pt-2 border-t">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => uploadIndividualItem(item)}
+                        disabled={itemLoadingStates[item.key]}
+                        className="flex-1"
+                      >
+                        <Upload className="h-3 w-3 mr-2" />
+                        {itemLoadingStates[item.key] ? 'Uploading...' : 'Upload'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => downloadIndividualItem(item)}
+                        disabled={itemLoadingStates[item.key]}
+                        className="flex-1"
+                      >
+                        <Download className="h-3 w-3 mr-2" />
+                        {itemLoadingStates[item.key] ? 'Downloading...' : 'Download'}
+                      </Button>
+                    </div>
+                    
+                    {hasLocalData(item) && (
+                      <div className="text-xs text-gray-500 bg-gray-50 dark:bg-gray-800 p-2 rounded">
+                        <strong>Local Data Preview:</strong>
+                        <pre className="mt-1 max-h-20 overflow-auto">
+                          {JSON.stringify(getItemData(item), null, 2).substring(0, 200)}
+                          {JSON.stringify(getItemData(item), null, 2).length > 200 ? '...' : ''}
+                        </pre>
+                      </div>
+                    )}
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
 

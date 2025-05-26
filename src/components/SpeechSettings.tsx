@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useSpeech } from "@/hooks/useSpeech";
+import { useSpeechSettingsSync } from "@/hooks/useSpeechSettingsSync";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -40,6 +41,16 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
     isPlayHTAvailable
   } = useSpeech();
   
+  const {
+    updateVoiceSelection,
+    updatePlayHTVoiceSelection,
+    updateAutoPlay: updateAutoPlaySync,
+    updateSpeechRate,
+    updateSpeechPitch,
+    updateSpeechVolume,
+    updateSpeechSource: updateSpeechSourceSync
+  } = useSpeechSettingsSync();
+  
   const [testText, setTestText] = useState("Hello! This is a test of the text-to-speech system.");
   const [voiceFilter, setVoiceFilter] = useState("");
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -48,6 +59,7 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
     const voice = availableVoices.find(v => v.name === voiceName);
     if (voice) {
       selectVoice(voice);
+      updateVoiceSelection(voiceName);
     }
   };
   
@@ -55,6 +67,7 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
     const voice = availablePlayHTVoices.find(v => v.id === voiceId);
     if (voice) {
       selectPlayHTVoice(voice);
+      updatePlayHTVoiceSelection(voiceId);
     }
   };
   
@@ -69,6 +82,27 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
   
   const handleSpeechSourceChange = (source: SpeechSource) => {
     updateSpeechSource(source);
+    updateSpeechSourceSync(source);
+  };
+  
+  const handleAutoPlayToggle = () => {
+    toggleAutoPlay();
+    updateAutoPlaySync(!autoPlay);
+  };
+  
+  const handleRateChange = (newRate: number) => {
+    updateRate(newRate);
+    updateSpeechRate(newRate);
+  };
+  
+  const handlePitchChange = (newPitch: number) => {
+    updatePitch(newPitch);
+    updateSpeechPitch(newPitch);
+  };
+  
+  const handleVolumeChange = (newVolume: number) => {
+    updateVolume(newVolume);
+    updateSpeechVolume(newVolume);
   };
   
   const handleRefreshVoices = () => {
@@ -79,13 +113,11 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
   
   // Group browser voices by language for better organization
   const groupedVoices = availableVoices.reduce((acc, voice) => {
-    // Extract country code and language name
     const [langCode, countryCode] = voice.lang.split('-');
     const langName = new Intl.DisplayNames([navigator.language], {
       type: 'language'
     }).of(langCode) || langCode.toUpperCase();
     
-    // Create a key that includes language name and country code
     const langKey = `${langName} (${countryCode || 'other'})`;
     
     if (!acc[langKey]) {
@@ -95,7 +127,6 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
     return acc;
   }, {} as Record<string, SpeechSynthesisVoice[]>);
   
-  // Group Play.ht voices by language
   const groupedPlayHTVoices = availablePlayHTVoices.reduce((acc, voice) => {
     const langKey = voice.language || 'Unknown';
     
@@ -106,7 +137,6 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
     return acc;
   }, {} as Record<string, PlayHTVoice[]>);
   
-  // Create a filtered view of browser voices based on search
   const filteredGroupedVoices: Record<string, SpeechSynthesisVoice[]> = Object.fromEntries(
     Object.entries(groupedVoices)
       .map(([lang, voices]) => {
@@ -119,7 +149,6 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
       .filter(([_, voices]) => voices.length > 0)
   );
   
-  // Create a filtered view of Play.ht voices based on search
   const filteredGroupedPlayHTVoices: Record<string, PlayHTVoice[]> = Object.fromEntries(
     Object.entries(groupedPlayHTVoices)
       .map(([lang, voices]) => {
@@ -133,15 +162,12 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
       .filter(([_, voices]) => voices.length > 0)
   );
   
-  // Count British female voices
   const britishFemaleVoices = availableVoices.filter(v => 
     v.lang.includes('en-GB') && 
     (v.name.toLowerCase().includes('female') || 
-     // More patterns for likely female voices
      /^(amy|emma|joanna|salli|kimberly|kendra|joanna|ivy|hannah|ruth|victoria|queen|elizabeth|catherine|kate|sophie|emily|lily|charlotte)/i.test(v.name))
   );
   
-  // Count Play.ht British female voices
   const playhtBritishFemaleVoices = availablePlayHTVoices.filter(v => 
     (v.language.toLowerCase().includes('english') && v.language.toLowerCase().includes('british')) && 
     v.gender.toLowerCase() === 'female'
@@ -165,7 +191,7 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
           <Switch 
             id="auto-speak" 
             checked={autoPlay} 
-            onCheckedChange={toggleAutoPlay}
+            onCheckedChange={handleAutoPlayToggle}
           />
         </div>
         
@@ -363,7 +389,7 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
                       min={0.1}
                       max={5}
                       step={0.1}
-                      onChange={(e) => updateRate(parseFloat(e.target.value) || 1)}
+                      onChange={(e) => handleRateChange(parseFloat(e.target.value) || 1)}
                       className="w-16 h-6 text-xs p-1"
                     />
                   </div>
@@ -373,7 +399,7 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
                   min={0.1} 
                   max={5} 
                   step={0.1} 
-                  onValueChange={values => updateRate(values[0])} 
+                  onValueChange={values => handleRateChange(values[0])} 
                 />
                 <p className="text-xs text-gray-400">
                   Slower values (0.1-0.8) for careful speaking, normal (1.0), faster (1.2-5.0) for quick reading
@@ -391,7 +417,7 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
                       min={0.1}
                       max={3}
                       step={0.1}
-                      onChange={(e) => updatePitch(parseFloat(e.target.value) || 1)}
+                      onChange={(e) => handlePitchChange(parseFloat(e.target.value) || 1)}
                       className="w-16 h-6 text-xs p-1"
                     />
                   </div>
@@ -401,7 +427,7 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
                   min={0.1} 
                   max={3} 
                   step={0.1} 
-                  onValueChange={values => updatePitch(values[0])} 
+                  onValueChange={values => handlePitchChange(values[0])} 
                 />
                 <p className="text-xs text-gray-400">
                   Lower values (0.1-0.8) for deeper voices, normal (1.0), higher (1.2-3.0) for higher pitched voices
@@ -419,7 +445,7 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
                       min={0}
                       max={100}
                       step={5}
-                      onChange={(e) => updateVolume(parseInt(e.target.value) / 100 || 1)}
+                      onChange={(e) => handleVolumeChange(parseInt(e.target.value) / 100 || 1)}
                       className="w-16 h-6 text-xs p-1"
                     />
                   </div>
@@ -429,7 +455,7 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
                   min={0} 
                   max={1} 
                   step={0.05} 
-                  onValueChange={values => updateVolume(values[0])} 
+                  onValueChange={values => handleVolumeChange(values[0])} 
                 />
                 <p className="text-xs text-gray-400">
                   Adjust volume from silent (0%) to full volume (100%)

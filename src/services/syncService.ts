@@ -13,7 +13,6 @@ export interface UserData {
   customCommands?: Command[];
   memories?: MemoryEntry[];
   chatHistory?: ChatMessage[];
-  _lastManualSync?: string; // For forcing new versions
 }
 
 export interface SyncMetadata {
@@ -41,6 +40,13 @@ export interface SyncStatus {
   customCommands: boolean;
   memories: boolean;
   chatHistory: boolean;
+}
+
+export interface DataComparisonResult {
+  isIdentical: boolean;
+  hasLocalData: boolean;
+  hasCloudData: boolean;
+  differences: string[];
 }
 
 class SyncServiceImpl {
@@ -88,6 +94,58 @@ class SyncServiceImpl {
     const current = this.getSyncMetadata();
     const updated = { ...current, ...metadata };
     localStorage.setItem(this.LOCAL_KEYS.SYNC_METADATA, JSON.stringify(updated));
+  }
+
+  // New method to compare local and cloud data
+  async compareDataWithCloud(dataType?: keyof UserData): Promise<DataComparisonResult> {
+    try {
+      const localData = this.loadLocalData();
+      const cloudData = await this.fetchCloudData();
+
+      if (!cloudData) {
+        return {
+          isIdentical: false,
+          hasLocalData: Object.values(localData).some(v => v && ((Array.isArray(v) && v.length > 0) || (typeof v === 'object' && Object.keys(v).length > 0))),
+          hasCloudData: false,
+          differences: ['No cloud data found']
+        };
+      }
+
+      const differences: string[] = [];
+      let isIdentical = true;
+
+      // Compare specific data type or all data
+      const typesToCompare = dataType ? [dataType] : Object.keys(localData) as (keyof UserData)[];
+      
+      for (const type of typesToCompare) {
+        const localValue = localData[type];
+        const cloudValue = cloudData[type];
+        
+        // Deep comparison
+        const localStr = JSON.stringify(localValue || (Array.isArray(localValue) ? [] : {}));
+        const cloudStr = JSON.stringify(cloudValue || (Array.isArray(cloudValue) ? [] : {}));
+        
+        if (localStr !== cloudStr) {
+          isIdentical = false;
+          differences.push(`${type}: Local and cloud data differ`);
+        }
+      }
+
+      return {
+        isIdentical,
+        hasLocalData: Object.values(localData).some(v => v && ((Array.isArray(v) && v.length > 0) || (typeof v === 'object' && Object.keys(v).length > 0))),
+        hasCloudData: Object.values(cloudData).some(v => v && ((Array.isArray(v) && v.length > 0) || (typeof v === 'object' && Object.keys(v).length > 0))),
+        differences
+      };
+    } catch (error) {
+      console.error('Error comparing data:', error);
+      return {
+        isIdentical: false,
+        hasLocalData: true,
+        hasCloudData: false,
+        differences: ['Error during comparison']
+      };
+    }
   }
 
   loadLocalData(): UserData {
@@ -292,15 +350,12 @@ class SyncServiceImpl {
     try {
       const user = await getCurrentUser();
       if (!user) {
-        console.log('❌ TROUBLESHOOT: No authenticated user, cannot save to cloud');
+        console.log('❌ No authenticated user, cannot save to cloud');
         return false;
       }
 
-      console.log("📤 TROUBLESHOOT: Starting cloud data upload for user:", user.id);
+      console.log("📤 Starting cloud data upload for user:", user.id);
 
-      // Step 1: Validate and prepare data (preserve existing data when doing individual uploads)
-      console.log("🔍 TROUBLESHOOT: Step 1 - Validating and preparing data");
-      
       // Get current cloud data to merge with
       const currentCloudData = await this.fetchCloudData();
       const currentLocalData = this.loadLocalData();
@@ -330,17 +385,15 @@ class SyncServiceImpl {
                       (currentLocalData.chatHistory ? JSON.stringify(currentLocalData.chatHistory) : JSON.stringify([])))
       };
 
-      // Step 2: Validate data size
-      console.log("🔍 TROUBLESHOOT: Step 2 - Checking data size");
+      // Check data size
       const dataSize = JSON.stringify(mergedData).length;
-      console.log("📊 TROUBLESHOOT: Data size:", dataSize, "bytes");
+      console.log("📊 Data size:", dataSize, "bytes");
       if (dataSize > 2 * 1024 * 1024) { // 2MB limit
-        console.error('❌ TROUBLESHOOT: Data too large for upload:', dataSize, 'bytes');
+        console.error('❌ Data too large for upload:', dataSize, 'bytes');
         throw new Error('Data size exceeds 2MB limit');
       }
 
-      // Step 3: Check if user already has data
-      console.log("🔍 TROUBLESHOOT: Step 3 - Checking for existing user data");
+      // Check if user already has data
       const { data: existingData, error: checkError } = await supabase
         .from('user_data')
         .select('id, data_version')
@@ -350,16 +403,19 @@ class SyncServiceImpl {
         .maybeSingle();
 
       if (checkError) {
-        console.error('❌ TROUBLESHOOT: Error checking existing data:', checkError.message);
+        console.error('❌ Error checking existing data:', checkError.message);
         return false;
       }
 
       const timestamp = new Date().toISOString();
 
       if (existingData) {
-        // UPDATE existing record - always increment version for individual uploads
-        console.log("🔄 TROUBLESHOOT: Step 4a - Updating existing record ID:", existingData.id);
-        const nextVersion = (existingData.data_version || 0) + 1;
+        // UPDATE existing record - only increment version if data actually changed
+        console.log("🔄 Updating existing record ID:", existingData.id);
+        
+        // Check if data actually changed by comparing with current cloud data
+        const comparison = await this.compareDataWithCloud();
+        const nextVersion = comparison.isIdentical ? existingData.data_version : (existingData.data_version || 0) + 1;
         
         const updateData = {
           ...mergedData,
@@ -375,11 +431,11 @@ class SyncServiceImpl {
           .eq('id', existingData.id);
 
         if (updateError) {
-          console.error('❌ TROUBLESHOOT: Error updating existing data:', updateError.message, updateError.details);
+          console.error('❌ Error updating existing data:', updateError.message, updateError.details);
           return false;
         }
 
-        console.log('✅ TROUBLESHOOT: Successfully updated existing data with version', nextVersion);
+        console.log('✅ Successfully updated existing data with version', nextVersion);
         
         this.updateSyncMetadata({
           lastSyncedAt: timestamp,
@@ -390,7 +446,7 @@ class SyncServiceImpl {
         return true;
       } else {
         // INSERT new record
-        console.log("➕ TROUBLESHOOT: Step 4b - Creating new record for user");
+        console.log("➕ Creating new record for user");
         
         const insertData = {
           user_id: user.id,
@@ -405,11 +461,11 @@ class SyncServiceImpl {
           .insert(insertData);
 
         if (insertError) {
-          console.error('❌ TROUBLESHOOT: Error inserting new data:', insertError.message, insertError.details);
+          console.error('❌ Error inserting new data:', insertError.message, insertError.details);
           return false;
         }
 
-        console.log('✅ TROUBLESHOOT: Successfully created new data with version 1');
+        console.log('✅ Successfully created new data with version 1');
         
         this.updateSyncMetadata({
           lastSyncedAt: timestamp,
@@ -420,7 +476,7 @@ class SyncServiceImpl {
         return true;
       }
     } catch (error) {
-      console.error('❌ TROUBLESHOOT: Critical error in saveCloudData:', error);
+      console.error('❌ Critical error in saveCloudData:', error);
       return false;
     }
   }
@@ -473,7 +529,7 @@ class SyncServiceImpl {
 
   async uploadToCloud(): Promise<boolean> {
     try {
-      console.log('📤 TROUBLESHOOT: Manual upload to cloud initiated');
+      console.log('📤 Manual upload to cloud initiated');
       const localData = this.loadLocalData();
       
       // Check if we have data to upload
@@ -485,11 +541,11 @@ class SyncServiceImpl {
       );
 
       if (!hasData) {
-        console.log('ℹ️ TROUBLESHOOT: No local data to upload');
+        console.log('ℹ️ No local data to upload');
         return false;
       }
 
-      console.log('📊 TROUBLESHOOT: Local data summary:', {
+      console.log('📊 Local data summary:', {
         hasModelConfig: !!localData.modelConfig,
         hasCommands: !!(localData.customCommands && localData.customCommands.length > 0),
         hasMemories: !!(localData.memories && localData.memories.length > 0),
@@ -499,14 +555,14 @@ class SyncServiceImpl {
       const success = await this.saveCloudData(localData);
       
       if (success) {
-        console.log('✅ TROUBLESHOOT: Manual upload successful');
+        console.log('✅ Manual upload successful');
       } else {
-        console.log('❌ TROUBLESHOOT: Manual upload failed');
+        console.log('❌ Manual upload failed');
       }
       
       return success;
     } catch (error) {
-      console.error('❌ TROUBLESHOOT: Error in manual upload:', error);
+      console.error('❌ Error in manual upload:', error);
       return false;
     }
   }
