@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useContext } from "react";
 import Header from "@/components/Header";
 import MessageList from "@/components/MessageList";
@@ -17,9 +16,9 @@ import SupabaseSyncStatus from "@/components/SupabaseSyncStatus";
 import { SupabaseContext } from "@/App";
 import { Command, loadCommands } from "@/services/commandsService";
 import { useDataSync } from "@/hooks/useDataSync";
+import { useChatHistory, ChatMessage } from "@/hooks/useChatHistory";
 
 const STORAGE_KEY_SHOW_CHANGELOG = "show-changelog-1.9.0";
-const STORAGE_KEY_SESSION_MESSAGES = "session-messages";
 
 interface CommandLog {
   timestamp: Date;
@@ -29,8 +28,12 @@ interface CommandLog {
 }
 
 const Index = () => {
-  // Session messages (preserved during navigation, cleared on logout)
-  const [messages, setMessages] = useState<Message[]>([]);
+  // Use the chat history hook for persistent chat
+  const { chatHistory, setChatHistory, clearChatHistory } = useChatHistory();
+  
+  // Convert ChatMessage to Message format for display
+  const [displayMessages, setDisplayMessages] = useState<Message[]>([]);
+  
   const { sendMessage, isLoading, error, selectedModel } = useGemini();
   const { speak, autoPlay } = useSpeech();
   const { toast } = useToast();
@@ -44,49 +47,38 @@ const Index = () => {
   const [loadingCommands, setLoadingCommands] = useState(true);
   
   const { syncData, isLoading: syncLoading } = useDataSync();
-  
-  // Load and save session messages (separate from persistent chat history)
+
+  // Convert ChatMessage[] to Message[] for display
   useEffect(() => {
-    const savedMessages = localStorage.getItem(STORAGE_KEY_SESSION_MESSAGES);
-    if (savedMessages) {
-      try {
-        const parsedMessages = JSON.parse(savedMessages) as Message[];
-        setMessages(parsedMessages);
-      } catch (error) {
-        console.error("Failed to parse saved session messages:", error);
-        // Initialize with welcome message if parsing fails
-        initializeWelcomeMessage();
-      }
+    const convertedMessages: Message[] = chatHistory.map((msg, index) => ({
+      id: `${msg.timestamp}-${index}`,
+      text: msg.content,
+      isUser: msg.role === 'user',
+      timestamp: new Date(msg.timestamp),
+      isMcpResult: msg.isMcpResult
+    }));
+
+    // Add welcome message if no messages exist
+    if (convertedMessages.length === 0) {
+      const welcomeMessage: Message = {
+        id: 'welcome',
+        text: "👋 Hi! I'm your Chuself AI assistant. How can I help you today?",
+        isUser: false,
+        timestamp: new Date(),
+      };
+      setDisplayMessages([welcomeMessage]);
     } else {
-      initializeWelcomeMessage();
+      setDisplayMessages(convertedMessages);
     }
-  }, []);
+  }, [chatHistory]);
 
-  // Save session messages on change
-  useEffect(() => {
-    if (messages.length > 0) {
-      localStorage.setItem(STORAGE_KEY_SESSION_MESSAGES, JSON.stringify(messages));
-    }
-  }, [messages]);
-
-  // Clear session messages on logout
+  // Clear chat on logout
   useEffect(() => {
     if (!user) {
-      setMessages([]);
-      localStorage.removeItem(STORAGE_KEY_SESSION_MESSAGES);
-      initializeWelcomeMessage();
+      console.log('User logged out, clearing chat history');
+      clearChatHistory();
     }
-  }, [user]);
-
-  const initializeWelcomeMessage = () => {
-    const welcomeMessage: Message = {
-      id: Date.now().toString(),
-      text: "👋 Hi! I'm your Chuself AI assistant. How can I help you today?",
-      isUser: false,
-      timestamp: new Date(),
-    };
-    setMessages([welcomeMessage]);
-  };
+  }, [user, clearChatHistory]);
   
   // Load command visibility preference from localStorage
   useEffect(() => {
@@ -170,20 +162,6 @@ const Index = () => {
       });
     };
   }, []);
-  
-  // Initialize with welcome message only (fresh start each session)
-  useEffect(() => {
-    if (messages.length === 0) {
-      const welcomeMessage: Message = {
-        id: Date.now().toString(),
-        text: "👋 Hi! I'm your Chuself AI assistant. How can I help you today?",
-        isUser: false,
-        timestamp: new Date(),
-      };
-      
-      setMessages([welcomeMessage]);
-    }
-  }, [messages.length]);
   
   useEffect(() => {
     if (error) {
@@ -409,25 +387,25 @@ const Index = () => {
   };
   
   const handleSendMessage = async (text: string) => {
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text,
-      isUser: true,
-      timestamp: new Date(),
+    // Add user message to chat history
+    const userChatMessage: ChatMessage = {
+      role: "user",
+      content: text,
+      timestamp: Date.now(),
     };
     
-    setMessages((prevMessages) => [...prevMessages, userMessage]);
-    
-    const loadingMessageId = (Date.now() + 1).toString();
-    const loadingMessage: Message = {
+    const newChatHistory = [...chatHistory, userChatMessage];
+    setChatHistory(newChatHistory);
+
+    // Show loading state in display
+    const loadingMessageId = Date.now().toString();
+    setDisplayMessages(prev => [...prev, {
       id: loadingMessageId,
       text: "",
       isUser: false,
       timestamp: new Date(),
       isLoading: true,
-    };
-    
-    setMessages((prevMessages) => [...prevMessages, loadingMessage]);
+    }]);
 
     const commandInstructions = getActiveCommands();
     
@@ -437,27 +415,30 @@ const Index = () => {
     if (isExplicitMemoryQuery) {
       response = await handleMemoryQuery(text);
     } else {
-      // Pass chat history from synced data (background context) but don't display it
-      const backgroundHistory = syncData?.chatHistory || [];
-      response = await sendMessage(text, commandInstructions, backgroundHistory);
+      // Use existing chat history as context (last 10 messages for context)
+      const contextHistory = chatHistory.slice(-10);
+      response = await sendMessage(text, commandInstructions, contextHistory);
     }
     
+    // Save to memories
     MemoryService.saveMemory(text, response);
     
     if (autoPlay && response) {
       speak(response);
     }
     
-    setMessages((prevMessages) => 
-      prevMessages
-        .filter(msg => msg.id !== loadingMessageId)
-        .concat({
-          id: (Date.now() + 2).toString(),
-          text: response,
-          isUser: false,
-          timestamp: new Date(),
-        })
-    );
+    // Add assistant response to chat history
+    const assistantChatMessage: ChatMessage = {
+      role: "assistant",
+      content: response,
+      timestamp: Date.now(),
+    };
+    
+    const finalChatHistory = [...newChatHistory, assistantChatMessage];
+    setChatHistory(finalChatHistory);
+
+    // Remove loading state from display
+    setDisplayMessages(prev => prev.filter(msg => msg.id !== loadingMessageId));
   };
   
   // Clear command logs
@@ -502,7 +483,7 @@ const Index = () => {
       )}
       
       <div className="flex-1 overflow-hidden pt-16 pb-16">
-        <MessageList messages={messages} />
+        <MessageList messages={displayMessages} />
       </div>
       
       <div className="fixed bottom-0 left-0 right-0 w-full">

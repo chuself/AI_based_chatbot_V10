@@ -21,7 +21,7 @@ export const useDataSync = () => {
           setSyncData(result);
           console.log('Data sync completed:', result.syncMetadata);
           
-          // Apply synced data to app immediately
+          // Apply synced data to app immediately (except chat history)
           applyDataToApp(result);
           
           if (result.syncMetadata.syncSource === 'cloud') {
@@ -58,7 +58,7 @@ export const useDataSync = () => {
     initializeData();
   }, [user?.id]);
 
-  // Helper function to apply synced data to the app
+  // Helper function to apply synced data to the app (excluding chat history)
   const applyDataToApp = (data: UserDataWithMeta) => {
     // Apply model config if available
     if (data.modelConfig) {
@@ -90,10 +90,8 @@ export const useDataSync = () => {
       localStorage.setItem('ai-memories', JSON.stringify(data.memories));
     }
     
-    // Apply chat history if available
-    if (data.chatHistory) {
-      localStorage.setItem('chat-history', JSON.stringify(data.chatHistory));
-    }
+    // NOTE: Chat history is handled separately by useChatHistory hook
+    // to avoid conflicts and ensure proper cross-device sync
   };
 
   const refreshSync = async () => {

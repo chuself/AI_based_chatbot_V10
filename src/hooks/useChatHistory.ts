@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useContext } from "react";
 import { syncChatHistory, fetchChatHistory } from "@/services/supabaseService";
 import { SupabaseContext } from "@/App";
@@ -23,6 +24,8 @@ export const useChatHistory = () => {
   useEffect(() => {
     const loadChatHistory = async () => {
       try {
+        console.log('Loading chat history for user:', user?.id || 'no user');
+        
         // Always start with local storage to prevent chat loss
         const localHistory = loadFromLocalStorage();
         
@@ -33,20 +36,24 @@ export const useChatHistory = () => {
 
         // If user is logged in, try to sync with cloud
         if (user) {
-          console.log("Fetching chat history from Supabase");
+          console.log("User is logged in, fetching chat history from cloud");
           const cloudHistory = await fetchChatHistory();
           
           if (cloudHistory && cloudHistory.length > 0) {
-            // Only update if cloud has more recent data
-            const localTimestamp = localHistory.length > 0 ? localHistory[localHistory.length - 1].timestamp : 0;
-            const cloudTimestamp = cloudHistory.length > 0 ? cloudHistory[cloudHistory.length - 1].timestamp : 0;
+            console.info(`Found cloud chat history: ${cloudHistory.length} messages`);
             
-            if (cloudTimestamp > localTimestamp) {
-              console.info(`Loaded newer chat history from cloud: ${cloudHistory.length} messages`);
-              setChatHistory(cloudHistory);
-              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cloudHistory));
-            }
+            // Always use cloud data if available and user is logged in
+            // This ensures cross-device sync works properly
+            setChatHistory(cloudHistory);
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cloudHistory));
+            console.log('Applied cloud chat history to local storage');
+          } else if (localHistory.length > 0) {
+            // If no cloud data but we have local data, upload it
+            console.log('No cloud data found, uploading local data');
+            await syncChatHistory(localHistory);
           }
+        } else {
+          console.log('No user logged in, using local data only');
         }
       } catch (error) {
         console.error("Error loading chat history:", error);
@@ -83,7 +90,7 @@ export const useChatHistory = () => {
     };
 
     loadChatHistory();
-  }, [user?.id]); // Only reload when user ID changes, not on every navigation
+  }, [user?.id]); // Only reload when user ID changes
 
   // Save to both localStorage and cloud when history changes
   useEffect(() => {
@@ -110,11 +117,13 @@ export const useChatHistory = () => {
   }, [chatHistory, isInitialLoad, user?.id]);
 
   const clearChatHistory = () => {
+    console.log('Clearing chat history');
     setChatHistory([]);
     localStorage.removeItem(LOCAL_STORAGE_KEY);
     
     // Also clear from cloud if user is logged in
     if (user) {
+      console.log('Clearing chat history from cloud');
       syncChatHistory([]).catch(error => {
         console.error("Failed to clear chat history in cloud:", error);
       });
