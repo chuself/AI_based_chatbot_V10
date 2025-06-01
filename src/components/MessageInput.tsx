@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -202,7 +203,7 @@ const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, isLoading })
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyPress}
           placeholder={isRecording ? "Listening..." : memoryReference ? "Continue the conversation about this memory..." : "Message"}
-          className="flex-1 mr-2 border-gray-300 focus-visible:ring-gemini-primary"
+          className="flex-1 mr-2 border-gray-300 focus-visible:ring-purple-500"
           disabled={isLoading}
         />
         
@@ -221,7 +222,7 @@ const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, isLoading })
         
         <Button
           onClick={handleSendMessage}
-          className="bg-gemini-primary hover:bg-gemini-secondary text-white p-2 rounded-full w-10 h-10 flex items-center justify-center"
+          className="bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-full w-10 h-10 flex items-center justify-center"
           disabled={!message.trim() || isLoading}
         >
           <Send size={18} />

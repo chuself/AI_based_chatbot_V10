@@ -1,15 +1,26 @@
 
 import React, { useEffect, useRef, useState } from "react";
-import MessageItem, { Message } from "./MessageItem";
+import MessageItem from "./MessageItem";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { ArrowDown } from "lucide-react";
+import { ChatMessage } from "@/hooks/useChatHistory";
 
 interface MessageListProps {
-  messages: Message[];
+  messages: ChatMessage[];
+  isLoading?: boolean;
+  onRegenerateResponse?: (message: ChatMessage) => void;
+  onCopyMessage?: (message: ChatMessage) => void;
+  onDeleteMessage?: (message: ChatMessage) => void;
 }
 
-const MessageList: React.FC<MessageListProps> = ({ messages }) => {
+const MessageList: React.FC<MessageListProps> = ({ 
+  messages, 
+  isLoading = false,
+  onRegenerateResponse,
+  onCopyMessage,
+  onDeleteMessage
+}) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -43,6 +54,16 @@ const MessageList: React.FC<MessageListProps> = ({ messages }) => {
     };
   }, []);
 
+  // Convert ChatMessage to Message format for MessageItem
+  const convertToMessage = (chatMessage: ChatMessage, index: number) => ({
+    id: `${chatMessage.timestamp}-${index}`,
+    text: chatMessage.content,
+    isUser: chatMessage.role === 'user',
+    timestamp: new Date(chatMessage.timestamp),
+    isLoading: false,
+    isMcpResult: chatMessage.isMcpResult || false
+  });
+
   return (
     <div className="flex-1 relative h-full">
       <ScrollArea className="h-full" scrollHideDelay={0}>
@@ -56,9 +77,23 @@ const MessageList: React.FC<MessageListProps> = ({ messages }) => {
               Start a conversation
             </div>
           ) : (
-            messages.map((message) => (
-              <MessageItem key={message.id} message={message} />
+            messages.map((message, index) => (
+              <MessageItem 
+                key={`${message.timestamp}-${index}`} 
+                message={convertToMessage(message, index)} 
+              />
             ))
+          )}
+          {isLoading && (
+            <MessageItem 
+              message={{
+                id: 'loading',
+                text: '',
+                isUser: false,
+                timestamp: new Date(),
+                isLoading: true
+              }}
+            />
           )}
           <div ref={messagesEndRef} />
         </div>
@@ -66,7 +101,7 @@ const MessageList: React.FC<MessageListProps> = ({ messages }) => {
       
       {showScrollButton && (
         <Button
-          className="absolute bottom-4 right-4 rounded-full w-10 h-10 p-0 bg-gemini-primary hover:bg-gemini-secondary"
+          className="absolute bottom-4 right-4 rounded-full w-10 h-10 p-0 bg-purple-600 hover:bg-purple-700"
           onClick={() => scrollToBottom()}
         >
           <ArrowDown size={18} />

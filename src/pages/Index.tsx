@@ -71,7 +71,7 @@ const Index = () => {
     saveMessages(updatedMessages);
   };
 
-  const sendMessage = async (content: string, isVoice: boolean = false) => {
+  const sendMessage = async (content: string) => {
     if (!content.trim()) return;
     
     const userMessage: ChatMessage = { 
@@ -162,7 +162,7 @@ const Index = () => {
       const data = await response.json();
       if (data && data.transcription) {
         // Send the transcribed text as a message
-        await sendMessage(data.transcription, true);
+        await sendMessage(data.transcription);
       } else {
         console.error("Transcription failed: No transcription received");
         const errorMessage: ChatMessage = {
@@ -330,7 +330,6 @@ const Index = () => {
           <MessageInput
             onSendMessage={sendMessage}
             isLoading={isLoading}
-            disabled={false}
           />
         </div>
       </div>
