@@ -1,32 +1,34 @@
-
 /**
  * MCP Service - Handles interactions with the Model Context Protocol server
  * 
- * This implementation uses fetch rather than a dedicated MCP client library
- * to avoid dependency issues.
+ * This implementation manages custom MCP servers and their configurations
  */
 
-// MCP Server base URLs
-const MCP_SERVER_URL = "https://cloud-connect-mcp-server.onrender.com";
-const SEARCH_MCP_SERVER_URL = "https://duckduckgo-mcp-server.onrender.com";
+// Track active connections for custom servers
+let activeConnections: Record<string, boolean> = {};
+let lastConnectionAttempt: Record<string, number> = {};
 
-// Track active connections
-let activeConnections: Record<string, boolean> = {
-  gmail: false,
-  calendar: false,
-  drive: false,
-  search: false
-};
+export interface MCPServer {
+  id: string;
+  name: string;
+  url: string;
+  type: string;
+  apiKey?: string;
+  description?: string;
+  commands?: MCPCommand[];
+  isActive: boolean;
+  lastUsed?: number;
+}
 
-let lastConnectionAttempt: Record<string, number> = {
-  gmail: 0,
-  calendar: 0,
-  drive: 0,
-  search: 0
-};
+export interface MCPCommand {
+  name: string;
+  description: string;
+  parameters?: Record<string, any>;
+  example?: string;
+}
 
 export interface MCPCall {
-  tool: string;
+  serverId: string;
   method: string;
   params: Record<string, any>;
   id: number;
@@ -37,120 +39,303 @@ export interface MCPResponse {
   error?: {
     message: string;
     code: string;
+    details?: any;
   };
 }
 
 /**
- * Creates a function that can make calls to the MCP server
+ * Creates a function that can make calls to MCP servers
  */
 export const getMcpClient = () => {
-  // Check if Gmail is connected
-  const isGmailConnected = () => {
-    const storedStatus = localStorage.getItem("gmail-connected");
-    if (!storedStatus) return false;
-    
+  /**
+   * Get all configured MCP servers
+   */
+  const getServers = (): MCPServer[] => {
     try {
-      const status = JSON.parse(storedStatus);
-      return status.gmail === true;
-    } catch (e) {
-      console.error("Failed to parse Gmail connection status:", e);
-      return false;
+      const stored = localStorage.getItem('mcp-servers');
+      return stored ? JSON.parse(stored) : [];
+    } catch (error) {
+      console.error('Failed to load MCP servers:', error);
+      return [];
     }
   };
 
   /**
-   * Makes a call to the MCP server
+   * Save MCP servers to localStorage
    */
-  const callMcp = async (tool: string, method: string, params: Record<string, any>, id: number): Promise<MCPResponse> => {
-    // For Gmail-related calls, check if connected
-    if (tool === "gmail" && !isGmailConnected()) {
+  const saveServers = (servers: MCPServer[]) => {
+    try {
+      localStorage.setItem('mcp-servers', JSON.stringify(servers));
+      console.log('Saved MCP servers:', servers.length);
+    } catch (error) {
+      console.error('Failed to save MCP servers:', error);
+    }
+  };
+
+  /**
+   * Add a new MCP server
+   */
+  const addServer = (server: Omit<MCPServer, 'id' | 'isActive' | 'lastUsed'>): MCPServer => {
+    const servers = getServers();
+    const newServer: MCPServer = {
+      ...server,
+      id: `server_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      isActive: false,
+      lastUsed: undefined
+    };
+    
+    servers.push(newServer);
+    saveServers(servers);
+    
+    // Initialize connection tracking
+    activeConnections[newServer.id] = false;
+    lastConnectionAttempt[newServer.id] = 0;
+    
+    return newServer;
+  };
+
+  /**
+   * Update an existing MCP server
+   */
+  const updateServer = (serverId: string, updates: Partial<MCPServer>): boolean => {
+    const servers = getServers();
+    const index = servers.findIndex(s => s.id === serverId);
+    
+    if (index === -1) return false;
+    
+    servers[index] = { ...servers[index], ...updates };
+    saveServers(servers);
+    return true;
+  };
+
+  /**
+   * Remove an MCP server
+   */
+  const removeServer = (serverId: string): boolean => {
+    const servers = getServers();
+    const filtered = servers.filter(s => s.id !== serverId);
+    
+    if (filtered.length === servers.length) return false;
+    
+    saveServers(filtered);
+    
+    // Clean up connection tracking
+    delete activeConnections[serverId];
+    delete lastConnectionAttempt[serverId];
+    
+    return true;
+  };
+
+  /**
+   * Test connection to an MCP server
+   */
+  const testServerConnection = async (server: MCPServer): Promise<MCPResponse> => {
+    console.log(`Testing connection to ${server.name} at ${server.url}`);
+    
+    // Update connection tracking
+    lastConnectionAttempt[server.id] = Date.now();
+    activeConnections[server.id] = true;
+
+    try {
+      // Try to validate URL format first
+      new URL(server.url);
+    } catch (error) {
+      activeConnections[server.id] = false;
       return {
         error: {
-          message: "Please connect your Gmail account first",
-          code: "not_authenticated"
+          message: "Invalid server URL format",
+          code: "invalid_url",
+          details: error
         }
       };
     }
 
-    // Update last connection attempt time
-    lastConnectionAttempt[tool] = Date.now();
-    // Set active connection status to true while making the call
-    activeConnections[tool] = true;
-
     try {
-      // Get the appropriate server URL based on the tool and stored configuration
-      const serverUrl = getServerUrl(tool);
-      console.log(`Calling MCP server for ${tool} at ${serverUrl}`);
-      
-      const response = await fetch(`${serverUrl}/tools/${tool}/${method}`, {
-        method: "POST",
+      // Try a basic health check first
+      const healthResponse = await fetch(`${server.url}/health`, {
+        method: 'GET',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
+          ...(server.apiKey && { 'Authorization': `Bearer ${server.apiKey}` })
         },
-        body: JSON.stringify(params),
-        credentials: "include"
+        signal: AbortSignal.timeout(10000) // 10 second timeout
       });
 
-      if (!response.ok) {
-        activeConnections[tool] = false; // Connection failed
-        
-        if (response.status === 401) {
+      if (healthResponse.ok) {
+        activeConnections[server.id] = false;
+        return { result: { status: 'healthy', message: 'Server is responding' } };
+      }
+
+      // If health check fails, try a generic status endpoint
+      const statusResponse = await fetch(`${server.url}/status`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(server.apiKey && { 'Authorization': `Bearer ${server.apiKey}` })
+        },
+        signal: AbortSignal.timeout(10000)
+      });
+
+      if (statusResponse.ok) {
+        const data = await statusResponse.json();
+        activeConnections[server.id] = false;
+        return { result: { status: 'available', data } };
+      }
+
+      // If both fail, return the error from status endpoint
+      const errorText = await statusResponse.text();
+      activeConnections[server.id] = false;
+      
+      return {
+        error: {
+          message: `Server not responding: ${statusResponse.status} ${statusResponse.statusText}`,
+          code: `http_${statusResponse.status}`,
+          details: errorText
+        }
+      };
+
+    } catch (error) {
+      activeConnections[server.id] = false;
+      
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
           return {
             error: {
-              message: "Authentication required. Please reconnect your Google account.",
-              code: "authentication_required"
+              message: "Connection timeout - server took too long to respond",
+              code: "timeout",
+              details: error.message
             }
           };
         }
         
-        const errorText = await response.text();
         return {
           error: {
-            message: `Error calling MCP server: ${errorText}`,
-            code: `http_${response.status}`
+            message: `Connection failed: ${error.message}`,
+            code: "connection_error",
+            details: error
+          }
+        };
+      }
+      
+      return {
+        error: {
+          message: "Unknown connection error occurred",
+          code: "unknown_error",
+          details: error
+        }
+      };
+    }
+  };
+
+  /**
+   * Make an API call to an MCP server
+   */
+  const callServer = async (serverId: string, method: string, params: Record<string, any>): Promise<MCPResponse> => {
+    const servers = getServers();
+    const server = servers.find(s => s.id === serverId);
+    
+    if (!server) {
+      return {
+        error: {
+          message: "Server not found",
+          code: "server_not_found"
+        }
+      };
+    }
+
+    console.log(`Calling ${server.name} server method: ${method}`);
+    
+    // Update connection tracking
+    lastConnectionAttempt[serverId] = Date.now();
+    activeConnections[serverId] = true;
+
+    try {
+      const endpoint = `${server.url}/api/${method}`;
+      console.log(`Making request to: ${endpoint}`);
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(server.apiKey && { 'Authorization': `Bearer ${server.apiKey}` }),
+          'X-Client': 'Chuself-AI'
+        },
+        body: JSON.stringify(params),
+        signal: AbortSignal.timeout(30000) // 30 second timeout for API calls
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        activeConnections[serverId] = false;
+        
+        return {
+          error: {
+            message: `API call failed: ${response.status} ${response.statusText}`,
+            code: `http_${response.status}`,
+            details: errorText
           }
         };
       }
 
       const data = await response.json();
-      // Successfully got data, keep active status for 10 seconds
+      
+      // Update server last used time
+      updateServer(serverId, { lastUsed: Date.now() });
+      
+      // Keep active for a bit then disable
       setTimeout(() => {
-        activeConnections[tool] = false;
-      }, 10000);
+        activeConnections[serverId] = false;
+      }, 5000);
       
       return { result: data };
+
     } catch (error) {
-      // Connection failed
-      activeConnections[tool] = false;
+      activeConnections[serverId] = false;
       
-      console.error("MCP call failed:", error);
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          return {
+            error: {
+              message: "API call timeout - server took too long to respond",
+              code: "timeout",
+              details: error.message
+            }
+          };
+        }
+        
+        return {
+          error: {
+            message: `API call failed: ${error.message}`,
+            code: "api_error",
+            details: error
+          }
+        };
+      }
+      
       return {
         error: {
-          message: error instanceof Error ? error.message : "Unknown error occurred",
-          code: "network_error"
+          message: "Unknown API error occurred",
+          code: "unknown_error",
+          details: error
         }
       };
     }
   };
 
   /**
-   * Processes an MCP call from the LLM response
+   * Process an MCP call from the LLM response
    */
   const processMcpCall = async (mcpCall: MCPCall): Promise<MCPResponse> => {
     try {
       console.log("Processing MCP call:", mcpCall);
-      return await callMcp(
-        mcpCall.tool,
-        mcpCall.method,
-        mcpCall.params,
-        mcpCall.id
-      );
+      return await callServer(mcpCall.serverId, mcpCall.method, mcpCall.params);
     } catch (error) {
       console.error("Failed to process MCP call:", error);
       return {
         error: {
           message: error instanceof Error ? error.message : "Unknown error processing MCP call",
-          code: "processing_error"
+          code: "processing_error",
+          details: error
         }
       };
     }
@@ -192,56 +377,43 @@ export const getMcpClient = () => {
   };
 
   /**
-   * Check if any tool is actively connecting
+   * Check if any server is actively connecting
    */
-  const isAnyToolActive = () => {
+  const isAnyServerActive = () => {
     return Object.values(activeConnections).some(status => status === true);
   };
 
   /**
-   * Get the time since last connection attempt
+   * Get servers with their active status
    */
-  const getTimeSinceLastConnection = () => {
-    const now = Date.now();
-    const result: Record<string, number> = {};
-    
-    for (const tool in lastConnectionAttempt) {
-      if (lastConnectionAttempt[tool] > 0) {
-        result[tool] = now - lastConnectionAttempt[tool];
-      } else {
-        result[tool] = -1; // Never connected
-      }
-    }
-    
-    return result;
-  };
-
-  const updateServerUrl = (tool: string, url: string) => {
-    console.log(`Updating ${tool} server URL to ${url}`);
-    if (tool === 'search') {
-      localStorage.setItem('mcp-server-search', url);
-    }
-  };
-
-  const getServerUrl = (tool: string) => {
-    if (tool === 'search') {
-      const customUrl = localStorage.getItem('mcp-server-search');
-      return customUrl || SEARCH_MCP_SERVER_URL;
-    }
-    return MCP_SERVER_URL;
+  const getServersWithStatus = (): (MCPServer & { isCurrentlyActive: boolean })[] => {
+    const servers = getServers();
+    return servers.map(server => ({
+      ...server,
+      isCurrentlyActive: activeConnections[server.id] || false
+    }));
   };
 
   return {
-    callMcp,
+    // Server management
+    getServers,
+    addServer,
+    updateServer,
+    removeServer,
+    getServersWithStatus,
+    
+    // Server operations
+    testServerConnection,
+    callServer,
+    
+    // MCP processing
     processMcpCall,
     hasMcpCall,
     extractMcpCall,
-    isGmailConnected,
+    
+    // Status tracking
     getActiveConnections,
-    isAnyToolActive,
-    getTimeSinceLastConnection,
-    updateServerUrl,
-    getServerUrl
+    isAnyServerActive
   };
 };
 
