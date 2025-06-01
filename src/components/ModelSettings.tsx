@@ -190,10 +190,10 @@ const ModelSettings: React.FC = () => {
   // Render the API key input step
   if (step === "api-key") {
     return (
-      <Card className="space-y-4 p-4 rounded-lg border border-white/10 bg-white/5">
+      <Card className="space-y-4 p-4 rounded-lg border border-gray-200 bg-white">
         <div className="space-y-2">
           <h3 className="text-lg font-medium">Connect to AI Model</h3>
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-gray-500">
             Choose a provider and enter your API key to access available models
           </p>
         </div>
@@ -225,13 +225,13 @@ const ModelSettings: React.FC = () => {
               onChange={(e) => setModelConfig(prev => ({ ...prev, apiKey: e.target.value }))}
               placeholder="Enter your API key"
             />
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-500">
               Your API key is stored locally in your browser
             </p>
           </div>
           
           <Button 
-            className="w-full bg-gemini-primary hover:bg-gemini-secondary"
+            className="w-full bg-purple-600 hover:bg-purple-700"
             onClick={handleApiKeySubmit}
           >
             <Key className="h-4 w-4 mr-2" />
@@ -244,7 +244,7 @@ const ModelSettings: React.FC = () => {
 
   // Render the model selection step
   return (
-    <div className="space-y-4 p-4 rounded-lg border border-white/10 bg-white/5">
+    <div className="space-y-4 p-4 rounded-lg border border-gray-200 bg-white">
       <div className="space-y-2">
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-medium">Model Configuration</h3>
@@ -256,7 +256,7 @@ const ModelSettings: React.FC = () => {
             Change API Key
           </Button>
         </div>
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-gray-500">
           Select the AI model you want to use for chat responses
         </p>
       </div>
@@ -287,11 +287,11 @@ const ModelSettings: React.FC = () => {
           <Label htmlFor="modelSelect">Available Models</Label>
           {isLoading ? (
             <div className="flex items-center justify-center py-4">
-              <Loader2 className="h-6 w-6 animate-spin text-gemini-primary" />
+              <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
               <span className="ml-2">Loading models...</span>
             </div>
           ) : error ? (
-            <div className="text-sm text-destructive bg-destructive/10 p-3 rounded">
+            <div className="text-sm text-red-600 bg-red-50 p-3 rounded">
               {error}
             </div>
           ) : availableModels.length > 0 ? (
@@ -325,13 +325,13 @@ const ModelSettings: React.FC = () => {
             onChange={(e) => setModelConfig(prev => ({ ...prev, endpoint: e.target.value }))}
             placeholder={getEndpointPlaceholder()}
           />
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-gray-500">
             Leave blank to use the default endpoint for the selected provider
           </p>
         </div>
         
         <Button 
-          className="w-full bg-gemini-primary hover:bg-gemini-secondary"
+          className="w-full bg-purple-600 hover:bg-purple-700"
           onClick={handleSaveConfig}
           disabled={!modelConfig.modelName || isLoading}
         >

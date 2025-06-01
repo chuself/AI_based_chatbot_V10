@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -311,18 +312,18 @@ const SyncStatusTab = () => {
     const comparison = dataComparisons[item.key];
     
     if (!comparison) {
-      return <div className="w-3 h-3 bg-gray-400 rounded-full" title="Loading..." />;
+      return <div className="w-3 h-3 bg-gray-400 rounded-full" />;
     }
     
     if (comparison.isIdentical) {
-      return <Check className="w-4 h-4 text-green-500" title="Data is synchronized" />;
+      return <Check className="w-4 h-4 text-green-500" />;
     }
     
     if (!comparison.hasLocalData && !comparison.hasCloudData) {
-      return <div className="w-3 h-3 bg-gray-400 rounded-full" title="No data" />;
+      return <div className="w-3 h-3 bg-gray-400 rounded-full" />;
     }
     
-    return <AlertCircle className="w-4 h-4 text-yellow-500" title="Data differs between local and cloud" />;
+    return <AlertCircle className="w-4 h-4 text-yellow-500" />;
   };
 
   const handleLogout = async () => {

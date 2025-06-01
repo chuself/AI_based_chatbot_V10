@@ -3,9 +3,11 @@ import React, { useState, useEffect, useCallback } from "react";
 import { ChatMessage } from "@/hooks/useChatHistory";
 import MessageList from "@/components/MessageList";
 import MessageInput from "@/components/MessageInput";
+import Header from "@/components/Header";
 import { useGemini } from "@/hooks/useGemini";
 import { useChatHistory } from "@/hooks/useChatHistory";
 import { useCommands } from "@/hooks/useCommands";
+import { useGeminiConfig } from "@/hooks/useGeminiConfig";
 import { Command } from "@/services/commandsService";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +21,7 @@ const Index = () => {
   const { sendMessage: sendMessageToGemini } = useGemini();
   const { chatHistory, setChatHistory } = useChatHistory();
   const { commands } = useCommands();
+  const { modelConfig } = useGeminiConfig();
   const mcpClient = getMcpClient();
 
   useEffect(() => {
@@ -244,17 +247,30 @@ const Index = () => {
     }
   };
 
+  // Get model display name
+  const getModelDisplayName = () => {
+    if (!modelConfig?.modelName) return "AI Assistant";
+    
+    // Extract just the model name from full path
+    const modelParts = modelConfig.modelName.split('/');
+    const modelName = modelParts[modelParts.length - 1];
+    
+    // Clean up common model name patterns
+    return modelName
+      .replace('-latest', '')
+      .replace('models/', '')
+      .replace(/^gemini-/, 'Gemini ')
+      .replace(/^gpt-/, 'GPT-')
+      .replace(/^claude-/, 'Claude ')
+      .replace(/-/g, ' ')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-slate-800 dark:via-slate-900 dark:to-indigo-900">
-      <header className="fixed top-0 left-0 right-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md z-10 border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
-          <h1 className="text-lg font-semibold">Chuself AI</h1>
-          <div className="flex items-center space-x-4">
-            {/* <ThemeToggle /> */}
-            {/* <UserButton afterSignOutUrl="/" /> */}
-          </div>
-        </div>
-      </header>
+      <Header modelName={getModelDisplayName()} />
       
       <div className="pt-20 pb-32">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
