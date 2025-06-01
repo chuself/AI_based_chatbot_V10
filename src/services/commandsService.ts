@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentUser } from "./supabaseService";
 
@@ -5,7 +6,13 @@ export interface Command {
   id: string;
   name: string;
   instruction: string;
+  description?: string;
   condition?: string;
+  type?: 'mcp' | 'regular';
+  serverId?: string;
+  endpoint?: string;
+  parameters?: Record<string, any>;
+  prompt?: string;
 }
 
 const LOCAL_STORAGE_KEY = "custom-ai-commands";

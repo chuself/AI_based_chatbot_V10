@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from "react";
 import { ChatMessage } from "@/hooks/useChatHistory";
 import MessageList from "@/components/MessageList";
@@ -15,22 +16,25 @@ const Index = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCommandExecuting, setIsCommandExecuting] = useState<string | null>(null);
-  const { sendMessageToGemini } = useGemini();
-  const { loadMessages, saveMessages } = useChatHistory();
+  const { sendMessage: sendMessageToGemini } = useGemini();
+  const { chatHistory, setChatHistory } = useChatHistory();
   const { commands } = useCommands();
   const mcpClient = getMcpClient();
 
   useEffect(() => {
-    const initialMessages = loadMessages();
-    setMessages(initialMessages);
-  }, [loadMessages]);
+    setMessages(chatHistory);
+  }, [chatHistory]);
+
+  const saveMessages = (newMessages: ChatMessage[]) => {
+    setChatHistory(newMessages);
+  };
 
   const handleRegenerateResponse = async (message: ChatMessage) => {
     setIsLoading(true);
     const previousMessages = messages.filter(m => m.timestamp < message.timestamp);
 
     try {
-      const response = await sendMessageToGemini(message.content, previousMessages);
+      const response = await sendMessageToGemini(message.content, undefined, previousMessages);
 
       const assistantMessage: ChatMessage = {
         role: 'assistant',
@@ -73,8 +77,7 @@ const Index = () => {
     const userMessage: ChatMessage = { 
       role: 'user', 
       content,
-      timestamp: Date.now(),
-      isVoice 
+      timestamp: Date.now()
     };
     
     const updatedMessages = [...messages, userMessage];
@@ -84,7 +87,7 @@ const Index = () => {
     setIsLoading(true);
     
     try {
-      const response = await sendMessageToGemini(content, updatedMessages);
+      const response = await sendMessageToGemini(content, undefined, updatedMessages);
       
       if (mcpClient.hasMcpCall(response)) {
         console.log("Response contains MCP call, processing...");
@@ -222,7 +225,7 @@ const Index = () => {
         saveMessages(updatedMessages);
       } else {
         // Handle regular command
-        await sendMessage(command.prompt);
+        await sendMessage(command.prompt || command.instruction);
       }
     } catch (error) {
       console.error("Error executing command:", error);
@@ -326,7 +329,6 @@ const Index = () => {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <MessageInput
             onSendMessage={sendMessage}
-            onSendVoiceMessage={handleVoiceMessage}
             isLoading={isLoading}
             disabled={false}
           />
