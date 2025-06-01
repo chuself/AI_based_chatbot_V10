@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +12,8 @@ import getMcpClient, { Integration, IntegrationCommand, ApiEndpoint } from "@/se
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import ReminderSetupGuide from "@/components/ReminderSetupGuide";
+import { isIntegrationAvailable } from "@/services/aiIntegrationHelper";
 
 const IntegrationsTab = () => {
   const [isAddIntegrationOpen, setIsAddIntegrationOpen] = useState(false);
@@ -21,6 +22,7 @@ const IntegrationsTab = () => {
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [activeConnections, setActiveConnections] = useState<Record<string, boolean>>({});
+  const [showReminderGuide, setShowReminderGuide] = useState(false);
   
   // Form states
   const [integrationName, setIntegrationName] = useState("");
@@ -43,7 +45,16 @@ const IntegrationsTab = () => {
 
   // Load integrations on component mount
   useEffect(() => {
-    setIntegrations(mcpClient.getServers());
+    const loadedIntegrations = mcpClient.getServers();
+    setIntegrations(loadedIntegrations);
+    
+    // Check if reminder integration exists
+    const hasReminderIntegration = isIntegrationAvailable('reminders') || 
+                                  isIntegrationAvailable('reminder') || 
+                                  isIntegrationAvailable('tasks') || 
+                                  isIntegrationAvailable('todo');
+    
+    setShowReminderGuide(!hasReminderIntegration);
   }, []);
   
   // Regularly check for active connections
@@ -98,6 +109,38 @@ const IntegrationsTab = () => {
       return;
     }
 
+    // Auto-configure reminder app integrations
+    let commands = integrationCommands;
+    if (['reminders', 'reminder', 'tasks', 'todo'].includes(integrationCategory.toLowerCase()) && commands.length === 0) {
+      commands = [
+        {
+          name: 'get_pending_tasks',
+          description: 'Retrieve all pending/incomplete tasks and reminders',
+          example: 'get_pending_tasks()',
+        },
+        {
+          name: 'create_reminder',
+          description: 'Create a new reminder or task with title and due date',
+          example: 'create_reminder(title="Call John", due_date="2024-01-15", priority="medium")',
+        },
+        {
+          name: 'complete_task',
+          description: 'Mark a specific task as completed using its ID',
+          example: 'complete_task(task_id="123")',
+        },
+        {
+          name: 'search_tasks',
+          description: 'Search tasks and reminders by keyword or phrase',
+          example: 'search_tasks(query="grocery shopping")',
+        },
+        {
+          name: 'get_tasks_by_date',
+          description: 'Get tasks scheduled for a specific date',
+          example: 'get_tasks_by_date(date="2024-01-15")',
+        }
+      ];
+    }
+
     const newIntegration = mcpClient.addServer({
       name: integrationName,
       url: integrationUrl,
@@ -105,16 +148,21 @@ const IntegrationsTab = () => {
       category: integrationCategory || 'custom',
       apiKey: integrationApiKey || undefined,
       description: integrationDescription || undefined,
-      commands: integrationCommands.length > 0 ? integrationCommands : undefined,
+      commands: commands.length > 0 ? commands : undefined,
       headers: Object.keys(integrationHeaders).length > 0 ? integrationHeaders : undefined,
       endpoints: integrationEndpoints.length > 0 ? integrationEndpoints : undefined
     });
     
     setIntegrations(mcpClient.getServers());
     
+    // Hide setup guide if reminder integration was added
+    if (['reminders', 'reminder', 'tasks', 'todo'].includes(integrationCategory.toLowerCase())) {
+      setShowReminderGuide(false);
+    }
+    
     toast({
       title: "Integration Added",
-      description: `${integrationName} has been added successfully`,
+      description: `${integrationName} has been added successfully. ${commands.length > 0 ? 'Pre-configured commands have been set up.' : ''}`,
     });
     
     setIsAddIntegrationOpen(false);
@@ -310,6 +358,9 @@ const IntegrationsTab = () => {
           Connect external services to enhance your assistant's capabilities
         </p>
       </div>
+
+      {/* Reminder Setup Guide */}
+      <ReminderSetupGuide isVisible={showReminderGuide} />
       
       {/* Supabase Integration Section */}
       <div className="border rounded-lg p-4 bg-white/5 space-y-4">
@@ -448,7 +499,7 @@ const IntegrationsTab = () => {
           <DialogHeader>
             <DialogTitle>Add Integration</DialogTitle>
             <DialogDescription>
-              Connect an MCP server or direct API to enhance your assistant
+              Connect an MCP server or direct API to enhance your assistant. For reminder apps, use category "reminders" or "tasks".
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -459,7 +510,7 @@ const IntegrationsTab = () => {
                   id="integrationName"
                   value={integrationName}
                   onChange={(e) => setIntegrationName(e.target.value)}
-                  placeholder="My Custom Integration"
+                  placeholder="My Reminder App"
                 />
               </div>
               <div className="space-y-2">
@@ -482,7 +533,7 @@ const IntegrationsTab = () => {
                   id="integrationUrl"
                   value={integrationUrl}
                   onChange={(e) => setIntegrationUrl(e.target.value)}
-                  placeholder="https://your-service.com"
+                  placeholder="https://your-reminder-api.com"
                 />
               </div>
               <div className="space-y-2">
@@ -491,7 +542,7 @@ const IntegrationsTab = () => {
                   id="integrationCategory"
                   value={integrationCategory}
                   onChange={(e) => setIntegrationCategory(e.target.value)}
-                  placeholder="search, ai, custom..."
+                  placeholder="reminders, tasks, search, email..."
                 />
               </div>
             </div>
@@ -511,7 +562,7 @@ const IntegrationsTab = () => {
                 id="integrationDescription"
                 value={integrationDescription}
                 onChange={(e) => setIntegrationDescription(e.target.value)}
-                placeholder="Brief description of what this integration does"
+                placeholder="My personal reminder and task management system"
               />
             </div>
           </div>
@@ -646,7 +697,7 @@ const IntegrationsTab = () => {
                       <Input
                         value={command.name}
                         onChange={(e) => updateCommand(index, 'name', e.target.value)}
-                        placeholder="search_web"
+                        placeholder="get_pending_tasks"
                       />
                     </div>
                     <div className="space-y-2">
@@ -654,7 +705,7 @@ const IntegrationsTab = () => {
                       <Input
                         value={command.description}
                         onChange={(e) => updateCommand(index, 'description', e.target.value)}
-                        placeholder="Search the web for information"
+                        placeholder="Retrieve all pending tasks and reminders"
                       />
                     </div>
                   </div>
@@ -663,7 +714,7 @@ const IntegrationsTab = () => {
                     <Textarea
                       value={command.example || ''}
                       onChange={(e) => updateCommand(index, 'example', e.target.value)}
-                      placeholder="Example: search_web(query='latest AI news')"
+                      placeholder="get_pending_tasks() or create_reminder(title='Call John', due_date='2024-01-15')"
                       className="min-h-[60px]"
                     />
                   </div>
@@ -695,7 +746,7 @@ const IntegrationsTab = () => {
                       <Input
                         value={endpoint.name}
                         onChange={(e) => updateEndpoint(index, 'name', e.target.value)}
-                        placeholder="search"
+                        placeholder="get_tasks"
                       />
                     </div>
                     <div className="space-y-2">
@@ -703,7 +754,7 @@ const IntegrationsTab = () => {
                       <Input
                         value={endpoint.path}
                         onChange={(e) => updateEndpoint(index, 'path', e.target.value)}
-                        placeholder="/api/search"
+                        placeholder="/api/tasks"
                       />
                     </div>
                     <div className="space-y-2">
@@ -729,7 +780,7 @@ const IntegrationsTab = () => {
                     <Textarea
                       value={endpoint.description}
                       onChange={(e) => updateEndpoint(index, 'description', e.target.value)}
-                      placeholder="Search for information using this endpoint"
+                      placeholder="Retrieve tasks and reminders from the API"
                       className="min-h-[60px]"
                     />
                   </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ModelConfig, useGeminiConfig } from "./useGeminiConfig";
 import { useChatHistory, ChatMessage, MAX_HISTORY_LENGTH } from "./useChatHistory";
+import { generateIntegrationsSystemPrompt } from "@/services/aiIntegrationHelper";
 
 export const useGemini = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -55,10 +56,26 @@ export const useGemini = () => {
         content: msg.content
       }));
 
+      // Build comprehensive system instructions
+      let systemInstructions = "You are a helpful AI assistant.";
+      
+      // Add integration context to help AI understand available services
+      const integrationsPrompt = generateIntegrationsSystemPrompt();
+      if (integrationsPrompt) {
+        systemInstructions += integrationsPrompt;
+        console.log('Added integrations context to system prompt');
+      }
+      
+      // Add custom instructions if provided
       if (customInstructions) {
+        systemInstructions += "\n\n" + customInstructions;
+      }
+
+      // Add system message with complete context
+      if (systemInstructions.length > "You are a helpful AI assistant.".length) {
         messages.unshift({
           role: "system",
-          content: customInstructions
+          content: systemInstructions
         });
       }
 
@@ -66,6 +83,7 @@ export const useGemini = () => {
       console.log('Using model:', modelConfig.modelName);
       console.log('Message count:', messages.length);
       console.log('API key length:', modelConfig.apiKey?.length || 0);
+      console.log('System prompt includes integrations:', integrationsPrompt.length > 0);
 
       let response;
       

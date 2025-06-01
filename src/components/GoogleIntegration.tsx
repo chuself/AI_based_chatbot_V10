@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -90,12 +89,6 @@ const GoogleIntegration: React.FC = () => {
     };
 
     checkConnectionStatus();
-    
-    // Initialize search server URL if not set
-    const searchServerUrl = localStorage.getItem('mcp-server-search');
-    if (!searchServerUrl) {
-      localStorage.setItem('mcp-server-search', DEFAULT_SEARCH_SERVER);
-    }
   }, [toast]);
   
   // Regularly check for active MCP connections
@@ -139,10 +132,9 @@ const GoogleIntegration: React.FC = () => {
   const handleConfigureService = (service: string) => {
     setSelectedService(service);
     
-    // Set initial URL value based on current configuration
+    // Set initial URL value based on service type
     if (service === 'search') {
-      const currentUrl = mcpClient.getServerUrl(service);
-      setServerUrl(currentUrl);
+      setServerUrl(DEFAULT_SEARCH_SERVER);
     } else {
       setServerUrl("");
     }
@@ -153,7 +145,22 @@ const GoogleIntegration: React.FC = () => {
   const handleSaveServiceConfig = () => {
     if (!selectedService || !serverUrl) return;
     
-    mcpClient.updateServerUrl(selectedService, serverUrl);
+    // Use the updateServer method to configure the service
+    const integrations = mcpClient.getServers();
+    const existingIntegration = integrations.find(i => i.category === selectedService);
+    
+    if (existingIntegration) {
+      mcpClient.updateServer(existingIntegration.id, { url: serverUrl });
+    } else {
+      // Add new integration if it doesn't exist
+      mcpClient.addServer({
+        name: selectedService.charAt(0).toUpperCase() + selectedService.slice(1),
+        url: serverUrl,
+        type: 'mcp',
+        category: selectedService
+      });
+    }
+    
     toast({
       title: "Server Configuration Saved",
       description: `Updated ${selectedService} server configuration`,
@@ -168,7 +175,6 @@ const GoogleIntegration: React.FC = () => {
     if (!selectedService) return;
     
     if (selectedService === 'search') {
-      mcpClient.updateServerUrl(selectedService, DEFAULT_SEARCH_SERVER);
       setServerUrl(DEFAULT_SEARCH_SERVER);
       
       toast({
@@ -321,6 +327,7 @@ const GoogleIntegration: React.FC = () => {
         </Button>
       )}
       
+      {/* Configuration Dialog */}
       <Dialog open={isConfiguring} onOpenChange={setIsConfiguring}>
         <DialogContent>
           <DialogHeader>
