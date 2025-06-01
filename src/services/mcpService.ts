@@ -1,31 +1,50 @@
 /**
- * MCP Service - Handles interactions with the Model Context Protocol server
+ * MCP Service - Handles interactions with the Model Context Protocol server and direct APIs
  * 
- * This implementation manages custom MCP servers and their configurations
+ * This implementation manages custom MCP servers, direct APIs, and their configurations
  */
 
 // Track active connections for custom servers
 let activeConnections: Record<string, boolean> = {};
 let lastConnectionAttempt: Record<string, number> = {};
 
-export interface MCPServer {
+export interface Integration {
   id: string;
   name: string;
   url: string;
-  type: string;
+  type: 'mcp' | 'api';
+  category: string; // e.g., 'search', 'ai', 'custom', etc.
   apiKey?: string;
   description?: string;
-  commands?: MCPCommand[];
+  commands?: IntegrationCommand[];
   isActive: boolean;
   lastUsed?: number;
+  headers?: Record<string, string>;
+  endpoints?: ApiEndpoint[];
 }
 
-export interface MCPCommand {
+export interface ApiEndpoint {
+  name: string;
+  path: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  description: string;
+  parameters?: Record<string, any>;
+}
+
+export interface IntegrationCommand {
   name: string;
   description: string;
   parameters?: Record<string, any>;
   example?: string;
 }
+
+// Keep MCPServer for backward compatibility
+export interface MCPServer extends Integration {
+  type: 'mcp';
+  commands?: MCPCommand[];
+}
+
+export interface MCPCommand extends IntegrationCommand {}
 
 export interface MCPCall {
   serverId: string;
@@ -44,106 +63,106 @@ export interface MCPResponse {
 }
 
 /**
- * Creates a function that can make calls to MCP servers
+ * Creates a function that can make calls to integrations (MCP servers and APIs)
  */
 export const getMcpClient = () => {
   /**
-   * Get all configured MCP servers
+   * Get all configured integrations
    */
-  const getServers = (): MCPServer[] => {
+  const getServers = (): Integration[] => {
     try {
-      const stored = localStorage.getItem('mcp-servers');
+      const stored = localStorage.getItem('integrations');
       return stored ? JSON.parse(stored) : [];
     } catch (error) {
-      console.error('Failed to load MCP servers:', error);
+      console.error('Failed to load integrations:', error);
       return [];
     }
   };
 
   /**
-   * Save MCP servers to localStorage
+   * Save integrations to localStorage
    */
-  const saveServers = (servers: MCPServer[]) => {
+  const saveServers = (integrations: Integration[]) => {
     try {
-      localStorage.setItem('mcp-servers', JSON.stringify(servers));
-      console.log('Saved MCP servers:', servers.length);
+      localStorage.setItem('integrations', JSON.stringify(integrations));
+      console.log('Saved integrations:', integrations.length);
     } catch (error) {
-      console.error('Failed to save MCP servers:', error);
+      console.error('Failed to save integrations:', error);
     }
   };
 
   /**
-   * Add a new MCP server
+   * Add a new integration
    */
-  const addServer = (server: Omit<MCPServer, 'id' | 'isActive' | 'lastUsed'>): MCPServer => {
-    const servers = getServers();
-    const newServer: MCPServer = {
-      ...server,
-      id: `server_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+  const addServer = (integration: Omit<Integration, 'id' | 'isActive' | 'lastUsed'>): Integration => {
+    const integrations = getServers();
+    const newIntegration: Integration = {
+      ...integration,
+      id: `integration_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       isActive: false,
       lastUsed: undefined
     };
     
-    servers.push(newServer);
-    saveServers(servers);
+    integrations.push(newIntegration);
+    saveServers(integrations);
     
     // Initialize connection tracking
-    activeConnections[newServer.id] = false;
-    lastConnectionAttempt[newServer.id] = 0;
+    activeConnections[newIntegration.id] = false;
+    lastConnectionAttempt[newIntegration.id] = 0;
     
-    return newServer;
+    return newIntegration;
   };
 
   /**
-   * Update an existing MCP server
+   * Update an existing integration
    */
-  const updateServer = (serverId: string, updates: Partial<MCPServer>): boolean => {
-    const servers = getServers();
-    const index = servers.findIndex(s => s.id === serverId);
+  const updateServer = (integrationId: string, updates: Partial<Integration>): boolean => {
+    const integrations = getServers();
+    const index = integrations.findIndex(s => s.id === integrationId);
     
     if (index === -1) return false;
     
-    servers[index] = { ...servers[index], ...updates };
-    saveServers(servers);
+    integrations[index] = { ...integrations[index], ...updates };
+    saveServers(integrations);
     return true;
   };
 
   /**
-   * Remove an MCP server
+   * Remove an integration
    */
-  const removeServer = (serverId: string): boolean => {
-    const servers = getServers();
-    const filtered = servers.filter(s => s.id !== serverId);
+  const removeServer = (integrationId: string): boolean => {
+    const integrations = getServers();
+    const filtered = integrations.filter(s => s.id !== integrationId);
     
-    if (filtered.length === servers.length) return false;
+    if (filtered.length === integrations.length) return false;
     
     saveServers(filtered);
     
     // Clean up connection tracking
-    delete activeConnections[serverId];
-    delete lastConnectionAttempt[serverId];
+    delete activeConnections[integrationId];
+    delete lastConnectionAttempt[integrationId];
     
     return true;
   };
 
   /**
-   * Test connection to an MCP server
+   * Test connection to an integration
    */
-  const testServerConnection = async (server: MCPServer): Promise<MCPResponse> => {
-    console.log(`Testing connection to ${server.name} at ${server.url}`);
+  const testServerConnection = async (integration: Integration): Promise<MCPResponse> => {
+    console.log(`Testing connection to ${integration.name} at ${integration.url}`);
     
     // Update connection tracking
-    lastConnectionAttempt[server.id] = Date.now();
-    activeConnections[server.id] = true;
+    lastConnectionAttempt[integration.id] = Date.now();
+    activeConnections[integration.id] = true;
 
     try {
       // Try to validate URL format first
-      new URL(server.url);
+      new URL(integration.url);
     } catch (error) {
-      activeConnections[server.id] = false;
+      activeConnections[integration.id] = false;
       return {
         error: {
-          message: "Invalid server URL format",
+          message: "Invalid URL format",
           code: "invalid_url",
           details: error
         }
@@ -151,57 +170,52 @@ export const getMcpClient = () => {
     }
 
     try {
-      // Try a basic health check first
-      const healthResponse = await fetch(`${server.url}/health`, {
-        method: 'GET',
+      let testEndpoint = integration.url;
+      
+      // For MCP servers, try health check endpoints
+      if (integration.type === 'mcp') {
+        testEndpoint = `${integration.url}/health`;
+      } else {
+        // For APIs, try the base URL or first endpoint
+        if (integration.endpoints && integration.endpoints.length > 0) {
+          testEndpoint = `${integration.url}${integration.endpoints[0].path}`;
+        }
+      }
+
+      const response = await fetch(testEndpoint, {
+        method: integration.type === 'mcp' ? 'GET' : (integration.endpoints?.[0]?.method || 'GET'),
         headers: {
           'Content-Type': 'application/json',
-          ...(server.apiKey && { 'Authorization': `Bearer ${server.apiKey}` })
+          ...(integration.apiKey && { 'Authorization': `Bearer ${integration.apiKey}` }),
+          ...(integration.headers || {})
         },
         signal: AbortSignal.timeout(10000) // 10 second timeout
       });
 
-      if (healthResponse.ok) {
-        activeConnections[server.id] = false;
-        return { result: { status: 'healthy', message: 'Server is responding' } };
+      if (response.ok) {
+        activeConnections[integration.id] = false;
+        return { result: { status: 'healthy', message: 'Integration is responding' } };
       }
 
-      // If health check fails, try a generic status endpoint
-      const statusResponse = await fetch(`${server.url}/status`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(server.apiKey && { 'Authorization': `Bearer ${server.apiKey}` })
-        },
-        signal: AbortSignal.timeout(10000)
-      });
-
-      if (statusResponse.ok) {
-        const data = await statusResponse.json();
-        activeConnections[server.id] = false;
-        return { result: { status: 'available', data } };
-      }
-
-      // If both fail, return the error from status endpoint
-      const errorText = await statusResponse.text();
-      activeConnections[server.id] = false;
+      const errorText = await response.text();
+      activeConnections[integration.id] = false;
       
       return {
         error: {
-          message: `Server not responding: ${statusResponse.status} ${statusResponse.statusText}`,
-          code: `http_${statusResponse.status}`,
+          message: `Integration not responding: ${response.status} ${response.statusText}`,
+          code: `http_${response.status}`,
           details: errorText
         }
       };
 
     } catch (error) {
-      activeConnections[server.id] = false;
+      activeConnections[integration.id] = false;
       
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
           return {
             error: {
-              message: "Connection timeout - server took too long to respond",
+              message: "Connection timeout - integration took too long to respond",
               code: "timeout",
               details: error.message
             }
@@ -228,45 +242,68 @@ export const getMcpClient = () => {
   };
 
   /**
-   * Make an API call to an MCP server
+   * Make an API call to an integration
    */
-  const callServer = async (serverId: string, method: string, params: Record<string, any>): Promise<MCPResponse> => {
-    const servers = getServers();
-    const server = servers.find(s => s.id === serverId);
+  const callServer = async (integrationId: string, method: string, params: Record<string, any>): Promise<MCPResponse> => {
+    const integrations = getServers();
+    const integration = integrations.find(s => s.id === integrationId);
     
-    if (!server) {
+    if (!integration) {
       return {
         error: {
-          message: "Server not found",
-          code: "server_not_found"
+          message: "Integration not found",
+          code: "integration_not_found"
         }
       };
     }
 
-    console.log(`Calling ${server.name} server method: ${method}`);
+    console.log(`Calling ${integration.name} integration method: ${method}`);
     
     // Update connection tracking
-    lastConnectionAttempt[serverId] = Date.now();
-    activeConnections[serverId] = true;
+    lastConnectionAttempt[integrationId] = Date.now();
+    activeConnections[integrationId] = true;
 
     try {
-      const endpoint = `${server.url}/api/${method}`;
-      console.log(`Making request to: ${endpoint}`);
+      let endpoint: string;
+      let httpMethod: string = 'POST';
       
-      const response = await fetch(endpoint, {
-        method: 'POST',
+      if (integration.type === 'mcp') {
+        endpoint = `${integration.url}/api/${method}`;
+        httpMethod = 'POST';
+      } else {
+        // For direct APIs, find the matching endpoint
+        const apiEndpoint = integration.endpoints?.find(ep => ep.name === method);
+        if (apiEndpoint) {
+          endpoint = `${integration.url}${apiEndpoint.path}`;
+          httpMethod = apiEndpoint.method;
+        } else {
+          endpoint = `${integration.url}/${method}`;
+        }
+      }
+      
+      console.log(`Making ${httpMethod} request to: ${endpoint}`);
+      
+      const requestOptions: RequestInit = {
+        method: httpMethod,
         headers: {
           'Content-Type': 'application/json',
-          ...(server.apiKey && { 'Authorization': `Bearer ${server.apiKey}` }),
+          ...(integration.apiKey && { 'Authorization': `Bearer ${integration.apiKey}` }),
+          ...(integration.headers || {}),
           'X-Client': 'Chuself-AI'
         },
-        body: JSON.stringify(params),
         signal: AbortSignal.timeout(30000) // 30 second timeout for API calls
-      });
+      };
+
+      // Add body for POST/PUT requests
+      if (['POST', 'PUT'].includes(httpMethod)) {
+        requestOptions.body = JSON.stringify(params);
+      }
+
+      const response = await fetch(endpoint, requestOptions);
 
       if (!response.ok) {
         const errorText = await response.text();
-        activeConnections[serverId] = false;
+        activeConnections[integrationId] = false;
         
         return {
           error: {
@@ -279,24 +316,24 @@ export const getMcpClient = () => {
 
       const data = await response.json();
       
-      // Update server last used time
-      updateServer(serverId, { lastUsed: Date.now() });
+      // Update integration last used time
+      updateServer(integrationId, { lastUsed: Date.now() });
       
       // Keep active for a bit then disable
       setTimeout(() => {
-        activeConnections[serverId] = false;
+        activeConnections[integrationId] = false;
       }, 5000);
       
       return { result: data };
 
     } catch (error) {
-      activeConnections[serverId] = false;
+      activeConnections[integrationId] = false;
       
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
           return {
             error: {
-              message: "API call timeout - server took too long to respond",
+              message: "API call timeout - integration took too long to respond",
               code: "timeout",
               details: error.message
             }
@@ -377,32 +414,32 @@ export const getMcpClient = () => {
   };
 
   /**
-   * Check if any server is actively connecting
+   * Check if any integration is actively connecting
    */
   const isAnyServerActive = () => {
     return Object.values(activeConnections).some(status => status === true);
   };
 
   /**
-   * Get servers with their active status
+   * Get integrations with their active status
    */
-  const getServersWithStatus = (): (MCPServer & { isCurrentlyActive: boolean })[] => {
-    const servers = getServers();
-    return servers.map(server => ({
-      ...server,
-      isCurrentlyActive: activeConnections[server.id] || false
+  const getServersWithStatus = (): (Integration & { isCurrentlyActive: boolean })[] => {
+    const integrations = getServers();
+    return integrations.map(integration => ({
+      ...integration,
+      isCurrentlyActive: activeConnections[integration.id] || false
     }));
   };
 
   return {
-    // Server management
+    // Integration management
     getServers,
     addServer,
     updateServer,
     removeServer,
     getServersWithStatus,
     
-    // Server operations
+    // Integration operations
     testServerConnection,
     callServer,
     

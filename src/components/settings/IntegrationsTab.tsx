@@ -5,28 +5,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Plus, Settings, Info, ArrowUpRight, Check, X, Zap, Database, Cloud, Trash2, TestTube, Edit } from "lucide-react";
+import { Plus, Settings, Info, ArrowUpRight, Check, X, Zap, Database, Cloud, Trash2, TestTube, Edit, Globe, Code } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getCurrentUser, useSupabaseSync } from "@/services/supabaseService";
 import { supabase } from "@/integrations/supabase/client";
-import getMcpClient, { MCPServer, MCPCommand } from "@/services/mcpService";
+import getMcpClient, { Integration, IntegrationCommand, ApiEndpoint } from "@/services/mcpService";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const IntegrationsTab = () => {
-  const [isAddServerOpen, setIsAddServerOpen] = useState(false);
-  const [isEditServerOpen, setIsEditServerOpen] = useState(false);
+  const [isAddIntegrationOpen, setIsAddIntegrationOpen] = useState(false);
+  const [isEditIntegrationOpen, setIsEditIntegrationOpen] = useState(false);
   const [isCommandsOpen, setIsCommandsOpen] = useState(false);
-  const [selectedServer, setSelectedServer] = useState<MCPServer | null>(null);
-  const [servers, setServers] = useState<MCPServer[]>([]);
+  const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
+  const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [activeConnections, setActiveConnections] = useState<Record<string, boolean>>({});
   
   // Form states
-  const [serverName, setServerName] = useState("");
-  const [serverUrl, setServerUrl] = useState("");
-  const [serverType, setServerType] = useState("");
-  const [serverApiKey, setServerApiKey] = useState("");
-  const [serverDescription, setServerDescription] = useState("");
-  const [serverCommands, setServerCommands] = useState<MCPCommand[]>([]);
+  const [integrationName, setIntegrationName] = useState("");
+  const [integrationUrl, setIntegrationUrl] = useState("");
+  const [integrationType, setIntegrationType] = useState<'mcp' | 'api'>('mcp');
+  const [integrationCategory, setIntegrationCategory] = useState("");
+  const [integrationApiKey, setIntegrationApiKey] = useState("");
+  const [integrationDescription, setIntegrationDescription] = useState("");
+  const [integrationCommands, setIntegrationCommands] = useState<IntegrationCommand[]>([]);
+  const [integrationHeaders, setIntegrationHeaders] = useState<Record<string, string>>({});
+  const [integrationEndpoints, setIntegrationEndpoints] = useState<ApiEndpoint[]>([]);
   
   const { toast } = useToast();
   const mcpClient = getMcpClient();
@@ -36,12 +41,12 @@ const IntegrationsTab = () => {
   const { syncStatus, checkConnection } = useSupabaseSync();
   const [syncEnabled, setSyncEnabled] = useState(true);
 
-  // Load servers on component mount
+  // Load integrations on component mount
   useEffect(() => {
-    setServers(mcpClient.getServers());
+    setIntegrations(mcpClient.getServers());
   }, []);
   
-  // Regularly check for active MCP connections
+  // Regularly check for active connections
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveConnections(mcpClient.getActiveConnections());
@@ -61,26 +66,29 @@ const IntegrationsTab = () => {
   }, []);
 
   const resetForm = () => {
-    setServerName("");
-    setServerUrl("");
-    setServerType("");
-    setServerApiKey("");
-    setServerDescription("");
-    setServerCommands([]);
+    setIntegrationName("");
+    setIntegrationUrl("");
+    setIntegrationType('mcp');
+    setIntegrationCategory("");
+    setIntegrationApiKey("");
+    setIntegrationDescription("");
+    setIntegrationCommands([]);
+    setIntegrationHeaders({});
+    setIntegrationEndpoints([]);
   };
 
-  const handleAddServer = async () => {
-    if (!serverName || !serverUrl) {
+  const handleAddIntegration = async () => {
+    if (!integrationName || !integrationUrl) {
       toast({
         title: "Missing Information",
-        description: "Please provide both a server name and URL",
+        description: "Please provide both a name and URL",
         variant: "destructive",
       });
       return;
     }
 
     try {
-      new URL(serverUrl);
+      new URL(integrationUrl);
     } catch (e) {
       toast({
         title: "Invalid URL",
@@ -90,70 +98,76 @@ const IntegrationsTab = () => {
       return;
     }
 
-    const newServer = mcpClient.addServer({
-      name: serverName,
-      url: serverUrl,
-      type: serverType || 'custom',
-      apiKey: serverApiKey || undefined,
-      description: serverDescription || undefined,
-      commands: serverCommands.length > 0 ? serverCommands : undefined
+    const newIntegration = mcpClient.addServer({
+      name: integrationName,
+      url: integrationUrl,
+      type: integrationType,
+      category: integrationCategory || 'custom',
+      apiKey: integrationApiKey || undefined,
+      description: integrationDescription || undefined,
+      commands: integrationCommands.length > 0 ? integrationCommands : undefined,
+      headers: Object.keys(integrationHeaders).length > 0 ? integrationHeaders : undefined,
+      endpoints: integrationEndpoints.length > 0 ? integrationEndpoints : undefined
     });
     
-    setServers(mcpClient.getServers());
+    setIntegrations(mcpClient.getServers());
     
     toast({
-      title: "Server Added",
-      description: `${serverName} has been added successfully`,
+      title: "Integration Added",
+      description: `${integrationName} has been added successfully`,
     });
     
-    setIsAddServerOpen(false);
+    setIsAddIntegrationOpen(false);
     resetForm();
   };
 
-  const handleEditServer = () => {
-    if (!selectedServer) return;
+  const handleEditIntegration = () => {
+    if (!selectedIntegration) return;
     
-    const success = mcpClient.updateServer(selectedServer.id, {
-      name: serverName,
-      url: serverUrl,
-      type: serverType,
-      apiKey: serverApiKey || undefined,
-      description: serverDescription || undefined,
-      commands: serverCommands.length > 0 ? serverCommands : undefined
+    const success = mcpClient.updateServer(selectedIntegration.id, {
+      name: integrationName,
+      url: integrationUrl,
+      type: integrationType,
+      category: integrationCategory,
+      apiKey: integrationApiKey || undefined,
+      description: integrationDescription || undefined,
+      commands: integrationCommands.length > 0 ? integrationCommands : undefined,
+      headers: Object.keys(integrationHeaders).length > 0 ? integrationHeaders : undefined,
+      endpoints: integrationEndpoints.length > 0 ? integrationEndpoints : undefined
     });
     
     if (success) {
-      setServers(mcpClient.getServers());
+      setIntegrations(mcpClient.getServers());
       toast({
-        title: "Server Updated",
-        description: `${serverName} has been updated successfully`,
+        title: "Integration Updated",
+        description: `${integrationName} has been updated successfully`,
       });
     }
     
-    setIsEditServerOpen(false);
-    setSelectedServer(null);
+    setIsEditIntegrationOpen(false);
+    setSelectedIntegration(null);
     resetForm();
   };
 
-  const handleDeleteServer = (server: MCPServer) => {
-    const success = mcpClient.removeServer(server.id);
+  const handleDeleteIntegration = (integration: Integration) => {
+    const success = mcpClient.removeServer(integration.id);
     
     if (success) {
-      setServers(mcpClient.getServers());
+      setIntegrations(mcpClient.getServers());
       toast({
-        title: "Server Removed",
-        description: `${server.name} has been removed`,
+        title: "Integration Removed",
+        description: `${integration.name} has been removed`,
       });
     }
   };
 
-  const handleTestConnection = async (server: MCPServer) => {
+  const handleTestConnection = async (integration: Integration) => {
     toast({
       title: "Testing Connection",
-      description: `Checking connection to ${server.name}...`,
+      description: `Checking connection to ${integration.name}...`,
     });
     
-    const result = await mcpClient.testServerConnection(server);
+    const result = await mcpClient.testServerConnection(integration);
     
     if (result.error) {
       toast({
@@ -164,53 +178,79 @@ const IntegrationsTab = () => {
     } else {
       toast({
         title: "Connection Successful",
-        description: `${server.name} is responding correctly`,
+        description: `${integration.name} is responding correctly`,
       });
     }
   };
 
-  const openEditDialog = (server: MCPServer) => {
-    setSelectedServer(server);
-    setServerName(server.name);
-    setServerUrl(server.url);
-    setServerType(server.type);
-    setServerApiKey(server.apiKey || "");
-    setServerDescription(server.description || "");
-    setServerCommands(server.commands || []);
-    setIsEditServerOpen(true);
+  const openEditDialog = (integration: Integration) => {
+    setSelectedIntegration(integration);
+    setIntegrationName(integration.name);
+    setIntegrationUrl(integration.url);
+    setIntegrationType(integration.type);
+    setIntegrationCategory(integration.category);
+    setIntegrationApiKey(integration.apiKey || "");
+    setIntegrationDescription(integration.description || "");
+    setIntegrationCommands(integration.commands || []);
+    setIntegrationHeaders(integration.headers || {});
+    setIntegrationEndpoints(integration.endpoints || []);
+    setIsEditIntegrationOpen(true);
   };
 
-  const openCommandsDialog = (server: MCPServer) => {
-    setSelectedServer(server);
-    setServerCommands(server.commands || []);
+  const openCommandsDialog = (integration: Integration) => {
+    setSelectedIntegration(integration);
+    setIntegrationCommands(integration.commands || []);
+    setIntegrationEndpoints(integration.endpoints || []);
     setIsCommandsOpen(true);
   };
 
   const addCommand = () => {
-    setServerCommands([...serverCommands, { name: "", description: "" }]);
+    setIntegrationCommands([...integrationCommands, { name: "", description: "" }]);
   };
 
-  const updateCommand = (index: number, field: keyof MCPCommand, value: string) => {
-    const updated = [...serverCommands];
+  const addEndpoint = () => {
+    setIntegrationEndpoints([...integrationEndpoints, { 
+      name: "", 
+      path: "", 
+      method: 'GET', 
+      description: "" 
+    }]);
+  };
+
+  const updateCommand = (index: number, field: keyof IntegrationCommand, value: string) => {
+    const updated = [...integrationCommands];
     updated[index] = { ...updated[index], [field]: value };
-    setServerCommands(updated);
+    setIntegrationCommands(updated);
+  };
+
+  const updateEndpoint = (index: number, field: keyof ApiEndpoint, value: string) => {
+    const updated = [...integrationEndpoints];
+    updated[index] = { ...updated[index], [field]: value };
+    setIntegrationEndpoints(updated);
   };
 
   const removeCommand = (index: number) => {
-    setServerCommands(serverCommands.filter((_, i) => i !== index));
+    setIntegrationCommands(integrationCommands.filter((_, i) => i !== index));
+  };
+
+  const removeEndpoint = (index: number) => {
+    setIntegrationEndpoints(integrationEndpoints.filter((_, i) => i !== index));
   };
 
   const saveCommands = () => {
-    if (selectedServer) {
-      mcpClient.updateServer(selectedServer.id, { commands: serverCommands });
-      setServers(mcpClient.getServers());
+    if (selectedIntegration) {
+      mcpClient.updateServer(selectedIntegration.id, { 
+        commands: integrationCommands,
+        endpoints: integrationEndpoints 
+      });
+      setIntegrations(mcpClient.getServers());
       toast({
-        title: "Commands Updated",
-        description: `Commands for ${selectedServer.name} have been updated`,
+        title: "Configuration Updated",
+        description: `Configuration for ${selectedIntegration.name} has been updated`,
       });
     }
     setIsCommandsOpen(false);
-    setSelectedServer(null);
+    setSelectedIntegration(null);
   };
 
   // Toggle Supabase sync
@@ -251,6 +291,16 @@ const IntegrationsTab = () => {
       default: return "bg-gray-500";
     }
   };
+
+  const getIntegrationIcon = (integration: Integration) => {
+    if (integration.type === 'mcp') {
+      return <Cloud className="h-5 w-5 text-blue-600 dark:text-blue-300" />;
+    }
+    return <Globe className="h-5 w-5 text-green-600 dark:text-green-300" />;
+  };
+
+  const mcpIntegrations = integrations.filter(i => i.type === 'mcp');
+  const apiIntegrations = integrations.filter(i => i.type === 'api');
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -297,306 +347,495 @@ const IntegrationsTab = () => {
         </p>
       </div>
 
-      {/* MCP Servers Section */}
+      {/* External Integrations Section */}
       <div className="border rounded-lg p-4 bg-white/5 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h3 className="font-medium">MCP Servers</h3>
+            <h3 className="font-medium">External Integrations</h3>
             <Tooltip>
               <TooltipTrigger>
                 <Info className="h-4 w-4 text-gray-400" />
               </TooltipTrigger>
               <TooltipContent>
                 <p className="max-w-xs text-xs">
-                  Model Context Protocol servers allow AI to interact with external services
+                  Connect MCP servers or direct APIs to extend AI capabilities
                 </p>
               </TooltipContent>
             </Tooltip>
           </div>
-          <Button onClick={() => setIsAddServerOpen(true)} size="sm">
+          <Button onClick={() => setIsAddIntegrationOpen(true)} size="sm">
             <Plus className="h-4 w-4 mr-2" />
-            Add Server
+            Add Integration
           </Button>
         </div>
 
-        {servers.length === 0 ? (
+        {integrations.length === 0 ? (
           <div className="text-center py-8 text-gray-400">
             <Cloud className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>No MCP servers configured</p>
-            <p className="text-xs mt-1">Add a server to enable external integrations</p>
+            <p>No external integrations configured</p>
+            <p className="text-xs mt-1">Add MCP servers or APIs to enable external integrations</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {servers.map((server) => (
-              <div key={server.id} className="border rounded-lg p-3 bg-gray-50 dark:bg-gray-900/50">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <div className={`h-3 w-3 rounded-full ${activeConnections[server.id] ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
-                      <div>
-                        <h4 className="font-medium">{server.name}</h4>
-                        <p className="text-xs text-gray-500">{server.type} • {server.url}</p>
-                        {server.description && (
-                          <p className="text-xs text-gray-400 mt-1">{server.description}</p>
-                        )}
-                      </div>
-                    </div>
-                    {activeConnections[server.id] && (
-                      <div className="flex items-center px-2 py-1 bg-green-500/20 rounded text-xs text-green-500">
-                        <Zap className="h-3 w-3 mr-1" />
-                        Active
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => handleTestConnection(server)}>
-                      <TestTube className="h-3 w-3" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => openCommandsDialog(server)}>
-                      <Settings className="h-3 w-3" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => openEditDialog(server)}>
-                      <Edit className="h-3 w-3" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDeleteServer(server)}>
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-                {server.commands && server.commands.length > 0 && (
-                  <div className="mt-2 pt-2 border-t">
-                    <p className="text-xs text-gray-500 mb-1">Available Commands:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {server.commands.map((cmd, idx) => (
-                        <span key={idx} className="text-xs bg-blue-100 dark:bg-blue-900 px-2 py-1 rounded">
-                          {cmd.name}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+          <Tabs defaultValue="all" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="all">All ({integrations.length})</TabsTrigger>
+              <TabsTrigger value="mcp">MCP ({mcpIntegrations.length})</TabsTrigger>
+              <TabsTrigger value="api">APIs ({apiIntegrations.length})</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="all" className="mt-4">
+              <div className="space-y-3">
+                {integrations.map((integration) => (
+                  <IntegrationCard
+                    key={integration.id}
+                    integration={integration}
+                    isActive={activeConnections[integration.id]}
+                    onTest={() => handleTestConnection(integration)}
+                    onEdit={() => openEditDialog(integration)}
+                    onCommands={() => openCommandsDialog(integration)}
+                    onDelete={() => handleDeleteIntegration(integration)}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
+            </TabsContent>
+            
+            <TabsContent value="mcp" className="mt-4">
+              <div className="space-y-3">
+                {mcpIntegrations.map((integration) => (
+                  <IntegrationCard
+                    key={integration.id}
+                    integration={integration}
+                    isActive={activeConnections[integration.id]}
+                    onTest={() => handleTestConnection(integration)}
+                    onEdit={() => openEditDialog(integration)}
+                    onCommands={() => openCommandsDialog(integration)}
+                    onDelete={() => handleDeleteIntegration(integration)}
+                  />
+                ))}
+              </div>
+            </TabsContent>
+            
+            <TabsContent value="api" className="mt-4">
+              <div className="space-y-3">
+                {apiIntegrations.map((integration) => (
+                  <IntegrationCard
+                    key={integration.id}
+                    integration={integration}
+                    isActive={activeConnections[integration.id]}
+                    onTest={() => handleTestConnection(integration)}
+                    onEdit={() => openEditDialog(integration)}
+                    onCommands={() => openCommandsDialog(integration)}
+                    onDelete={() => handleDeleteIntegration(integration)}
+                  />
+                ))}
+              </div>
+            </TabsContent>
+          </Tabs>
         )}
 
         <div className="text-xs text-gray-400 mt-4">
-          <p className="font-semibold">How to use MCP servers:</p>
+          <p className="font-semibold">Integration Types:</p>
           <ul className="list-disc pl-5 mt-1 space-y-1">
-            <li>Add your custom MCP server with its API endpoint</li>
-            <li>Define commands to help the AI understand what the server can do</li>
-            <li>The AI will automatically call your server when relevant</li>
+            <li><strong>MCP Servers:</strong> Model Context Protocol servers with standardized interfaces</li>
+            <li><strong>Direct APIs:</strong> REST APIs with custom endpoints and configurations</li>
           </ul>
         </div>
       </div>
 
-      {/* Add Server Dialog */}
-      <Dialog open={isAddServerOpen} onOpenChange={setIsAddServerOpen}>
+      {/* Add Integration Dialog */}
+      <Dialog open={isAddIntegrationOpen} onOpenChange={setIsAddIntegrationOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Add MCP Server</DialogTitle>
+            <DialogTitle>Add Integration</DialogTitle>
             <DialogDescription>
-              Connect to an external MCP server to enhance your assistant
+              Connect an MCP server or direct API to enhance your assistant
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="serverName">Server Name *</Label>
+                <Label htmlFor="integrationName">Name *</Label>
                 <Input
-                  id="serverName"
-                  value={serverName}
-                  onChange={(e) => setServerName(e.target.value)}
-                  placeholder="My Custom Server"
+                  id="integrationName"
+                  value={integrationName}
+                  onChange={(e) => setIntegrationName(e.target.value)}
+                  placeholder="My Custom Integration"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="serverType">Type</Label>
+                <Label htmlFor="integrationType">Type *</Label>
+                <Select value={integrationType} onValueChange={(value: 'mcp' | 'api') => setIntegrationType(value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mcp">MCP Server</SelectItem>
+                    <SelectItem value="api">Direct API</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="integrationUrl">URL *</Label>
                 <Input
-                  id="serverType"
-                  value={serverType}
-                  onChange={(e) => setServerType(e.target.value)}
-                  placeholder="search, api, custom..."
+                  id="integrationUrl"
+                  value={integrationUrl}
+                  onChange={(e) => setIntegrationUrl(e.target.value)}
+                  placeholder="https://your-service.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="integrationCategory">Category</Label>
+                <Input
+                  id="integrationCategory"
+                  value={integrationCategory}
+                  onChange={(e) => setIntegrationCategory(e.target.value)}
+                  placeholder="search, ai, custom..."
                 />
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="serverUrl">Server URL *</Label>
+              <Label htmlFor="integrationApiKey">API Key (Optional)</Label>
               <Input
-                id="serverUrl"
-                value={serverUrl}
-                onChange={(e) => setServerUrl(e.target.value)}
-                placeholder="https://your-mcp-server.com"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="serverApiKey">API Key (Optional)</Label>
-              <Input
-                id="serverApiKey"
+                id="integrationApiKey"
                 type="password"
-                value={serverApiKey}
-                onChange={(e) => setServerApiKey(e.target.value)}
+                value={integrationApiKey}
+                onChange={(e) => setIntegrationApiKey(e.target.value)}
                 placeholder="Your API key if required"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="serverDescription">Description (Optional)</Label>
+              <Label htmlFor="integrationDescription">Description (Optional)</Label>
               <Input
-                id="serverDescription"
-                value={serverDescription}
-                onChange={(e) => setServerDescription(e.target.value)}
-                placeholder="Brief description of what this server does"
+                id="integrationDescription"
+                value={integrationDescription}
+                onChange={(e) => setIntegrationDescription(e.target.value)}
+                placeholder="Brief description of what this integration does"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddServerOpen(false)}>
+            <Button variant="outline" onClick={() => setIsAddIntegrationOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAddServer}>
-              Add Server
+            <Button onClick={handleAddIntegration}>
+              Add Integration
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Server Dialog */}
-      <Dialog open={isEditServerOpen} onOpenChange={setIsEditServerOpen}>
+      {/* Edit Integration Dialog */}
+      <Dialog open={isEditIntegrationOpen} onOpenChange={setIsEditIntegrationOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Edit MCP Server</DialogTitle>
+            <DialogTitle>Edit Integration</DialogTitle>
             <DialogDescription>
-              Update server configuration
+              Update integration configuration
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="editServerName">Server Name *</Label>
+                <Label htmlFor="editIntegrationName">Name *</Label>
                 <Input
-                  id="editServerName"
-                  value={serverName}
-                  onChange={(e) => setServerName(e.target.value)}
-                  placeholder="My Custom Server"
+                  id="editIntegrationName"
+                  value={integrationName}
+                  onChange={(e) => setIntegrationName(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="editServerType">Type</Label>
+                <Label htmlFor="editIntegrationType">Type *</Label>
+                <Select value={integrationType} onValueChange={(value: 'mcp' | 'api') => setIntegrationType(value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mcp">MCP Server</SelectItem>
+                    <SelectItem value="api">Direct API</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="editIntegrationUrl">URL *</Label>
                 <Input
-                  id="editServerType"
-                  value={serverType}
-                  onChange={(e) => setServerType(e.target.value)}
-                  placeholder="search, api, custom..."
+                  id="editIntegrationUrl"
+                  value={integrationUrl}
+                  onChange={(e) => setIntegrationUrl(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editIntegrationCategory">Category</Label>
+                <Input
+                  id="editIntegrationCategory"
+                  value={integrationCategory}
+                  onChange={(e) => setIntegrationCategory(e.target.value)}
                 />
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="editServerUrl">Server URL *</Label>
+              <Label htmlFor="editIntegrationApiKey">API Key (Optional)</Label>
               <Input
-                id="editServerUrl"
-                value={serverUrl}
-                onChange={(e) => setServerUrl(e.target.value)}
-                placeholder="https://your-mcp-server.com"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="editServerApiKey">API Key (Optional)</Label>
-              <Input
-                id="editServerApiKey"
+                id="editIntegrationApiKey"
                 type="password"
-                value={serverApiKey}
-                onChange={(e) => setServerApiKey(e.target.value)}
-                placeholder="Your API key if required"
+                value={integrationApiKey}
+                onChange={(e) => setIntegrationApiKey(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="editServerDescription">Description (Optional)</Label>
+              <Label htmlFor="editIntegrationDescription">Description (Optional)</Label>
               <Input
-                id="editServerDescription"
-                value={serverDescription}
-                onChange={(e) => setServerDescription(e.target.value)}
-                placeholder="Brief description of what this server does"
+                id="editIntegrationDescription"
+                value={integrationDescription}
+                onChange={(e) => setIntegrationDescription(e.target.value)}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditServerOpen(false)}>
+            <Button variant="outline" onClick={() => setIsEditIntegrationOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleEditServer}>
-              Update Server
+            <Button onClick={handleEditIntegration}>
+              Update Integration
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* MCP Commands Dialog */}
+      {/* Commands/Endpoints Dialog */}
       <Dialog open={isCommandsOpen} onOpenChange={setIsCommandsOpen}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>MCP Commands</DialogTitle>
+            <DialogTitle>
+              {selectedIntegration?.type === 'mcp' ? 'MCP Commands' : 'API Endpoints'}
+            </DialogTitle>
             <DialogDescription>
-              Define commands to help the AI understand what this server can do
+              Define {selectedIntegration?.type === 'mcp' ? 'commands' : 'endpoints'} to help the AI understand what this integration can do
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            {serverCommands.map((command, index) => (
-              <div key={index} className="border rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium">Command {index + 1}</h4>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeCommand(index)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
+          
+          <Tabs defaultValue="commands" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="commands">
+                {selectedIntegration?.type === 'mcp' ? 'Commands' : 'General Commands'}
+              </TabsTrigger>
+              <TabsTrigger value="endpoints" disabled={selectedIntegration?.type === 'mcp'}>
+                API Endpoints
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="commands" className="space-y-4 py-4">
+              {integrationCommands.map((command, index) => (
+                <div key={index} className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-medium">Command {index + 1}</h4>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeCommand(index)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Command Name</Label>
+                      <Input
+                        value={command.name}
+                        onChange={(e) => updateCommand(index, 'name', e.target.value)}
+                        placeholder="search_web"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Description</Label>
+                      <Input
+                        value={command.description}
+                        onChange={(e) => updateCommand(index, 'description', e.target.value)}
+                        placeholder="Search the web for information"
+                      />
+                    </div>
+                  </div>
                   <div className="space-y-2">
-                    <Label>Command Name</Label>
-                    <Input
-                      value={command.name}
-                      onChange={(e) => updateCommand(index, 'name', e.target.value)}
-                      placeholder="search_web"
+                    <Label>Example Usage (Optional)</Label>
+                    <Textarea
+                      value={command.example || ''}
+                      onChange={(e) => updateCommand(index, 'example', e.target.value)}
+                      placeholder="Example: search_web(query='latest AI news')"
+                      className="min-h-[60px]"
                     />
+                  </div>
+                </div>
+              ))}
+              
+              <Button variant="outline" onClick={addCommand} className="w-full">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Command
+              </Button>
+            </TabsContent>
+            
+            <TabsContent value="endpoints" className="space-y-4 py-4">
+              {integrationEndpoints.map((endpoint, index) => (
+                <div key={index} className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-medium">Endpoint {index + 1}</h4>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeEndpoint(index)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-2">
+                      <Label>Endpoint Name</Label>
+                      <Input
+                        value={endpoint.name}
+                        onChange={(e) => updateEndpoint(index, 'name', e.target.value)}
+                        placeholder="search"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Path</Label>
+                      <Input
+                        value={endpoint.path}
+                        onChange={(e) => updateEndpoint(index, 'path', e.target.value)}
+                        placeholder="/api/search"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Method</Label>
+                      <Select 
+                        value={endpoint.method} 
+                        onValueChange={(value) => updateEndpoint(index, 'method', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="GET">GET</SelectItem>
+                          <SelectItem value="POST">POST</SelectItem>
+                          <SelectItem value="PUT">PUT</SelectItem>
+                          <SelectItem value="DELETE">DELETE</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label>Description</Label>
-                    <Input
-                      value={command.description}
-                      onChange={(e) => updateCommand(index, 'description', e.target.value)}
-                      placeholder="Search the web for information"
+                    <Textarea
+                      value={endpoint.description}
+                      onChange={(e) => updateEndpoint(index, 'description', e.target.value)}
+                      placeholder="Search for information using this endpoint"
+                      className="min-h-[60px]"
                     />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Example Usage (Optional)</Label>
-                  <Textarea
-                    value={command.example || ''}
-                    onChange={(e) => updateCommand(index, 'example', e.target.value)}
-                    placeholder="Example: search_web(query='latest AI news')"
-                    className="min-h-[60px]"
-                  />
-                </div>
-              </div>
-            ))}
-            
-            <Button variant="outline" onClick={addCommand} className="w-full">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Command
-            </Button>
-          </div>
+              ))}
+              
+              <Button variant="outline" onClick={addEndpoint} className="w-full">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Endpoint
+              </Button>
+            </TabsContent>
+          </Tabs>
+          
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCommandsOpen(false)}>
               Cancel
             </Button>
             <Button onClick={saveCommands}>
-              Save Commands
+              Save Configuration
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+};
+
+// Integration Card Component
+const IntegrationCard: React.FC<{
+  integration: Integration;
+  isActive: boolean;
+  onTest: () => void;
+  onEdit: () => void;
+  onCommands: () => void;
+  onDelete: () => void;
+}> = ({ integration, isActive, onTest, onEdit, onCommands, onDelete }) => {
+  const getIntegrationIcon = () => {
+    if (integration.type === 'mcp') {
+      return <Cloud className="h-5 w-5 text-blue-600 dark:text-blue-300" />;
+    }
+    return <Globe className="h-5 w-5 text-green-600 dark:text-green-300" />;
+  };
+
+  return (
+    <div className="border rounded-lg p-3 bg-gray-50 dark:bg-gray-900/50">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className={`h-3 w-3 rounded-full ${isActive ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
+            <div className="p-2 rounded-md bg-gray-100 dark:bg-gray-800">
+              {getIntegrationIcon()}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-medium">{integration.name}</h4>
+                <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 rounded text-blue-600 dark:text-blue-300">
+                  {integration.type.toUpperCase()}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">{integration.category} • {integration.url}</p>
+              {integration.description && (
+                <p className="text-xs text-gray-400 mt-1">{integration.description}</p>
+              )}
+            </div>
+          </div>
+          {isActive && (
+            <div className="flex items-center px-2 py-1 bg-green-500/20 rounded text-xs text-green-500">
+              <Zap className="h-3 w-3 mr-1" />
+              Active
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={onTest}>
+            <TestTube className="h-3 w-3" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onCommands}>
+            <Settings className="h-3 w-3" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onEdit}>
+            <Edit className="h-3 w-3" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onDelete}>
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+      {(integration.commands && integration.commands.length > 0) || (integration.endpoints && integration.endpoints.length > 0) && (
+        <div className="mt-2 pt-2 border-t">
+          <p className="text-xs text-gray-500 mb-1">
+            Available {integration.type === 'mcp' ? 'Commands' : 'Endpoints'}:
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {integration.commands?.map((cmd, idx) => (
+              <span key={idx} className="text-xs bg-blue-100 dark:bg-blue-900 px-2 py-1 rounded">
+                {cmd.name}
+              </span>
+            ))}
+            {integration.endpoints?.map((endpoint, idx) => (
+              <span key={idx} className="text-xs bg-green-100 dark:bg-green-900 px-2 py-1 rounded">
+                {endpoint.method} {endpoint.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
