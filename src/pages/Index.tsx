@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from "react";
 import { ChatMessage } from "@/hooks/useChatHistory";
 import MessageList from "@/components/MessageList";
@@ -13,6 +12,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LoadingDots } from "@/components/ui/loading";
 import getMcpClient from "@/services/mcpService";
+import { syncIntegrationsToSupabase } from "@/services/supabaseIntegrationsService";
+import { generateIntegrationsSystemPrompt } from "@/services/aiIntegrationHelper";
+import { useIntegrationCommands } from "@/hooks/useIntegrationCommands";
 
 const Index = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -23,9 +25,22 @@ const Index = () => {
   const { commands } = useCommands();
   const { modelConfig } = useGeminiConfig();
   const mcpClient = getMcpClient();
+  const { executeCommand: executeIntegrationCommand } = useIntegrationCommands();
 
   useEffect(() => {
     setMessages(chatHistory);
+    
+    // Sync integrations to Supabase when component mounts
+    const syncIntegrations = async () => {
+      try {
+        console.log('Syncing integrations on app load...');
+        await syncIntegrationsToSupabase();
+      } catch (error) {
+        console.error('Error syncing integrations on load:', error);
+      }
+    };
+    
+    syncIntegrations();
   }, [chatHistory]);
 
   const saveMessages = (newMessages: ChatMessage[]) => {
@@ -90,9 +105,65 @@ const Index = () => {
     setIsLoading(true);
     
     try {
-      const response = await sendMessageToGemini(content, undefined, updatedMessages);
+      // Add integration context to the message
+      const integrationPrompt = await generateIntegrationsSystemPrompt();
+      const enhancedContent = integrationPrompt ? `${content}\n\n${integrationPrompt}` : content;
       
-      if (mcpClient.hasMcpCall(response)) {
+      const response = await sendMessageToGemini(enhancedContent, undefined, updatedMessages);
+      
+      // Check if response contains integration command
+      if (response.includes('executeIntegrationCommand(')) {
+        console.log("Response contains integration command, processing...");
+        
+        // Extract integration command parameters
+        const commandMatch = response.match(/executeIntegrationCommand\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*(?:,\s*({[^}]*}))?\s*\)/);
+        
+        if (commandMatch) {
+          const [, integrationName, commandName, parametersStr] = commandMatch;
+          let parameters = {};
+          
+          if (parametersStr) {
+            try {
+              parameters = JSON.parse(parametersStr);
+            } catch (e) {
+              console.error('Error parsing command parameters:', e);
+            }
+          }
+          
+          console.log('Executing integration command:', { integrationName, commandName, parameters });
+          
+          const integrationResult = await executeIntegrationCommand(integrationName, commandName, parameters);
+          
+          let finalResponse = response;
+          if (integrationResult.result) {
+            finalResponse += `\n\n**Integration Result:**\n\`\`\`json\n${JSON.stringify(integrationResult.result, null, 2)}\n\`\`\``;
+          } else if (integrationResult.error) {
+            finalResponse += `\n\n**Integration Error:** ${integrationResult.error.message}`;
+          }
+          
+          const assistantMessage: ChatMessage = { 
+            role: 'assistant', 
+            content: finalResponse,
+            timestamp: Date.now(),
+            isMcpResult: true
+          };
+          
+          const finalMessages = [...updatedMessages, assistantMessage];
+          setMessages(finalMessages);
+          saveMessages(finalMessages);
+        } else {
+          // Fallback to regular response
+          const assistantMessage: ChatMessage = { 
+            role: 'assistant', 
+            content: response,
+            timestamp: Date.now()
+          };
+          
+          const finalMessages = [...updatedMessages, assistantMessage];
+          setMessages(finalMessages);
+          saveMessages(finalMessages);
+        }
+      } else if (mcpClient.hasMcpCall(response)) {
         console.log("Response contains MCP call, processing...");
         const mcpCall = mcpClient.extractMcpCall(response);
         

@@ -7,6 +7,12 @@
  */
 
 import getMcpClient, { Integration } from './mcpService';
+import { 
+  fetchIntegrationsFromSupabase, 
+  fetchCommandsFromSupabase, 
+  StoredIntegration, 
+  StoredCommand 
+} from './supabaseIntegrationsService';
 
 export interface IntegrationContext {
   id: string;
@@ -25,25 +31,61 @@ export interface IntegrationContext {
   setupInstructions: string[];
   isActive: boolean;
   isConfigured: boolean;
+  supabaseId?: string; // For stored integrations
 }
 
 /**
  * Get AI-friendly context for all configured integrations
  */
-export const getIntegrationsContext = (): IntegrationContext[] => {
-  const mcpClient = getMcpClient();
-  const integrations = mcpClient.getServersWithStatus();
-  
-  return integrations.map(integration => {
-    const context = buildIntegrationContext(integration);
-    return context;
-  });
+export const getIntegrationsContext = async (): Promise<IntegrationContext[]> => {
+  try {
+    // Get integrations from both local MCP client and Supabase
+    const mcpClient = getMcpClient();
+    const localIntegrations = mcpClient.getServersWithStatus();
+    const storedIntegrations = await fetchIntegrationsFromSupabase();
+    const storedCommands = await fetchCommandsFromSupabase();
+
+    console.log('Fetched integrations:', { 
+      local: localIntegrations.length, 
+      stored: storedIntegrations.length,
+      commands: storedCommands.length 
+    });
+
+    // Combine and prioritize stored integrations
+    const combinedIntegrations = new Map<string, IntegrationContext>();
+
+    // Add stored integrations first (these have priority)
+    for (const stored of storedIntegrations) {
+      const commands = storedCommands.filter(cmd => cmd.integration_id === stored.id);
+      const context = buildStoredIntegrationContext(stored, commands);
+      combinedIntegrations.set(stored.name, context);
+    }
+
+    // Add local integrations that aren't already stored
+    for (const local of localIntegrations) {
+      if (!combinedIntegrations.has(local.name)) {
+        const context = buildLocalIntegrationContext(local);
+        combinedIntegrations.set(local.name, context);
+      }
+    }
+
+    return Array.from(combinedIntegrations.values());
+  } catch (error) {
+    console.error('Error getting integrations context:', error);
+    // Fallback to local integrations only
+    const mcpClient = getMcpClient();
+    const integrations = mcpClient.getServersWithStatus();
+    return integrations.map(integration => buildLocalIntegrationContext(integration));
+  }
 };
 
 /**
- * Build detailed context for a specific integration
+ * Build context for stored Supabase integration
  */
-const buildIntegrationContext = (integration: Integration & { isCurrentlyActive: boolean }): IntegrationContext => {
+const buildStoredIntegrationContext = (
+  integration: StoredIntegration, 
+  commands: StoredCommand[]
+): IntegrationContext => {
   const baseContext: IntegrationContext = {
     id: integration.id,
     name: integration.name,
@@ -52,14 +94,52 @@ const buildIntegrationContext = (integration: Integration & { isCurrentlyActive:
     description: integration.description || '',
     capabilities: [],
     usageExamples: [],
-    commonCommands: [],
+    commonCommands: commands.map(cmd => ({
+      name: cmd.name,
+      description: cmd.description || '',
+      example: cmd.example || `${cmd.name}()`,
+      parameters: Object.keys(cmd.parameters || {})
+    })),
+    setupInstructions: [],
+    isActive: integration.is_active,
+    isConfigured: true,
+    supabaseId: integration.id
+  };
+
+  return enhanceContextByCategory(baseContext);
+};
+
+/**
+ * Build context for local MCP integration
+ */
+const buildLocalIntegrationContext = (integration: Integration & { isCurrentlyActive: boolean }): IntegrationContext => {
+  const baseContext: IntegrationContext = {
+    id: integration.id,
+    name: integration.name,
+    type: integration.type,
+    category: integration.category,
+    description: integration.description || '',
+    capabilities: [],
+    usageExamples: [],
+    commonCommands: (integration.commands || []).map(cmd => ({
+      name: cmd.name,
+      description: cmd.description || '',
+      example: cmd.example || `${cmd.name}()`,
+      parameters: cmd.parameters ? Object.keys(cmd.parameters) : []
+    })),
     setupInstructions: [],
     isActive: integration.isCurrentlyActive,
     isConfigured: true
   };
 
-  // Add category-specific context
-  switch (integration.category.toLowerCase()) {
+  return enhanceContextByCategory(baseContext);
+};
+
+/**
+ * Enhance context based on integration category
+ */
+const enhanceContextByCategory = (baseContext: IntegrationContext): IntegrationContext => {
+  switch (baseContext.category.toLowerCase()) {
     case 'reminders':
     case 'reminder':
     case 'tasks':
@@ -80,38 +160,6 @@ const buildIntegrationContext = (integration: Integration & { isCurrentlyActive:
           'Add a reminder to call John tomorrow at 3 PM',
           'Mark the grocery shopping task as done',
           'Show me all overdue reminders'
-        ],
-        commonCommands: [
-          {
-            name: 'get_pending_tasks',
-            description: 'Retrieve all pending/incomplete tasks',
-            example: 'get_pending_tasks()',
-            parameters: []
-          },
-          {
-            name: 'get_tasks_by_date',
-            description: 'Get tasks for a specific date',
-            example: 'get_tasks_by_date(date="2024-01-15")',
-            parameters: ['date (YYYY-MM-DD format)']
-          },
-          {
-            name: 'create_reminder',
-            description: 'Create a new reminder/task',
-            example: 'create_reminder(title="Meeting with client", due_date="2024-01-15", priority="high")',
-            parameters: ['title', 'due_date', 'priority (optional)']
-          },
-          {
-            name: 'complete_task',
-            description: 'Mark a task as completed',
-            example: 'complete_task(task_id="123")',
-            parameters: ['task_id']
-          },
-          {
-            name: 'search_tasks',
-            description: 'Search tasks by keyword',
-            example: 'search_tasks(query="grocery")',
-            parameters: ['query']
-          }
         ],
         setupInstructions: [
           '1. Ensure your reminder app API is accessible via the configured URL',
@@ -137,14 +185,6 @@ const buildIntegrationContext = (integration: Integration & { isCurrentlyActive:
           'Find information about quantum computing',
           'Search for restaurant reviews near me'
         ],
-        commonCommands: [
-          {
-            name: 'search',
-            description: 'Search the web for information',
-            example: 'search(query="latest AI developments")',
-            parameters: ['query']
-          }
-        ],
         setupInstructions: [
           '1. Configure the search server URL (default: DuckDuckGo MCP server)',
           '2. Test the connection to ensure search is working',
@@ -168,20 +208,6 @@ const buildIntegrationContext = (integration: Integration & { isCurrentlyActive:
           'Search for emails from my manager',
           'Reply to the last email from Sarah'
         ],
-        commonCommands: [
-          {
-            name: 'get_emails',
-            description: 'Retrieve recent emails',
-            example: 'get_emails(limit=10)',
-            parameters: ['limit (optional)']
-          },
-          {
-            name: 'send_email',
-            description: 'Send a new email',
-            example: 'send_email(to="john@example.com", subject="Meeting", body="Let\'s meet tomorrow")',
-            parameters: ['to', 'subject', 'body']
-          }
-        ],
         setupInstructions: [
           '1. Connect your Gmail account using OAuth',
           '2. Grant necessary permissions for reading and sending emails',
@@ -193,13 +219,7 @@ const buildIntegrationContext = (integration: Integration & { isCurrentlyActive:
       return {
         ...baseContext,
         capabilities: ['Custom API integration'],
-        usageExamples: [`Interact with ${integration.name} service`],
-        commonCommands: integration.commands?.map(cmd => ({
-          name: cmd.name,
-          description: cmd.description,
-          example: cmd.example || `${cmd.name}()`,
-          parameters: cmd.parameters ? Object.keys(cmd.parameters) : []
-        })) || [],
+        usageExamples: [`Interact with ${baseContext.name} service`],
         setupInstructions: [
           '1. Configure the API endpoint URL',
           '2. Add API key if required',
@@ -213,8 +233,8 @@ const buildIntegrationContext = (integration: Integration & { isCurrentlyActive:
 /**
  * Generate AI system prompt with integration context
  */
-export const generateIntegrationsSystemPrompt = (): string => {
-  const integrations = getIntegrationsContext();
+export const generateIntegrationsSystemPrompt = async (): Promise<string> => {
+  const integrations = await getIntegrationsContext();
   const activeIntegrations = integrations.filter(i => i.isConfigured);
   
   if (activeIntegrations.length === 0) {
@@ -222,12 +242,13 @@ export const generateIntegrationsSystemPrompt = (): string => {
   }
 
   let prompt = '\n\n## Available Integrations\n\n';
-  prompt += 'You have access to the following external services through MCP (Model Context Protocol):\n\n';
+  prompt += 'You have access to the following external services through integrations:\n\n';
 
   activeIntegrations.forEach(integration => {
     prompt += `### ${integration.name} (${integration.category})\n`;
     prompt += `**Status:** ${integration.isActive ? '🟢 Active' : '⚪ Available'}\n`;
     prompt += `**Type:** ${integration.type.toUpperCase()}\n`;
+    prompt += `**Integration ID:** ${integration.supabaseId || integration.id}\n`;
     
     if (integration.description) {
       prompt += `**Description:** ${integration.description}\n`;
@@ -262,10 +283,11 @@ export const generateIntegrationsSystemPrompt = (): string => {
   });
 
   prompt += '\n**How to use integrations:**\n';
-  prompt += '1. When users ask about tasks, reminders, emails, or other integrated services, use the appropriate commands\n';
+  prompt += '1. When users ask about tasks, reminders, emails, or other integrated services, use the executeIntegrationCommand function\n';
   prompt += '2. Always provide helpful context about what you\'re doing ("Let me check your pending tasks...")\n';
   prompt += '3. If an integration isn\'t working, suggest checking the configuration in Settings > Integrations\n';
-  prompt += '4. Format responses in a user-friendly way, not just raw API data\n\n';
+  prompt += '4. Format responses in a user-friendly way, not just raw API data\n';
+  prompt += '5. Use the integration ID and command name to execute commands\n\n';
 
   return prompt;
 };
@@ -273,8 +295,8 @@ export const generateIntegrationsSystemPrompt = (): string => {
 /**
  * Get setup instructions for a specific integration type
  */
-export const getSetupInstructions = (category: string): string[] => {
-  const integrations = getIntegrationsContext();
+export const getSetupInstructions = async (category: string): Promise<string[]> => {
+  const integrations = await getIntegrationsContext();
   const integration = integrations.find(i => i.category.toLowerCase() === category.toLowerCase());
   
   return integration?.setupInstructions || [
@@ -289,8 +311,8 @@ export const getSetupInstructions = (category: string): string[] => {
 /**
  * Check if a specific integration category is available and configured
  */
-export const isIntegrationAvailable = (category: string): boolean => {
-  const integrations = getIntegrationsContext();
+export const isIntegrationAvailable = async (category: string): Promise<boolean> => {
+  const integrations = await getIntegrationsContext();
   return integrations.some(i => 
     i.category.toLowerCase() === category.toLowerCase() && i.isConfigured
   );
@@ -299,7 +321,7 @@ export const isIntegrationAvailable = (category: string): boolean => {
 /**
  * Get integration by category
  */
-export const getIntegrationByCategory = (category: string): IntegrationContext | undefined => {
-  const integrations = getIntegrationsContext();
+export const getIntegrationByCategory = async (category: string): Promise<IntegrationContext | undefined> => {
+  const integrations = await getIntegrationsContext();
   return integrations.find(i => i.category.toLowerCase() === category.toLowerCase());
 };

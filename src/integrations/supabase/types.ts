@@ -36,6 +36,95 @@ export type Database = {
         }
         Relationships: []
       }
+      integration_commands: {
+        Row: {
+          created_at: string
+          description: string | null
+          endpoint: string | null
+          example: string | null
+          id: string
+          integration_id: string
+          is_active: boolean
+          method: string | null
+          name: string
+          parameters: Json | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          endpoint?: string | null
+          example?: string | null
+          id?: string
+          integration_id: string
+          is_active?: boolean
+          method?: string | null
+          name: string
+          parameters?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          endpoint?: string | null
+          example?: string | null
+          id?: string
+          integration_id?: string
+          is_active?: boolean
+          method?: string | null
+          name?: string
+          parameters?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integration_commands_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "integrations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      integrations: {
+        Row: {
+          category: string
+          config: Json
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          config?: Json
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          config?: Json
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       memories: {
         Row: {
           assistant_reply: string | null

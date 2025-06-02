@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ReminderSetupGuide from "@/components/ReminderSetupGuide";
 import { isIntegrationAvailable } from "@/services/aiIntegrationHelper";
+import { syncIntegrationsToSupabase } from "@/services/supabaseIntegrationsService";
 
 const IntegrationsTab = () => {
   const [isAddIntegrationOpen, setIsAddIntegrationOpen] = useState(false);
