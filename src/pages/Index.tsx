@@ -105,64 +105,48 @@ const Index = () => {
     setIsLoading(true);
     
     try {
-      // Add integration context to the message
-      const integrationPrompt = await generateIntegrationsSystemPrompt();
-      const enhancedContent = integrationPrompt ? `${content}\n\n${integrationPrompt}` : content;
+      console.log("Sending message to AI with integration context...");
       
-      const response = await sendMessageToGemini(enhancedContent, undefined, updatedMessages);
+      const response = await sendMessageToGemini(content, undefined, updatedMessages);
       
-      // Check if response contains integration command
-      if (response.includes('executeIntegrationCommand(')) {
+      // Check if response contains integration command with better pattern matching
+      const integrationCommandMatch = response.match(/executeIntegrationCommand\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*['"`]([^'"`]+)['"`](?:\s*,\s*({[^}]*}))?\s*\)/);
+      
+      if (integrationCommandMatch) {
         console.log("Response contains integration command, processing...");
         
-        // Extract integration command parameters
-        const commandMatch = response.match(/executeIntegrationCommand\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*(?:,\s*({[^}]*}))?\s*\)/);
+        const [, integrationName, commandName, parametersStr] = integrationCommandMatch;
+        let parameters = {};
         
-        if (commandMatch) {
-          const [, integrationName, commandName, parametersStr] = commandMatch;
-          let parameters = {};
-          
-          if (parametersStr) {
-            try {
-              parameters = JSON.parse(parametersStr);
-            } catch (e) {
-              console.error('Error parsing command parameters:', e);
-            }
+        if (parametersStr) {
+          try {
+            parameters = JSON.parse(parametersStr);
+          } catch (e) {
+            console.error('Error parsing command parameters:', e);
           }
-          
-          console.log('Executing integration command:', { integrationName, commandName, parameters });
-          
-          const integrationResult = await executeIntegrationCommand(integrationName, commandName, parameters);
-          
-          let finalResponse = response;
-          if (integrationResult.result) {
-            finalResponse += `\n\n**Integration Result:**\n\`\`\`json\n${JSON.stringify(integrationResult.result, null, 2)}\n\`\`\``;
-          } else if (integrationResult.error) {
-            finalResponse += `\n\n**Integration Error:** ${integrationResult.error.message}`;
-          }
-          
-          const assistantMessage: ChatMessage = { 
-            role: 'assistant', 
-            content: finalResponse,
-            timestamp: Date.now(),
-            isMcpResult: true
-          };
-          
-          const finalMessages = [...updatedMessages, assistantMessage];
-          setMessages(finalMessages);
-          saveMessages(finalMessages);
-        } else {
-          // Fallback to regular response
-          const assistantMessage: ChatMessage = { 
-            role: 'assistant', 
-            content: response,
-            timestamp: Date.now()
-          };
-          
-          const finalMessages = [...updatedMessages, assistantMessage];
-          setMessages(finalMessages);
-          saveMessages(finalMessages);
         }
+        
+        console.log('Executing integration command:', { integrationName, commandName, parameters });
+        
+        const integrationResult = await executeIntegrationCommand(integrationName, commandName, parameters);
+        
+        let finalResponse = response;
+        if (integrationResult.result) {
+          finalResponse += `\n\n**Integration Result:**\n\`\`\`json\n${JSON.stringify(integrationResult.result, null, 2)}\n\`\`\``;
+        } else if (integrationResult.error) {
+          finalResponse += `\n\n**Integration Error:** ${integrationResult.error.message}`;
+        }
+        
+        const assistantMessage: ChatMessage = { 
+          role: 'assistant', 
+          content: finalResponse,
+          timestamp: Date.now(),
+          isMcpResult: true
+        };
+        
+        const finalMessages = [...updatedMessages, assistantMessage];
+        setMessages(finalMessages);
+        saveMessages(finalMessages);
       } else if (mcpClient.hasMcpCall(response)) {
         console.log("Response contains MCP call, processing...");
         const mcpCall = mcpClient.extractMcpCall(response);

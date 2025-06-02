@@ -5,7 +5,8 @@ import {
   Cpu,
   Volume2, 
   Globe,
-  RefreshCw
+  RefreshCw,
+  Terminal
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SettingsHeader from "@/components/settings/SettingsHeader";
@@ -14,6 +15,7 @@ import ModelSettingsTab from "@/components/settings/ModelSettings";
 import SpeechSettingsTab from "@/components/settings/SpeechSettingsTab";
 import IntegrationsTab from "@/components/settings/IntegrationsTab";
 import SyncStatusTab from "@/components/settings/SyncStatusTab";
+import CommandsTab from "@/components/settings/CommandsTab";
 
 const Settings = () => {
   return (
@@ -23,7 +25,7 @@ const Settings = () => {
       <div className="pt-20 pb-8">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <Tabs defaultValue="general" className="w-full">
-            <TabsList className="glass-card grid w-full grid-cols-5 mb-8 p-1">
+            <TabsList className="glass-card grid w-full grid-cols-6 mb-8 p-1">
               <TabsTrigger 
                 value="general" 
                 className="flex items-center gap-2 glass-button data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400"
@@ -53,6 +55,13 @@ const Settings = () => {
                 <span className="hidden sm:inline">Integrations</span>
               </TabsTrigger>
               <TabsTrigger 
+                value="commands" 
+                className="flex items-center gap-2 glass-button data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400"
+              >
+                <Terminal className="h-4 w-4" />
+                <span className="hidden sm:inline">Commands</span>
+              </TabsTrigger>
+              <TabsTrigger 
                 value="sync" 
                 className="flex items-center gap-2 glass-button data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400"
               >
@@ -76,6 +85,10 @@ const Settings = () => {
 
               <TabsContent value="integrations" className="animate-fade-in">
                 <IntegrationsTab />
+              </TabsContent>
+
+              <TabsContent value="commands" className="animate-fade-in">
+                <CommandsTab />
               </TabsContent>
 
               <TabsContent value="sync" className="animate-fade-in">

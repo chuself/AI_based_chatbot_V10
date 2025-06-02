@@ -14,7 +14,7 @@ export interface StoredIntegration {
     url: string;
     apiKey?: string;
     headers?: Record<string, string>;
-    commands?: IntegrationCommand[];
+    commands?: any[];
     endpoints?: any[];
   };
   is_active: boolean;
@@ -29,7 +29,7 @@ export interface StoredCommand {
   description?: string;
   endpoint?: string;
   method: string;
-  parameters: Record<string, any>;
+  parameters: any;
   example?: string;
   is_active: boolean;
 }
@@ -70,9 +70,9 @@ export const syncIntegrationsToSupabase = async (): Promise<boolean> => {
           url: integration.url,
           apiKey: integration.apiKey,
           headers: integration.headers,
-          commands: integration.commands,
-          endpoints: integration.endpoints
-        },
+          commands: integration.commands || [],
+          endpoints: integration.endpoints || []
+        } as any,
         is_active: true
       };
 
@@ -138,7 +138,7 @@ const syncCommandsForIntegration = async (
       integration_id: integrationId,
       name: cmd.name,
       description: cmd.description,
-      endpoint: cmd.endpoint,
+      endpoint: cmd.endpoint || `/${cmd.name}`,
       method: cmd.method || 'GET',
       parameters: cmd.parameters || {},
       example: cmd.example,
@@ -181,7 +181,11 @@ export const fetchIntegrationsFromSupabase = async (): Promise<StoredIntegration
       return [];
     }
 
-    return data || [];
+    return (data || []).map(integration => ({
+      ...integration,
+      type: integration.type as 'mcp' | 'api',
+      config: integration.config as any
+    }));
   } catch (error) {
     console.error('Error in fetchIntegrationsFromSupabase:', error);
     return [];
@@ -213,7 +217,10 @@ export const fetchCommandsFromSupabase = async (): Promise<StoredCommand[]> => {
       return [];
     }
 
-    return data || [];
+    return (data || []).map(cmd => ({
+      ...cmd,
+      parameters: cmd.parameters as any
+    }));
   } catch (error) {
     console.error('Error in fetchCommandsFromSupabase:', error);
     return [];
@@ -259,18 +266,19 @@ export const executeIntegrationCommand = async (
     }
 
     // Build the API URL
-    const baseUrl = integration.config.url;
+    const config = integration.config as any;
+    const baseUrl = config.url;
     const endpoint = command.endpoint || `/${commandName}`;
     const fullUrl = `${baseUrl}${endpoint}`;
 
     // Prepare headers
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...integration.config.headers
+      ...(config.headers || {})
     };
 
-    if (integration.config.apiKey) {
-      headers['Authorization'] = `Bearer ${integration.config.apiKey}`;
+    if (config.apiKey) {
+      headers['Authorization'] = `Bearer ${config.apiKey}`;
     }
 
     // Make the API call
@@ -314,5 +322,98 @@ const makeApiCall = async (url: string, options: RequestInit): Promise<{ result?
   } catch (error) {
     console.error('Error making API call:', error);
     return { error: { message: error instanceof Error ? error.message : 'Network error' } };
+  }
+};
+
+/**
+ * Create or update an integration command
+ */
+export const saveIntegrationCommand = async (
+  integrationId: string,
+  commandData: {
+    name: string;
+    description?: string;
+    endpoint?: string;
+    method: string;
+    parameters?: Record<string, any>;
+    example?: string;
+  }
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: 'User not authenticated' };
+    }
+
+    // Check if command already exists
+    const { data: existingCommand } = await supabase
+      .from('integration_commands')
+      .select('id')
+      .eq('integration_id', integrationId)
+      .eq('name', commandData.name)
+      .single();
+
+    const commandPayload = {
+      integration_id: integrationId,
+      name: commandData.name,
+      description: commandData.description,
+      endpoint: commandData.endpoint || `/${commandData.name}`,
+      method: commandData.method,
+      parameters: commandData.parameters || {},
+      example: commandData.example,
+      is_active: true
+    };
+
+    if (existingCommand) {
+      // Update existing command
+      const { error } = await supabase
+        .from('integration_commands')
+        .update(commandPayload)
+        .eq('id', existingCommand.id);
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+    } else {
+      // Create new command
+      const { error } = await supabase
+        .from('integration_commands')
+        .insert(commandPayload);
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error saving integration command:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+};
+
+/**
+ * Delete an integration command
+ */
+export const deleteIntegrationCommand = async (commandId: string): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: 'User not authenticated' };
+    }
+
+    const { error } = await supabase
+      .from('integration_commands')
+      .delete()
+      .eq('id', commandId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting integration command:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 };

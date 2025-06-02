@@ -60,8 +60,8 @@ export const useGemini = () => {
       let systemInstructions = "You are a helpful AI assistant.";
       
       // Add integration context to help AI understand available services
-      const integrationsPrompt = generateIntegrationsSystemPrompt();
-      if (integrationsPrompt) {
+      const integrationsPrompt = await generateIntegrationsSystemPrompt();
+      if (integrationsPrompt && integrationsPrompt.length > 0) {
         systemInstructions += integrationsPrompt;
         console.log('Added integrations context to system prompt');
       }
