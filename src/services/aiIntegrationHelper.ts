@@ -97,7 +97,7 @@ const buildStoredIntegrationContext = (
     commonCommands: commands.map(cmd => ({
       name: cmd.name,
       description: cmd.description || '',
-      example: cmd.example || `${cmd.name}()`,
+      example: cmd.example || `executeIntegrationCommand("${integration.name}", "${cmd.name}")`,
       parameters: Object.keys(cmd.parameters || {})
     })),
     setupInstructions: [],
@@ -106,7 +106,20 @@ const buildStoredIntegrationContext = (
     supabaseId: integration.id
   };
 
-  return enhanceContextByCategory(baseContext);
+  // Only enhance with capabilities if commands actually exist
+  if (commands.length > 0) {
+    return enhanceContextByCategory(baseContext);
+  } else {
+    // No commands exist, provide minimal context
+    baseContext.capabilities = ['Integration configured but no commands available'];
+    baseContext.usageExamples = [`Configure commands for ${integration.name} in Settings > Commands`];
+    baseContext.setupInstructions = [
+      '1. Go to Settings > Commands',
+      '2. Select this integration',
+      '3. Add commands that define how the AI can interact with this service'
+    ];
+    return baseContext;
+  }
 };
 
 /**
@@ -132,13 +145,31 @@ const buildLocalIntegrationContext = (integration: Integration & { isCurrentlyAc
     isConfigured: true
   };
 
-  return enhanceContextByCategory(baseContext);
+  // Only enhance with capabilities if commands actually exist
+  if (integration.commands && integration.commands.length > 0) {
+    return enhanceContextByCategory(baseContext);
+  } else {
+    // No commands exist, provide minimal context
+    baseContext.capabilities = ['Integration available but no commands configured'];
+    baseContext.usageExamples = [`Configure commands for ${integration.name} to enable AI interaction`];
+    baseContext.setupInstructions = [
+      '1. Ensure your integration server is running',
+      '2. Check that commands are properly exposed',
+      '3. Verify the connection in Settings > Integrations'
+    ];
+    return baseContext;
+  }
 };
 
 /**
- * Enhance context based on integration category
+ * Enhance context based on integration category - ONLY when commands exist
  */
 const enhanceContextByCategory = (baseContext: IntegrationContext): IntegrationContext => {
+  // Only provide enhanced capabilities if there are actual commands
+  if (baseContext.commonCommands.length === 0) {
+    return baseContext;
+  }
+
   switch (baseContext.category.toLowerCase()) {
     case 'reminders':
     case 'reminder':
@@ -218,8 +249,8 @@ const enhanceContextByCategory = (baseContext: IntegrationContext): IntegrationC
     default:
       return {
         ...baseContext,
-        capabilities: ['Custom API integration'],
-        usageExamples: [`Interact with ${baseContext.name} service`],
+        capabilities: ['Custom API integration with configured commands'],
+        usageExamples: [`Use the configured commands to interact with ${baseContext.name}`],
         setupInstructions: [
           '1. Configure the API endpoint URL',
           '2. Add API key if required',
@@ -254,14 +285,15 @@ export const generateIntegrationsSystemPrompt = async (): Promise<string> => {
       prompt += `**Description:** ${integration.description}\n`;
     }
 
-    if (integration.capabilities.length > 0) {
-      prompt += `**Capabilities:**\n`;
-      integration.capabilities.forEach(cap => {
-        prompt += `- ${cap}\n`;
-      });
-    }
-
+    // Only show capabilities if commands exist
     if (integration.commonCommands.length > 0) {
+      if (integration.capabilities.length > 0) {
+        prompt += `**Capabilities:**\n`;
+        integration.capabilities.forEach(cap => {
+          prompt += `- ${cap}\n`;
+        });
+      }
+
       prompt += `**Available Commands:**\n`;
       integration.commonCommands.forEach(cmd => {
         prompt += `- \`${cmd.name}\`: ${cmd.description}\n`;
@@ -270,24 +302,35 @@ export const generateIntegrationsSystemPrompt = async (): Promise<string> => {
           prompt += `  Parameters: ${cmd.parameters.join(', ')}\n`;
         }
       });
-    }
 
-    if (integration.usageExamples.length > 0) {
-      prompt += `**Usage Examples:**\n`;
-      integration.usageExamples.forEach(example => {
-        prompt += `- "${example}"\n`;
-      });
+      if (integration.usageExamples.length > 0) {
+        prompt += `**Usage Examples:**\n`;
+        integration.usageExamples.forEach(example => {
+          prompt += `- "${example}"\n`;
+        });
+      }
+    } else {
+      prompt += `**Status:** No commands configured yet. Configure commands in Settings > Commands to enable AI interaction.\n`;
     }
 
     prompt += '\n';
   });
 
-  prompt += '\n**How to use integrations:**\n';
-  prompt += '1. When users ask about tasks, reminders, emails, or other integrated services, use the executeIntegrationCommand function\n';
-  prompt += '2. Always provide helpful context about what you\'re doing ("Let me check your pending tasks...")\n';
-  prompt += '3. If an integration isn\'t working, suggest checking the configuration in Settings > Integrations\n';
-  prompt += '4. Format responses in a user-friendly way, not just raw API data\n';
-  prompt += '5. Use the integration ID and command name to execute commands\n\n';
+  // Only add usage instructions if there are integrations with commands
+  const integrationsWithCommands = activeIntegrations.filter(i => i.commonCommands.length > 0);
+  
+  if (integrationsWithCommands.length > 0) {
+    prompt += '\n**How to use integrations:**\n';
+    prompt += '1. When users ask about tasks, reminders, emails, or other integrated services, use the executeIntegrationCommand function\n';
+    prompt += '2. Always provide helpful context about what you\'re doing ("Let me check your pending tasks...")\n';
+    prompt += '3. If an integration isn\'t working, suggest checking the configuration in Settings > Integrations\n';
+    prompt += '4. Format responses in a user-friendly way, not just raw API data\n';
+    prompt += '5. Use the integration ID and command name to execute commands\n';
+  } else {
+    prompt += '\n**Note:** All integrations are configured but no commands are available yet. Users need to configure commands in Settings > Commands to enable AI interaction with these services.\n';
+  }
+
+  prompt += '\n';
 
   return prompt;
 };
