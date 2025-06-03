@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from "react";
 import { ChatMessage } from "@/hooks/useChatHistory";
 import MessageList from "@/components/MessageList";
@@ -109,12 +110,23 @@ const Index = () => {
       
       const response = await sendMessageToGemini(content, undefined, updatedMessages);
       
-      // Check if response contains integration command with better pattern matching
+      console.log("AI Response received:", response);
+      
+      // Check for different integration command patterns
+      let integrationResult = null;
+      let finalResponse = response;
+      
+      // Pattern 1: executeIntegrationCommand format
       const integrationCommandMatch = response.match(/executeIntegrationCommand\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*['"`]([^'"`]+)['"`](?:\s*,\s*({[^}]*}))?\s*\)/);
       
+      // Pattern 2: tool_code format like "reminder.getTasks" or "reminder.createTask(...)"
+      const toolCodeMatch = response.match(/```tool_code\s*\n\s*([^.]+)\.([^(\s]+)(?:\(([^)]*)\))?\s*\n\s*```/);
+      
+      // Pattern 3: Simple tool format like "reminder.getTasks" without code blocks
+      const simpleToolMatch = response.match(/([^.\s]+)\.([^(\s]+)(?:\(([^)]*)\))?/);
+      
       if (integrationCommandMatch) {
-        console.log("Response contains integration command, processing...");
-        
+        console.log("Found executeIntegrationCommand pattern");
         const [, integrationName, commandName, parametersStr] = integrationCommandMatch;
         let parameters = {};
         
@@ -127,26 +139,76 @@ const Index = () => {
         }
         
         console.log('Executing integration command:', { integrationName, commandName, parameters });
+        integrationResult = await executeIntegrationCommand(integrationName, commandName, parameters);
+      } else if (toolCodeMatch) {
+        console.log("Found tool_code pattern:", toolCodeMatch);
+        const [, integrationName, commandName, parametersStr] = toolCodeMatch;
+        let parameters = {};
         
-        const integrationResult = await executeIntegrationCommand(integrationName, commandName, parameters);
-        
-        let finalResponse = response;
-        if (integrationResult.result) {
-          finalResponse += `\n\n**Integration Result:**\n\`\`\`json\n${JSON.stringify(integrationResult.result, null, 2)}\n\`\`\``;
-        } else if (integrationResult.error) {
-          finalResponse += `\n\n**Integration Error:** ${integrationResult.error.message}`;
+        if (parametersStr) {
+          try {
+            // Parse function parameters like 'title="buy new car", due_date="2025-12-15"'
+            const paramPairs = parametersStr.split(',').map(p => p.trim());
+            for (const pair of paramPairs) {
+              const [key, value] = pair.split('=').map(s => s.trim());
+              if (key && value) {
+                // Remove quotes from value
+                parameters[key] = value.replace(/['"]/g, '');
+              }
+            }
+          } catch (e) {
+            console.error('Error parsing tool_code parameters:', e);
+          }
         }
         
-        const assistantMessage: ChatMessage = { 
-          role: 'assistant', 
-          content: finalResponse,
-          timestamp: Date.now(),
-          isMcpResult: true
-        };
+        console.log('Executing tool_code command:', { integrationName, commandName, parameters });
+        integrationResult = await executeIntegrationCommand(integrationName, commandName, parameters);
+      } else if (simpleToolMatch && response.includes('.')) {
+        console.log("Found simple tool pattern:", simpleToolMatch);
+        const [, integrationName, commandName, parametersStr] = simpleToolMatch;
+        let parameters = {};
         
-        const finalMessages = [...updatedMessages, assistantMessage];
-        setMessages(finalMessages);
-        saveMessages(finalMessages);
+        if (parametersStr) {
+          try {
+            // Similar parameter parsing
+            const paramPairs = parametersStr.split(',').map(p => p.trim());
+            for (const pair of paramPairs) {
+              const [key, value] = pair.split('=').map(s => s.trim());
+              if (key && value) {
+                parameters[key] = value.replace(/['"]/g, '');
+              }
+            }
+          } catch (e) {
+            console.error('Error parsing simple tool parameters:', e);
+          }
+        }
+        
+        console.log('Executing simple tool command:', { integrationName, commandName, parameters });
+        integrationResult = await executeIntegrationCommand(integrationName, commandName, parameters);
+      }
+      
+      // Process integration result
+      if (integrationResult) {
+        console.log("Integration command executed, result:", integrationResult);
+        
+        if (integrationResult.result) {
+          // Format the result nicely
+          let resultText = '';
+          if (typeof integrationResult.result === 'object') {
+            if (Array.isArray(integrationResult.result)) {
+              resultText = `\n\n**Results:**\n${integrationResult.result.map(item => `• ${JSON.stringify(item)}`).join('\n')}`;
+            } else {
+              resultText = `\n\n**Result:**\n\`\`\`json\n${JSON.stringify(integrationResult.result, null, 2)}\n\`\`\``;
+            }
+          } else {
+            resultText = `\n\n**Result:** ${integrationResult.result}`;
+          }
+          
+          finalResponse = response.replace(/```tool_code[\s\S]*?```/g, '').trim() + resultText;
+        } else if (integrationResult.error) {
+          console.error("Integration command error:", integrationResult.error);
+          finalResponse = response.replace(/```tool_code[\s\S]*?```/g, '').trim() + `\n\n**Error:** ${integrationResult.error.message}`;
+        }
       } else if (mcpClient.hasMcpCall(response)) {
         console.log("Response contains MCP call, processing...");
         const mcpCall = mcpClient.extractMcpCall(response);
@@ -156,34 +218,24 @@ const Index = () => {
           
           const mcpResponse = await mcpClient.processMcpCall(mcpCall);
           
-          let finalResponse = response;
           if (mcpResponse.result) {
             finalResponse += `\n\nMCP Result: ${JSON.stringify(mcpResponse.result, null, 2)}`;
           } else if (mcpResponse.error) {
             finalResponse += `\n\nMCP Error: ${mcpResponse.error.message}`;
           }
-          
-          const assistantMessage: ChatMessage = { 
-            role: 'assistant', 
-            content: finalResponse,
-            timestamp: Date.now()
-          };
-          
-          const finalMessages = [...updatedMessages, assistantMessage];
-          setMessages(finalMessages);
-          saveMessages(finalMessages);
         }
-      } else {
-        const assistantMessage: ChatMessage = { 
-          role: 'assistant', 
-          content: response,
-          timestamp: Date.now()
-        };
-        
-        const finalMessages = [...updatedMessages, assistantMessage];
-        setMessages(finalMessages);
-        saveMessages(finalMessages);
       }
+      
+      const assistantMessage: ChatMessage = { 
+        role: 'assistant', 
+        content: finalResponse,
+        timestamp: Date.now(),
+        isMcpResult: !!integrationResult
+      };
+      
+      const finalMessages = [...updatedMessages, assistantMessage];
+      setMessages(finalMessages);
+      saveMessages(finalMessages);
       
     } catch (error) {
       console.error("Error sending message:", error);

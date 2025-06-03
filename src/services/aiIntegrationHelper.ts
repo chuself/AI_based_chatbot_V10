@@ -321,12 +321,17 @@ export const generateIntegrationsSystemPrompt = async (): Promise<string> => {
       prompt += '\n';
     });
 
-    prompt += '\n**How to use integrations:**\n';
-    prompt += '1. When users ask about tasks, reminders, emails, or other integrated services, use the executeIntegrationCommand function\n';
-    prompt += '2. Always provide helpful context about what you\'re doing ("Let me check your pending tasks...")\n';
-    prompt += '3. If an integration isn\'t working, suggest checking the configuration in Settings > Integrations\n';
-    prompt += '4. Format responses in a user-friendly way, not just raw API data\n';
-    prompt += '5. Use the integration ID and command name to execute commands\n';
+    prompt += '\n**CRITICAL: How to use integrations:**\n';
+    prompt += '1. When users ask about tasks, reminders, emails, or other integrated services, use this EXACT format:\n';
+    prompt += '   ```tool_code\n';
+    prompt += '   integrationName.commandName(parameter1="value1", parameter2="value2")\n';
+    prompt += '   ```\n';
+    prompt += '2. For example, to get tasks: ```tool_code\nreminder.getTasks\n```\n';
+    prompt += '3. To create a task: ```tool_code\nreminder.createTask(title="Buy groceries", due_date="2024-12-15")\n```\n';
+    prompt += '4. Always use the exact integration name and command name as shown above\n';
+    prompt += '5. Always provide helpful context about what you\'re doing ("Let me check your pending tasks...")\n';
+    prompt += '6. If an integration isn\'t working, suggest checking the configuration in Settings > Integrations\n';
+    prompt += '7. Format responses in a user-friendly way, not just raw API data\n';
   }
 
   // Show integrations without commands in a separate section
