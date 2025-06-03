@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import getMcpClient, { Integration, IntegrationCommand } from './mcpService';
 import { getCurrentUser } from './supabaseService';
@@ -241,6 +240,9 @@ export const executeIntegrationCommand = async (
       return { error: { message: 'User not authenticated' } };
     }
 
+    console.log(`Executing integration command: ${commandName} for integration: ${integrationId}`);
+    console.log('Parameters:', parameters);
+
     // Get integration details
     const { data: integration, error: integrationError } = await supabase
       .from('integrations')
@@ -250,8 +252,11 @@ export const executeIntegrationCommand = async (
       .single();
 
     if (integrationError || !integration) {
+      console.error('Integration not found:', integrationError);
       return { error: { message: 'Integration not found' } };
     }
+
+    console.log('Found integration:', integration.name, integration.config);
 
     // Get command details
     const { data: command, error: commandError } = await supabase
@@ -262,24 +267,47 @@ export const executeIntegrationCommand = async (
       .single();
 
     if (commandError || !command) {
-      return { error: { message: 'Command not found' } };
+      console.error('Command not found:', commandError);
+      return { error: { message: `Command "${commandName}" not found` } };
     }
+
+    console.log('Found command:', command);
 
     // Build the API URL
     const config = integration.config as any;
     const baseUrl = config.url;
     const endpoint = command.endpoint || `/${commandName}`;
-    const fullUrl = `${baseUrl}${endpoint}`;
+    
+    // For reminder API, ensure we're using the correct full URL
+    let fullUrl: string;
+    if (baseUrl.includes('supabase.co/functions/v1')) {
+      // Already a full Supabase function URL
+      fullUrl = endpoint.startsWith('/') ? `${baseUrl}${endpoint}` : `${baseUrl}/${endpoint}`;
+    } else {
+      // Regular API URL
+      fullUrl = `${baseUrl}${endpoint}`;
+    }
 
-    // Prepare headers
+    console.log('Full API URL:', fullUrl);
+
+    // Prepare headers with correct Bearer token format
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(config.headers || {})
     };
 
     if (config.apiKey) {
-      headers['Authorization'] = `Bearer ${config.apiKey}`;
+      // Ensure Bearer format for API key
+      if (config.apiKey.startsWith('sk_')) {
+        headers['Authorization'] = `Bearer ${config.apiKey}`;
+      } else if (!config.apiKey.startsWith('Bearer ')) {
+        headers['Authorization'] = `Bearer ${config.apiKey}`;
+      } else {
+        headers['Authorization'] = config.apiKey;
+      }
     }
+
+    console.log('Request headers:', headers);
 
     // Make the API call
     const fetchOptions: RequestInit = {
@@ -289,9 +317,11 @@ export const executeIntegrationCommand = async (
 
     if (command.method !== 'GET' && Object.keys(parameters).length > 0) {
       fetchOptions.body = JSON.stringify(parameters);
+      console.log('Request body:', fetchOptions.body);
     } else if (command.method === 'GET' && Object.keys(parameters).length > 0) {
       const searchParams = new URLSearchParams(parameters);
       const urlWithParams = `${fullUrl}?${searchParams}`;
+      console.log('GET URL with params:', urlWithParams);
       return await makeApiCall(urlWithParams, { ...fetchOptions, method: 'GET' });
     }
 
@@ -307,15 +337,29 @@ export const executeIntegrationCommand = async (
  */
 const makeApiCall = async (url: string, options: RequestInit): Promise<{ result?: any; error?: { message: string } }> => {
   try {
-    console.log('Making API call to:', url, 'with options:', options);
+    console.log('Making API call to:', url);
+    console.log('Request options:', options);
     
     const response = await fetch(url, options);
     
+    console.log('Response status:', response.status);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+    
     if (!response.ok) {
-      return { error: { message: `API call failed with status ${response.status}: ${response.statusText}` } };
+      const errorText = await response.text();
+      console.error('API call failed:', response.status, response.statusText, errorText);
+      return { error: { message: `API call failed with status ${response.status}: ${response.statusText}. ${errorText}` } };
     }
 
-    const result = await response.json();
+    const contentType = response.headers.get('content-type');
+    let result;
+    
+    if (contentType && contentType.includes('application/json')) {
+      result = await response.json();
+    } else {
+      result = await response.text();
+    }
+    
     console.log('API call successful, result:', result);
     
     return { result };

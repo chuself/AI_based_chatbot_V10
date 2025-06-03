@@ -25,50 +25,53 @@ const Settings = () => {
       <div className="pt-20 pb-8">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <Tabs defaultValue="general" className="w-full">
-            <TabsList className="glass-card grid w-full grid-cols-6 mb-8 p-1">
-              <TabsTrigger 
-                value="general" 
-                className="flex items-center gap-2 glass-button data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400"
-              >
-                <SettingsIcon className="h-4 w-4" />
-                <span className="hidden sm:inline">General</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="models" 
-                className="flex items-center gap-2 glass-button data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400"
-              >
-                <Cpu className="h-4 w-4" />
-                <span className="hidden sm:inline">Models</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="speech" 
-                className="flex items-center gap-2 glass-button data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400"
-              >
-                <Volume2 className="h-4 w-4" />
-                <span className="hidden sm:inline">Speech</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="integrations" 
-                className="flex items-center gap-2 glass-button data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400"
-              >
-                <Globe className="h-4 w-4" />
-                <span className="hidden sm:inline">Integrations</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="commands" 
-                className="flex items-center gap-2 glass-button data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400"
-              >
-                <Terminal className="h-4 w-4" />
-                <span className="hidden sm:inline">Commands</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="sync" 
-                className="flex items-center gap-2 glass-button data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400"
-              >
-                <RefreshCw className="h-4 w-4" />
-                <span className="hidden sm:inline">Sync</span>
-              </TabsTrigger>
-            </TabsList>
+            {/* Sticky Tab Navigation */}
+            <div className="sticky top-16 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-3 mb-6">
+              <TabsList className="glass-card grid w-full grid-cols-6 p-1 max-w-4xl mx-auto">
+                <TabsTrigger 
+                  value="general" 
+                  className="flex items-center gap-2 glass-button data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400"
+                >
+                  <SettingsIcon className="h-4 w-4" />
+                  <span className="hidden sm:inline">General</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="models" 
+                  className="flex items-center gap-2 glass-button data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400"
+                >
+                  <Cpu className="h-4 w-4" />
+                  <span className="hidden sm:inline">Models</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="speech" 
+                  className="flex items-center gap-2 glass-button data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400"
+                >
+                  <Volume2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Speech</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="integrations" 
+                  className="flex items-center gap-2 glass-button data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400"
+                >
+                  <Globe className="h-4 w-4" />
+                  <span className="hidden sm:inline">Integrations</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="commands" 
+                  className="flex items-center gap-2 glass-button data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400"
+                >
+                  <Terminal className="h-4 w-4" />
+                  <span className="hidden sm:inline">Commands</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="sync" 
+                  className="flex items-center gap-2 glass-button data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  <span className="hidden sm:inline">Sync</span>
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
             <div className="space-y-6">
               <TabsContent value="general" className="animate-fade-in">

@@ -33,6 +33,22 @@ const CommandsTab = () => {
                 command to fetch data from your reminder API and present it in a user-friendly format.
               </p>
             </div>
+
+            <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+              <h3 className="font-medium text-green-900 dark:text-green-100 mb-2">Reminder API Setup Guide</h3>
+              <div className="text-sm text-green-800 dark:text-green-200 space-y-2">
+                <p><strong>Base URL:</strong> https://uyxunjmpsyeujzihthdr.supabase.co/functions/v1</p>
+                <p><strong>Authentication:</strong> Bearer token in Authorization header</p>
+                <p><strong>Common Commands to Add:</strong></p>
+                <ul className="ml-4 space-y-1">
+                  <li>• <strong>getTasks</strong> - GET /api-reminders (List all reminders)</li>
+                  <li>• <strong>createTask</strong> - POST /api-reminders (Create new reminder)</li>
+                  <li>• <strong>updateTask</strong> - PUT /api-reminders/{'{id}'} (Update reminder)</li>
+                  <li>• <strong>getProfile</strong> - GET /api-profile (Get user profile)</li>
+                  <li>• <strong>getUsage</strong> - GET /api-usage (Get API usage stats)</li>
+                </ul>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>

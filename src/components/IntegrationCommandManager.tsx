@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Plus, Edit, Save, X } from 'lucide-react';
+import { Trash2, Plus, Edit, Save, X, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { 
   fetchIntegrationsFromSupabase, 
@@ -34,6 +33,50 @@ const IntegrationCommandManager = () => {
     example: ''
   });
   const { toast } = useToast();
+
+  // Reminder API command templates
+  const reminderTemplates = [
+    {
+      name: 'getTasks',
+      description: 'Get all reminders/tasks for the user',
+      endpoint: '/api-reminders',
+      method: 'GET',
+      parameters: '{}',
+      example: 'Get my pending tasks'
+    },
+    {
+      name: 'createTask',
+      description: 'Create a new reminder/task',
+      endpoint: '/api-reminders',
+      method: 'POST',
+      parameters: '{"title": "string", "description": "string", "due_date": "YYYY-MM-DD", "due_time": "HH:MM", "priority": "High|Medium|Low", "tags": ["array", "of", "strings"]}',
+      example: 'Create a reminder to call John tomorrow at 3 PM'
+    },
+    {
+      name: 'updateTask',
+      description: 'Update an existing reminder/task',
+      endpoint: '/api-reminders/{id}',
+      method: 'PUT',
+      parameters: '{"title": "string", "description": "string", "completed_at": "ISO_DATE_STRING"}',
+      example: 'Mark the grocery shopping task as completed'
+    },
+    {
+      name: 'getProfile',
+      description: 'Get user profile information',
+      endpoint: '/api-profile',
+      method: 'GET',
+      parameters: '{}',
+      example: 'Show my profile information'
+    },
+    {
+      name: 'getUsage',
+      description: 'Get API usage statistics',
+      endpoint: '/api-usage',
+      method: 'GET',
+      parameters: '{}',
+      example: 'Show my API usage stats'
+    }
+  ];
 
   useEffect(() => {
     loadData();
@@ -100,7 +143,6 @@ const IntegrationCommandManager = () => {
           example: ''
         });
         
-        // Reload data
         await loadData();
       } else {
         toast({
@@ -136,8 +178,16 @@ const IntegrationCommandManager = () => {
     }
   };
 
+  const useTemplate = (template: any) => {
+    setNewCommand(template);
+    setShowNewCommandForm(true);
+  };
+
   const selectedIntegration = integrations.find(i => i.id === selectedIntegrationId);
   const filteredCommands = commands.filter(c => c.integration_id === selectedIntegrationId);
+  const isReminderIntegration = selectedIntegration?.category.toLowerCase().includes('reminder') || 
+                                 selectedIntegration?.name.toLowerCase().includes('reminder') ||
+                                 selectedIntegration?.description?.toLowerCase().includes('reminder');
 
   if (isLoading) {
     return <div className="flex items-center justify-center p-8">Loading...</div>;
@@ -188,6 +238,41 @@ const IntegrationCommandManager = () => {
                     </div>
                   </div>
 
+                  {/* Show templates for reminder integrations */}
+                  {isReminderIntegration && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">Quick Setup - Reminder API Commands</CardTitle>
+                        <CardDescription>
+                          Click any template below to quickly add pre-configured commands for your reminder API
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {reminderTemplates.map((template, index) => (
+                            <Button
+                              key={index}
+                              variant="outline"
+                              onClick={() => useTemplate(template)}
+                              className="h-auto p-3 text-left flex flex-col items-start"
+                            >
+                              <div className="flex items-center gap-2 w-full">
+                                <Copy className="h-4 w-4" />
+                                <span className="font-medium">{template.name}</span>
+                                <Badge variant="secondary" className="ml-auto">
+                                  {template.method}
+                                </Badge>
+                              </div>
+                              <span className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                {template.description}
+                              </span>
+                            </Button>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-medium">Commands ({filteredCommands.length})</h3>
                     <Button onClick={() => setShowNewCommandForm(true)} size="sm">
@@ -231,7 +316,8 @@ const IntegrationCommandManager = () => {
 
                   {filteredCommands.length === 0 && !showNewCommandForm && (
                     <div className="text-center py-8 text-gray-500">
-                      No commands found for this integration. Add your first command to get started.
+                      No commands found for this integration. 
+                      {isReminderIntegration ? ' Use the quick setup templates above or add your first command to get started.' : ' Add your first command to get started.'}
                     </div>
                   )}
                 </div>
@@ -300,7 +386,7 @@ const NewCommandForm: React.FC<CommandFormProps> = ({ command, onChange, onSave,
             id="endpoint"
             value={command.endpoint}
             onChange={(e) => onChange({ ...command, endpoint: e.target.value })}
-            placeholder="e.g., /api/tasks"
+            placeholder="e.g., /api-reminders"
           />
         </div>
 
