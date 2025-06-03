@@ -1,4 +1,3 @@
-
 /**
  * AI Integration Helper - Provides context and prompts for AI to understand integrations
  * 
@@ -58,18 +57,24 @@ export const getIntegrationsContext = async (): Promise<IntegrationContext[]> =>
     for (const stored of storedIntegrations) {
       const commands = storedCommands.filter(cmd => cmd.integration_id === stored.id);
       const context = buildStoredIntegrationContext(stored, commands);
-      combinedIntegrations.set(stored.name, context);
+      // Use a composite key to avoid conflicts
+      const key = `${stored.name}-${stored.category}`;
+      combinedIntegrations.set(key, context);
     }
 
     // Add local integrations that aren't already stored
     for (const local of localIntegrations) {
-      if (!combinedIntegrations.has(local.name)) {
+      const key = `${local.name}-${local.category}`;
+      if (!combinedIntegrations.has(key)) {
         const context = buildLocalIntegrationContext(local);
-        combinedIntegrations.set(local.name, context);
+        combinedIntegrations.set(key, context);
       }
     }
 
-    return Array.from(combinedIntegrations.values());
+    const result = Array.from(combinedIntegrations.values());
+    console.log('Final integrations context:', result.map(i => ({ name: i.name, category: i.category, commands: i.commonCommands.length })));
+    
+    return result;
   } catch (error) {
     console.error('Error getting integrations context:', error);
     // Fallback to local integrations only
@@ -97,7 +102,7 @@ const buildStoredIntegrationContext = (
     commonCommands: commands.map(cmd => ({
       name: cmd.name,
       description: cmd.description || '',
-      example: cmd.example || `executeIntegrationCommand("${integration.name}", "${cmd.name}")`,
+      example: cmd.example || `${integration.name}.${cmd.name}()`,
       parameters: Object.keys(cmd.parameters || {})
     })),
     setupInstructions: [],
@@ -139,7 +144,7 @@ const buildLocalIntegrationContext = (integration: Integration & { isCurrentlyAc
     commonCommands: (integration.commands || []).map(cmd => ({
       name: cmd.name,
       description: cmd.description || '',
-      example: cmd.example || `${cmd.name}()`,
+      example: cmd.example || `${integration.name}.${cmd.name}()`,
       parameters: cmd.parameters ? Object.keys(cmd.parameters) : []
     })),
     setupInstructions: [],
@@ -174,95 +179,94 @@ const enhanceContextByCategory = (baseContext: IntegrationContext): IntegrationC
     return baseContext;
   }
 
-  switch (baseContext.category.toLowerCase()) {
-    case 'reminders':
-    case 'reminder':
-    case 'tasks':
-    case 'todo':
-      return {
-        ...baseContext,
-        capabilities: [
-          'Retrieve pending tasks and reminders',
-          'Create new reminders with due dates',
-          'Mark tasks as completed',
-          'Update reminder details',
-          'Delete reminders',
-          'Search tasks by title or date'
-        ],
-        usageExamples: [
-          'Check my pending tasks',
-          'What reminders do I have for today?',
-          'Add a reminder to call John tomorrow at 3 PM',
-          'Mark the grocery shopping task as done',
-          'Show me all overdue reminders'
-        ],
-        setupInstructions: [
-          '1. Ensure your reminder app API is accessible via the configured URL',
-          '2. Verify API key authentication is working (if required)',
-          '3. Test the connection using the "Test Connection" button in integrations',
-          '4. Make sure your API returns data in JSON format',
-          '5. Check that CORS is properly configured if calling from browser'
-        ]
-      };
-
-    case 'search':
-      return {
-        ...baseContext,
-        capabilities: [
-          'Search the web for current information',
-          'Find specific facts and data',
-          'Get recent news and updates',
-          'Research topics and questions'
-        ],
-        usageExamples: [
-          'Search for latest AI news',
-          'What\'s the weather like today?',
-          'Find information about quantum computing',
-          'Search for restaurant reviews near me'
-        ],
-        setupInstructions: [
-          '1. Configure the search server URL (default: DuckDuckGo MCP server)',
-          '2. Test the connection to ensure search is working',
-          '3. No API key required for basic search functionality'
-        ]
-      };
-
-    case 'email':
-    case 'gmail':
-      return {
-        ...baseContext,
-        capabilities: [
-          'Read and search emails',
-          'Send new emails',
-          'Reply to messages',
-          'Manage email folders'
-        ],
-        usageExamples: [
-          'Check my recent emails',
-          'Send an email to John about the meeting',
-          'Search for emails from my manager',
-          'Reply to the last email from Sarah'
-        ],
-        setupInstructions: [
-          '1. Connect your Gmail account using OAuth',
-          '2. Grant necessary permissions for reading and sending emails',
-          '3. Test the connection to verify access'
-        ]
-      };
-
-    default:
-      return {
-        ...baseContext,
-        capabilities: ['Custom API integration with configured commands'],
-        usageExamples: [`Use the configured commands to interact with ${baseContext.name}`],
-        setupInstructions: [
-          '1. Configure the API endpoint URL',
-          '2. Add API key if required',
-          '3. Test the connection',
-          '4. Define available commands/endpoints'
-        ]
-      };
+  const category = baseContext.category.toLowerCase();
+  
+  if (['reminders', 'reminder', 'tasks', 'todo'].includes(category)) {
+    return {
+      ...baseContext,
+      capabilities: [
+        'Retrieve pending tasks and reminders',
+        'Create new reminders with due dates',
+        'Mark tasks as completed',
+        'Update reminder details',
+        'Delete reminders',
+        'Search tasks by title or date'
+      ],
+      usageExamples: [
+        'Check my pending tasks',
+        'What reminders do I have for today?',
+        'Add a reminder to call John tomorrow at 3 PM',
+        'Mark the grocery shopping task as done',
+        'Show me all overdue reminders'
+      ],
+      setupInstructions: [
+        '1. Ensure your reminder app API is accessible via the configured URL',
+        '2. Verify API key authentication is working (if required)',
+        '3. Test the connection using the "Test Connection" button in integrations',
+        '4. Make sure your API returns data in JSON format',
+        '5. Check that CORS is properly configured if calling from browser'
+      ]
+    };
   }
+
+  if (category === 'search') {
+    return {
+      ...baseContext,
+      capabilities: [
+        'Search the web for current information',
+        'Find specific facts and data',
+        'Get recent news and updates',
+        'Research topics and questions'
+      ],
+      usageExamples: [
+        'Search for latest AI news',
+        'What\'s the weather like today?',
+        'Find information about quantum computing',
+        'Search for restaurant reviews near me'
+      ],
+      setupInstructions: [
+        '1. Configure the search server URL (default: DuckDuckGo MCP server)',
+        '2. Test the connection to ensure search is working',
+        '3. No API key required for basic search functionality'
+      ]
+    };
+  }
+
+  if (['email', 'gmail'].includes(category)) {
+    return {
+      ...baseContext,
+      capabilities: [
+        'Read and search emails',
+        'Send new emails',
+        'Reply to messages',
+        'Manage email folders'
+      ],
+      usageExamples: [
+        'Check my recent emails',
+        'Send an email to John about the meeting',
+        'Search for emails from my manager',
+        'Reply to the last email from Sarah'
+      ],
+      setupInstructions: [
+        '1. Connect your Gmail account using OAuth',
+        '2. Grant necessary permissions for reading and sending emails',
+        '3. Test the connection to verify access'
+      ]
+    };
+  }
+
+  // Default case
+  return {
+    ...baseContext,
+    capabilities: ['Custom API integration with configured commands'],
+    usageExamples: [`Use the configured commands to interact with ${baseContext.name}`],
+    setupInstructions: [
+      '1. Configure the API endpoint URL',
+      '2. Add API key if required',
+      '3. Test the connection',
+      '4. Define available commands/endpoints'
+    ]
+  };
 };
 
 /**

@@ -1,3 +1,4 @@
+
 /**
  * MCP Service - Handles interactions with the Model Context Protocol server and direct APIs
  * 
@@ -34,6 +35,8 @@ export interface ApiEndpoint {
 export interface IntegrationCommand {
   name: string;
   description: string;
+  endpoint?: string;
+  method?: string;
   parameters?: Record<string, any>;
   example?: string;
 }
