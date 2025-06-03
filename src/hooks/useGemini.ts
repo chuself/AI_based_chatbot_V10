@@ -2,12 +2,14 @@ import { useState, useEffect } from "react";
 import { ModelConfig, useGeminiConfig } from "./useGeminiConfig";
 import { useChatHistory, ChatMessage, MAX_HISTORY_LENGTH } from "./useChatHistory";
 import { generateIntegrationsSystemPrompt } from "@/services/aiIntegrationHelper";
+import { useCommands } from "./useCommands";
 
 export const useGemini = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { modelConfig, selectedModel, isValidated } = useGeminiConfig();
   const { chatHistory, setChatHistory, clearChatHistory } = useChatHistory();
+  const { commands } = useCommands();
 
   const sendMessage = async (
     message: string, 
@@ -59,6 +61,46 @@ export const useGemini = () => {
       // Build comprehensive system instructions
       let systemInstructions = "You are a helpful AI assistant.";
       
+      // Add personality and instructions from normal commands first
+      if (commands && commands.length > 0) {
+        const personalityCommands = commands.filter(cmd => 
+          cmd.type !== 'mcp' && 
+          (cmd.instruction || cmd.prompt) &&
+          (cmd.name.toLowerCase().includes('personality') || 
+           cmd.name.toLowerCase().includes('behavior') ||
+           cmd.name.toLowerCase().includes('instructions') ||
+           cmd.instruction?.toLowerCase().includes('you are') ||
+           cmd.prompt?.toLowerCase().includes('you are'))
+        );
+        
+        if (personalityCommands.length > 0) {
+          systemInstructions += "\n\n## Personality and Behavior Instructions:\n";
+          personalityCommands.forEach(cmd => {
+            const instruction = cmd.instruction || cmd.prompt;
+            if (instruction) {
+              systemInstructions += `\n- ${cmd.name}: ${instruction}`;
+            }
+          });
+        }
+        
+        // Add other general commands as context
+        const otherCommands = commands.filter(cmd => 
+          cmd.type !== 'mcp' && 
+          !personalityCommands.includes(cmd) &&
+          (cmd.instruction || cmd.prompt)
+        );
+        
+        if (otherCommands.length > 0) {
+          systemInstructions += "\n\n## Available Commands and Instructions:\n";
+          otherCommands.forEach(cmd => {
+            const instruction = cmd.instruction || cmd.prompt;
+            if (instruction) {
+              systemInstructions += `\n- ${cmd.name}: ${instruction}`;
+            }
+          });
+        }
+      }
+      
       // Add integration context to help AI understand available services
       const integrationsPrompt = await generateIntegrationsSystemPrompt();
       if (integrationsPrompt && integrationsPrompt.length > 0) {
@@ -84,6 +126,7 @@ export const useGemini = () => {
       console.log('Message count:', messages.length);
       console.log('API key length:', modelConfig.apiKey?.length || 0);
       console.log('System prompt includes integrations:', integrationsPrompt.length > 0);
+      console.log('System prompt includes normal commands:', commands.length > 0);
 
       let response;
       

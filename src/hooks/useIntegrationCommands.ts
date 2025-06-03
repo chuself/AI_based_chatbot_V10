@@ -56,8 +56,31 @@ export const useIntegrationCommands = () => {
         };
       }
 
-      // Check if the command exists
-      const commandExists = integration.commonCommands.some(cmd => cmd.name.toLowerCase() === commandName.toLowerCase());
+      // Normalize command names - handle common variations
+      let normalizedCommandName = commandName.toLowerCase();
+      
+      // Map common command variations to the correct command names
+      const commandMappings: Record<string, string> = {
+        'deletetask': 'deleteTask',
+        'delete_task': 'deleteTask',
+        'updatetask': 'updateTask', 
+        'update_task': 'updateTask',
+        'gettasks': 'getTasks',
+        'get_tasks': 'getTasks',
+        'createtask': 'createTask',
+        'create_task': 'createTask'
+      };
+      
+      // Apply mapping if exists
+      if (commandMappings[normalizedCommandName]) {
+        normalizedCommandName = commandMappings[normalizedCommandName];
+      }
+
+      // Check if the command exists (case-insensitive)
+      const commandExists = integration.commonCommands.some(cmd => 
+        cmd.name.toLowerCase() === normalizedCommandName.toLowerCase()
+      );
+      
       if (!commandExists) {
         console.error(`Command "${commandName}" not found in integration "${integration.name}". Available commands:`, integration.commonCommands.map(c => c.name));
         return { 
@@ -67,11 +90,18 @@ export const useIntegrationCommands = () => {
         };
       }
 
-      console.log(`Executing command ${commandName} on integration ${integration.name} with parameters:`, parameters);
+      // Find the actual command name with correct casing
+      const actualCommand = integration.commonCommands.find(cmd => 
+        cmd.name.toLowerCase() === normalizedCommandName.toLowerCase()
+      );
+      
+      const finalCommandName = actualCommand ? actualCommand.name : normalizedCommandName;
+
+      console.log(`Executing command ${finalCommandName} on integration ${integration.name} with parameters:`, parameters);
       
       const result = await executeIntegrationCommand(
         integration.supabaseId,
-        commandName,
+        finalCommandName,
         parameters
       );
 

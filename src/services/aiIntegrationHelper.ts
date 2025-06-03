@@ -335,7 +335,8 @@ export const generateIntegrationsSystemPrompt = async (): Promise<string> => {
     prompt += '4. Always use the exact integration name and command name as shown above\n';
     prompt += '5. Always provide helpful context about what you\'re doing ("Let me check your pending tasks...")\n';
     prompt += '6. If an integration isn\'t working, suggest checking the configuration in Settings > Integrations\n';
-    prompt += '7. Format responses in a user-friendly way, not just raw API data\n';
+    prompt += '7. **IMPORTANT: Format ALL responses in a conversational, human-friendly way. Never show raw JSON or technical output unless specifically asked. Present information naturally as if you\'re having a conversation.**\n';
+    prompt += '8. **CRITICAL: When showing API usage information, only show: API name, usage count, purpose, and response summary. Do not show full technical details unless requested.**\n';
   }
 
   // Show integrations without commands in a separate section

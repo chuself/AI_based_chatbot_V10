@@ -88,6 +88,60 @@ const Index = () => {
     saveMessages(updatedMessages);
   };
 
+  // Helper function to format integration results in a conversational way
+  const formatIntegrationResult = (result: any, commandName: string, integrationName: string): string => {
+    if (!result) return "The command was executed successfully.";
+    
+    // Handle task/reminder operations specifically
+    if (integrationName.toLowerCase().includes('reminder') || integrationName.toLowerCase().includes('task')) {
+      if (commandName.toLowerCase() === 'gettasks') {
+        if (Array.isArray(result.data)) {
+          if (result.data.length === 0) {
+            return "You don't have any pending tasks at the moment.";
+          }
+          
+          const taskList = result.data.map((task: any, index: number) => {
+            const dueDate = task.due_date ? new Date(task.due_date).toLocaleDateString() : 'No due date';
+            return `${index + 1}. **${task.title}** - Due: ${dueDate} (Priority: ${task.priority || 'Medium'})`;
+          }).join('\n');
+          
+          return `Here are your current tasks:\n\n${taskList}`;
+        }
+      } else if (commandName.toLowerCase() === 'createtask') {
+        if (result.data && result.data.title) {
+          const dueDate = result.data.due_date ? new Date(result.data.due_date).toLocaleDateString() : 'No due date set';
+          return `Great! I've created a new task "${result.data.title}" for you. Due date: ${dueDate}`;
+        }
+      } else if (commandName.toLowerCase() === 'updatetask') {
+        if (result.data && result.data.title) {
+          return `Perfect! I've updated the task "${result.data.title}" successfully.`;
+        } else {
+          return "The task has been updated successfully.";
+        }
+      } else if (commandName.toLowerCase() === 'deletetask') {
+        return "The task has been deleted successfully.";
+      }
+    }
+    
+    // For other integrations or when specific formatting isn't available
+    if (typeof result === 'string') {
+      return result;
+    } else if (typeof result === 'object') {
+      // Try to extract meaningful information from the result
+      if (result.message) {
+        return result.message;
+      } else if (result.data) {
+        if (Array.isArray(result.data)) {
+          return `Found ${result.data.length} results.`;
+        } else if (typeof result.data === 'object' && result.data.title) {
+          return `Operation completed for: ${result.data.title}`;
+        }
+      }
+    }
+    
+    return "The operation was completed successfully.";
+  };
+
   const sendMessage = async (content: string) => {
     if (!content.trim()) return;
     
@@ -162,22 +216,20 @@ const Index = () => {
         console.log("Integration command executed, result:", integrationResult);
         
         if (integrationResult.result) {
-          // Format the result nicely
-          let resultText = '';
-          if (typeof integrationResult.result === 'object') {
-            if (Array.isArray(integrationResult.result)) {
-              resultText = `\n\n**Results:**\n${integrationResult.result.map(item => `• ${JSON.stringify(item)}`).join('\n')}`;
-            } else {
-              resultText = `\n\n**Result:**\n\`\`\`json\n${JSON.stringify(integrationResult.result, null, 2)}\n\`\`\``;
-            }
-          } else {
-            resultText = `\n\n**Result:** ${integrationResult.result}`;
-          }
+          // Format the result in a conversational way
+          const conversationalResult = formatIntegrationResult(
+            integrationResult.result, 
+            toolCodeMatch ? toolCodeMatch[2] : '', 
+            toolCodeMatch ? toolCodeMatch[1] : ''
+          );
           
-          finalResponse = response.replace(/```tool_code[\s\S]*?```/g, '').trim() + resultText;
+          // Remove the tool_code block and replace with conversational response
+          finalResponse = response.replace(/```tool_code[\s\S]*?```/g, '').trim() + 
+                         (finalResponse.trim() ? '\n\n' : '') + conversationalResult;
         } else if (integrationResult.error) {
           console.error("Integration command error:", integrationResult.error);
-          finalResponse = response.replace(/```tool_code[\s\S]*?```/g, '').trim() + `\n\n**Error:** ${integrationResult.error.message}`;
+          finalResponse = response.replace(/```tool_code[\s\S]*?```/g, '').trim() + 
+                         `\n\nI encountered an error: ${integrationResult.error.message}`;
         }
       }
       
