@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from "react";
 import { ChatMessage } from "@/hooks/useChatHistory";
 import MessageList from "@/components/MessageList";
@@ -158,13 +159,13 @@ const Index = () => {
     setIsLoading(true);
     
     try {
-      console.log("Sending message to AI with integration context...");
+      console.log("Sending message to AI...");
       
       const response = await sendMessageToGemini(content, undefined, updatedMessages);
       
       console.log("AI Response received:", response);
       
-      // Simplified integration command handling - only look for tool_code pattern
+      // ONLY process integration commands if they contain actual tool_code format
       let integrationResult = null;
       let finalResponse = response;
       
@@ -192,8 +193,29 @@ const Index = () => {
           }
         }
         
-        console.log('Executing tool_code command:', { integrationName, commandName, parameters });
+        console.log('Executing REAL integration command:', { integrationName, commandName, parameters });
         integrationResult = await executeIntegrationCommand(integrationName, commandName, parameters);
+        
+        if (integrationResult) {
+          console.log("REAL Integration command executed, result:", integrationResult);
+          
+          if (integrationResult.result) {
+            // Format the result in a conversational way
+            const conversationalResult = formatIntegrationResult(
+              integrationResult.result, 
+              commandName, 
+              integrationName
+            );
+            
+            // Remove the tool_code block and replace with conversational response
+            finalResponse = response.replace(/```tool_code[\s\S]*?```/g, '').trim() + 
+                           (finalResponse.trim() ? '\n\n' : '') + conversationalResult;
+          } else if (integrationResult.error) {
+            console.error("Integration command error:", integrationResult.error);
+            finalResponse = response.replace(/```tool_code[\s\S]*?```/g, '').trim() + 
+                           `\n\nI encountered an error: ${integrationResult.error.message}`;
+          }
+        }
       } else if (mcpClient.hasMcpCall(response)) {
         console.log("Response contains MCP call, processing...");
         const mcpCall = mcpClient.extractMcpCall(response);
@@ -208,28 +230,6 @@ const Index = () => {
           } else if (mcpResponse.error) {
             finalResponse += `\n\nMCP Error: ${mcpResponse.error.message}`;
           }
-        }
-      }
-      
-      // Process integration result
-      if (integrationResult) {
-        console.log("Integration command executed, result:", integrationResult);
-        
-        if (integrationResult.result) {
-          // Format the result in a conversational way
-          const conversationalResult = formatIntegrationResult(
-            integrationResult.result, 
-            toolCodeMatch ? toolCodeMatch[2] : '', 
-            toolCodeMatch ? toolCodeMatch[1] : ''
-          );
-          
-          // Remove the tool_code block and replace with conversational response
-          finalResponse = response.replace(/```tool_code[\s\S]*?```/g, '').trim() + 
-                         (finalResponse.trim() ? '\n\n' : '') + conversationalResult;
-        } else if (integrationResult.error) {
-          console.error("Integration command error:", integrationResult.error);
-          finalResponse = response.replace(/```tool_code[\s\S]*?```/g, '').trim() + 
-                         `\n\nI encountered an error: ${integrationResult.error.message}`;
         }
       }
       

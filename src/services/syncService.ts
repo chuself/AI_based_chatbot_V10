@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentUser } from "./supabaseService";
 import { ChatMessage } from "@/hooks/useChatHistory";
@@ -13,6 +14,8 @@ export interface UserData {
   customCommands?: Command[];
   memories?: MemoryEntry[];
   chatHistory?: ChatMessage[];
+  integrations?: any[];
+  commandsTabSettings?: any;
 }
 
 export interface SyncMetadata {
@@ -40,6 +43,8 @@ export interface SyncStatus {
   customCommands: boolean;
   memories: boolean;
   chatHistory: boolean;
+  integrations: boolean;
+  commandsTabSettings: boolean;
 }
 
 export interface DataComparisonResult {
@@ -58,6 +63,8 @@ class SyncServiceImpl {
     CUSTOM_COMMANDS: 'custom-ai-commands',
     MEMORIES: 'ai-memories',
     CHAT_HISTORY: 'chat-history',
+    INTEGRATIONS: 'integrations-data',
+    COMMANDS_TAB_SETTINGS: 'commands-tab-settings',
     SYNC_METADATA: 'sync-metadata'
   };
 
@@ -86,7 +93,9 @@ class SyncServiceImpl {
       integrationSettings: !!(localData.integrationSettings && Object.keys(localData.integrationSettings).length > 0),
       customCommands: !!(localData.customCommands && localData.customCommands.length > 0),
       memories: !!(localData.memories && localData.memories.length > 0),
-      chatHistory: !!(localData.chatHistory && localData.chatHistory.length > 0)
+      chatHistory: !!(localData.chatHistory && localData.chatHistory.length > 0),
+      integrations: !!(localData.integrations && localData.integrations.length > 0),
+      commandsTabSettings: !!(localData.commandsTabSettings && Object.keys(localData.commandsTabSettings).length > 0)
     };
   }
 
@@ -207,6 +216,22 @@ class SyncServiceImpl {
           data.chatHistory = parsed;
         }
       }
+
+      const integrationsStr = localStorage.getItem(this.LOCAL_KEYS.INTEGRATIONS);
+      if (integrationsStr) {
+        const parsed = JSON.parse(integrationsStr);
+        if (Array.isArray(parsed)) {
+          data.integrations = parsed;
+        }
+      }
+
+      const commandsTabStr = localStorage.getItem(this.LOCAL_KEYS.COMMANDS_TAB_SETTINGS);
+      if (commandsTabStr) {
+        const parsed = JSON.parse(commandsTabStr);
+        if (parsed && typeof parsed === 'object') {
+          data.commandsTabSettings = parsed;
+        }
+      }
     } catch (error) {
       console.error("Error loading local data:", error);
     }
@@ -236,6 +261,12 @@ class SyncServiceImpl {
       }
       if (data.chatHistory) {
         localStorage.setItem(this.LOCAL_KEYS.CHAT_HISTORY, JSON.stringify(data.chatHistory));
+      }
+      if (data.integrations) {
+        localStorage.setItem(this.LOCAL_KEYS.INTEGRATIONS, JSON.stringify(data.integrations));
+      }
+      if (data.commandsTabSettings) {
+        localStorage.setItem(this.LOCAL_KEYS.COMMANDS_TAB_SETTINGS, JSON.stringify(data.commandsTabSettings));
       }
 
       this.updateSyncMetadata({
@@ -323,6 +354,8 @@ class SyncServiceImpl {
         customCommands: this.parseJsonField(data.custom_commands),
         memories: this.parseJsonField(data.memories),
         chatHistory: this.parseJsonField(data.chat_history),
+        integrations: this.parseJsonField(data.integrations),
+        commandsTabSettings: this.parseJsonField(data.commands_tab_settings),
         syncMetadata: {
           lastSyncedAt: data.last_synced_at || data.created_at,
           syncSource: (data.sync_source as 'local' | 'cloud' | 'merged') || 'cloud',
@@ -382,7 +415,13 @@ class SyncServiceImpl {
                   (currentLocalData.memories ? JSON.stringify(currentLocalData.memories) : JSON.stringify([]))),
         chat_history: data.chatHistory ? JSON.stringify(data.chatHistory) : 
                      (currentCloudData?.chatHistory ? JSON.stringify(currentCloudData.chatHistory) : 
-                      (currentLocalData.chatHistory ? JSON.stringify(currentLocalData.chatHistory) : JSON.stringify([])))
+                      (currentLocalData.chatHistory ? JSON.stringify(currentLocalData.chatHistory) : JSON.stringify([]))),
+        integrations: data.integrations ? JSON.stringify(data.integrations) : 
+                     (currentCloudData?.integrations ? JSON.stringify(currentCloudData.integrations) : 
+                      (currentLocalData.integrations ? JSON.stringify(currentLocalData.integrations) : JSON.stringify([]))),
+        commands_tab_settings: data.commandsTabSettings ? JSON.stringify(data.commandsTabSettings) : 
+                              (currentCloudData?.commandsTabSettings ? JSON.stringify(currentCloudData.commandsTabSettings) : 
+                               (currentLocalData.commandsTabSettings ? JSON.stringify(currentLocalData.commandsTabSettings) : JSON.stringify({})))
       };
 
       // Check data size

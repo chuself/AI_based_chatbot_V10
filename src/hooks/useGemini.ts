@@ -58,7 +58,7 @@ export const useGemini = () => {
         content: msg.content
       }));
 
-      // Build comprehensive system instructions
+      // Build comprehensive system instructions - ONLY ONCE
       let systemInstructions = "You are a helpful AI assistant.";
       
       // Add personality and instructions from normal commands first
@@ -113,7 +113,7 @@ export const useGemini = () => {
         systemInstructions += "\n\n" + customInstructions;
       }
 
-      // Add system message with complete context
+      // IMPORTANT: Add system message ONLY ONCE at the beginning
       if (systemInstructions.length > "You are a helpful AI assistant.".length) {
         messages.unshift({
           role: "system",
@@ -124,9 +124,7 @@ export const useGemini = () => {
       console.log('Sending request to:', modelConfig.provider);
       console.log('Using model:', modelConfig.modelName);
       console.log('Message count:', messages.length);
-      console.log('API key length:', modelConfig.apiKey?.length || 0);
-      console.log('System prompt includes integrations:', integrationsPrompt.length > 0);
-      console.log('System prompt includes normal commands:', commands.length > 0);
+      console.log('System prompt length:', systemInstructions.length);
 
       let response;
       

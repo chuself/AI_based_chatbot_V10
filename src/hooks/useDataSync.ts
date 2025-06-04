@@ -90,6 +90,16 @@ export const useDataSync = () => {
       localStorage.setItem('ai-memories', JSON.stringify(data.memories));
     }
     
+    // Apply integrations if available
+    if (data.integrations) {
+      localStorage.setItem('integrations-data', JSON.stringify(data.integrations));
+    }
+    
+    // Apply commands tab settings if available
+    if (data.commandsTabSettings) {
+      localStorage.setItem('commands-tab-settings', JSON.stringify(data.commandsTabSettings));
+    }
+    
     // NOTE: Chat history is handled separately by useChatHistory hook
     // to avoid conflicts and ensure proper cross-device sync
   };
