@@ -34,7 +34,83 @@ export interface StoredCommand {
 }
 
 /**
- * Sync local MCP integrations to Supabase
+ * Clean up duplicate integrations for a user
+ */
+export const cleanupDuplicateIntegrations = async (): Promise<void> => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      console.log('No authenticated user, skipping cleanup');
+      return;
+    }
+
+    console.log('🧹 Starting cleanup of duplicate integrations');
+
+    // Get all integrations grouped by name and type
+    const { data: integrations, error } = await supabase
+      .from('integrations')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching integrations for cleanup:', error);
+      return;
+    }
+
+    if (!integrations || integrations.length === 0) {
+      console.log('No integrations found for cleanup');
+      return;
+    }
+
+    // Group by name and type to find duplicates
+    const integrationGroups = new Map<string, StoredIntegration[]>();
+    
+    integrations.forEach(integration => {
+      const key = `${integration.name}:${integration.type}`;
+      if (!integrationGroups.has(key)) {
+        integrationGroups.set(key, []);
+      }
+      integrationGroups.get(key)!.push(integration as StoredIntegration);
+    });
+
+    // Process duplicates
+    for (const [key, group] of integrationGroups) {
+      if (group.length > 1) {
+        console.log(`Found ${group.length} duplicates for ${key}`);
+        
+        // Keep the most recent one, delete the rest
+        const toKeep = group[group.length - 1];
+        const toDelete = group.slice(0, -1);
+        
+        for (const duplicate of toDelete) {
+          console.log(`Deleting duplicate integration: ${duplicate.id}`);
+          
+          // Delete associated commands first
+          await supabase
+            .from('integration_commands')
+            .delete()
+            .eq('integration_id', duplicate.id);
+          
+          // Delete the integration
+          await supabase
+            .from('integrations')
+            .delete()
+            .eq('id', duplicate.id);
+        }
+        
+        console.log(`Kept integration: ${toKeep.id} for ${key}`);
+      }
+    }
+
+    console.log('✅ Cleanup of duplicate integrations completed');
+  } catch (error) {
+    console.error('Error during cleanup:', error);
+  }
+};
+
+/**
+ * Sync local MCP integrations to Supabase with duplicate prevention
  */
 export const syncIntegrationsToSupabase = async (): Promise<boolean> => {
   try {
@@ -44,20 +120,24 @@ export const syncIntegrationsToSupabase = async (): Promise<boolean> => {
       return false;
     }
 
+    // First cleanup any existing duplicates
+    await cleanupDuplicateIntegrations();
+
     const mcpClient = getMcpClient();
     const localIntegrations = mcpClient.getServers();
 
     console.log('Syncing integrations to Supabase:', localIntegrations.length);
 
     for (const integration of localIntegrations) {
-      // Check if integration already exists in Supabase
+      // Check if integration already exists (by name, type, and URL to be more specific)
       const { data: existingIntegration } = await supabase
         .from('integrations')
         .select('id')
         .eq('user_id', user.id)
         .eq('name', integration.name)
         .eq('type', integration.type)
-        .single();
+        .eq('config->>url', integration.url)
+        .maybeSingle();
 
       const integrationData = {
         user_id: user.id,
@@ -89,6 +169,7 @@ export const syncIntegrationsToSupabase = async (): Promise<boolean> => {
           continue;
         }
         integrationId = existingIntegration.id;
+        console.log(`Updated existing integration: ${integration.name}`);
       } else {
         // Create new integration
         const { data, error } = await supabase
@@ -102,6 +183,7 @@ export const syncIntegrationsToSupabase = async (): Promise<boolean> => {
           continue;
         }
         integrationId = data.id;
+        console.log(`Created new integration: ${integration.name}`);
       }
 
       // Sync commands for this integration
@@ -119,38 +201,68 @@ export const syncIntegrationsToSupabase = async (): Promise<boolean> => {
 };
 
 /**
- * Sync commands for a specific integration
+ * Sync commands for a specific integration with better duplicate handling
  */
 const syncCommandsForIntegration = async (
   integrationId: string, 
   commands: IntegrationCommand[]
 ): Promise<void> => {
   try {
-    // Delete existing commands for this integration
-    await supabase
+    // Get existing commands to avoid duplicates
+    const { data: existingCommands } = await supabase
       .from('integration_commands')
-      .delete()
+      .select('name, id')
       .eq('integration_id', integrationId);
 
-    // Insert new commands
-    const commandsData = commands.map(cmd => ({
-      integration_id: integrationId,
-      name: cmd.name,
-      description: cmd.description,
-      endpoint: cmd.endpoint || `/${cmd.name}`,
-      method: cmd.method || 'GET',
-      parameters: cmd.parameters || {},
-      example: cmd.example,
-      is_active: true
-    }));
+    const existingCommandNames = new Set(existingCommands?.map(cmd => cmd.name) || []);
 
-    if (commandsData.length > 0) {
+    // Only insert commands that don't already exist
+    const newCommands = commands.filter(cmd => !existingCommandNames.has(cmd.name));
+
+    if (newCommands.length > 0) {
+      const commandsData = newCommands.map(cmd => ({
+        integration_id: integrationId,
+        name: cmd.name,
+        description: cmd.description,
+        endpoint: cmd.endpoint || `/${cmd.name}`,
+        method: cmd.method || 'GET',
+        parameters: cmd.parameters || {},
+        example: cmd.example,
+        is_active: true
+      }));
+
       const { error } = await supabase
         .from('integration_commands')
         .insert(commandsData);
 
       if (error) {
         console.error('Error syncing commands:', error);
+      } else {
+        console.log(`Synced ${newCommands.length} new commands`);
+      }
+    }
+
+    // Update existing commands if needed
+    for (const cmd of commands) {
+      if (existingCommandNames.has(cmd.name)) {
+        const existingCmd = existingCommands?.find(ec => ec.name === cmd.name);
+        if (existingCmd) {
+          const { error } = await supabase
+            .from('integration_commands')
+            .update({
+              description: cmd.description,
+              endpoint: cmd.endpoint || `/${cmd.name}`,
+              method: cmd.method || 'GET',
+              parameters: cmd.parameters || {},
+              example: cmd.example,
+              is_active: true
+            })
+            .eq('id', existingCmd.id);
+
+          if (error) {
+            console.error('Error updating command:', error);
+          }
+        }
       }
     }
   } catch (error) {
@@ -159,7 +271,7 @@ const syncCommandsForIntegration = async (
 };
 
 /**
- * Fetch integrations from Supabase
+ * Fetch integrations from Supabase with deduplication
  */
 export const fetchIntegrationsFromSupabase = async (): Promise<StoredIntegration[]> => {
   try {
@@ -173,18 +285,29 @@ export const fetchIntegrationsFromSupabase = async (): Promise<StoredIntegration
       .from('integrations')
       .select('*')
       .eq('user_id', user.id)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Error fetching integrations:', error);
       return [];
     }
 
-    return (data || []).map(integration => ({
-      ...integration,
-      type: integration.type as 'mcp' | 'api',
-      config: integration.config as any
-    }));
+    // Remove duplicates based on name and type (keep most recent)
+    const uniqueIntegrations = new Map<string, StoredIntegration>();
+    
+    (data || []).forEach(integration => {
+      const key = `${integration.name}:${integration.type}`;
+      if (!uniqueIntegrations.has(key)) {
+        uniqueIntegrations.set(key, {
+          ...integration,
+          type: integration.type as 'mcp' | 'api',
+          config: integration.config as any
+        });
+      }
+    });
+
+    return Array.from(uniqueIntegrations.values());
   } catch (error) {
     console.error('Error in fetchIntegrationsFromSupabase:', error);
     return [];
@@ -227,7 +350,7 @@ export const fetchCommandsFromSupabase = async (): Promise<StoredCommand[]> => {
 };
 
 /**
- * Execute an API call to an integration
+ * Execute an API call to an integration with improved error handling
  */
 export const executeIntegrationCommand = async (
   integrationId: string,
@@ -243,61 +366,81 @@ export const executeIntegrationCommand = async (
     console.log(`Executing integration command: ${commandName} for integration: ${integrationId}`);
     console.log('Parameters:', parameters);
 
-    // Get integration details
+    // Get integration details with better error handling
     const { data: integration, error: integrationError } = await supabase
       .from('integrations')
       .select('*')
       .eq('id', integrationId)
       .eq('user_id', user.id)
-      .single();
+      .eq('is_active', true)
+      .maybeSingle();
 
-    if (integrationError || !integration) {
-      console.error('Integration not found:', integrationError);
-      return { error: { message: 'Integration not found' } };
+    if (integrationError) {
+      console.error('Integration query error:', integrationError);
+      return { error: { message: `Database error: ${integrationError.message}` } };
+    }
+
+    if (!integration) {
+      console.error('Integration not found or inactive:', integrationId);
+      return { error: { message: 'Integration not found or inactive' } };
     }
 
     console.log('Found integration:', integration.name, integration.config);
 
-    // Get command details
+    // Get command details with better error handling
     const { data: command, error: commandError } = await supabase
       .from('integration_commands')
       .select('*')
       .eq('integration_id', integrationId)
       .eq('name', commandName)
-      .single();
+      .eq('is_active', true)
+      .maybeSingle();
 
-    if (commandError || !command) {
-      console.error('Command not found:', commandError);
-      return { error: { message: `Command "${commandName}" not found` } };
+    if (commandError) {
+      console.error('Command query error:', commandError);
+      return { error: { message: `Database error: ${commandError.message}` } };
+    }
+
+    if (!command) {
+      console.error('Command not found or inactive:', commandName);
+      return { error: { message: `Command "${commandName}" not found or inactive` } };
     }
 
     console.log('Found command:', command);
 
-    // Build the API URL
+    // Build the API URL with validation
     const config = integration.config as any;
+    if (!config || !config.url) {
+      return { error: { message: 'Integration configuration is missing or invalid' } };
+    }
+
     const baseUrl = config.url;
     const endpoint = command.endpoint || `/${commandName}`;
     
-    // For reminder API, ensure we're using the correct full URL
     let fullUrl: string;
-    if (baseUrl.includes('supabase.co/functions/v1')) {
-      // Already a full Supabase function URL
-      fullUrl = endpoint.startsWith('/') ? `${baseUrl}${endpoint}` : `${baseUrl}/${endpoint}`;
-    } else {
-      // Regular API URL
-      fullUrl = `${baseUrl}${endpoint}`;
+    try {
+      if (baseUrl.includes('supabase.co/functions/v1')) {
+        fullUrl = endpoint.startsWith('/') ? `${baseUrl}${endpoint}` : `${baseUrl}/${endpoint}`;
+      } else {
+        fullUrl = `${baseUrl}${endpoint}`;
+      }
+      
+      // Validate URL
+      new URL(fullUrl);
+    } catch (urlError) {
+      console.error('Invalid URL:', urlError);
+      return { error: { message: 'Invalid API URL configuration' } };
     }
 
     console.log('Full API URL:', fullUrl);
 
-    // Prepare headers with correct Bearer token format
+    // Prepare headers with validation
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(config.headers || {})
     };
 
     if (config.apiKey) {
-      // Ensure Bearer format for API key
       if (config.apiKey.startsWith('sk_')) {
         headers['Authorization'] = `Bearer ${config.apiKey}`;
       } else if (!config.apiKey.startsWith('Bearer ')) {
@@ -307,19 +450,25 @@ export const executeIntegrationCommand = async (
       }
     }
 
-    console.log('Request headers:', headers);
+    console.log('Request headers:', { ...headers, Authorization: headers.Authorization ? '[REDACTED]' : undefined });
 
-    // Make the API call
+    // Make the API call with timeout
     const fetchOptions: RequestInit = {
       method: command.method,
-      headers
+      headers,
+      signal: AbortSignal.timeout(30000) // 30 second timeout
     };
 
     if (command.method !== 'GET' && Object.keys(parameters).length > 0) {
       fetchOptions.body = JSON.stringify(parameters);
       console.log('Request body:', fetchOptions.body);
     } else if (command.method === 'GET' && Object.keys(parameters).length > 0) {
-      const searchParams = new URLSearchParams(parameters);
+      const searchParams = new URLSearchParams();
+      Object.entries(parameters).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          searchParams.append(key, String(value));
+        }
+      });
       const urlWithParams = `${fullUrl}?${searchParams}`;
       console.log('GET URL with params:', urlWithParams);
       return await makeApiCall(urlWithParams, { ...fetchOptions, method: 'GET' });
@@ -333,12 +482,12 @@ export const executeIntegrationCommand = async (
 };
 
 /**
- * Helper function to make the actual API call
+ * Helper function to make the actual API call with improved error handling
  */
 const makeApiCall = async (url: string, options: RequestInit): Promise<{ result?: any; error?: { message: string } }> => {
   try {
     console.log('Making API call to:', url);
-    console.log('Request options:', options);
+    console.log('Request options:', { ...options, headers: options.headers });
     
     const response = await fetch(url, options);
     
@@ -348,7 +497,18 @@ const makeApiCall = async (url: string, options: RequestInit): Promise<{ result?
     if (!response.ok) {
       const errorText = await response.text();
       console.error('API call failed:', response.status, response.statusText, errorText);
-      return { error: { message: `API call failed with status ${response.status}: ${response.statusText}. ${errorText}` } };
+      
+      let errorMessage = `API call failed with status ${response.status}: ${response.statusText}`;
+      if (errorText) {
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage += `. ${errorJson.message || errorText}`;
+        } catch {
+          errorMessage += `. ${errorText}`;
+        }
+      }
+      
+      return { error: { message: errorMessage } };
     }
 
     const contentType = response.headers.get('content-type');
@@ -365,6 +525,11 @@ const makeApiCall = async (url: string, options: RequestInit): Promise<{ result?
     return { result };
   } catch (error) {
     console.error('Error making API call:', error);
+    
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      return { error: { message: 'Request timeout - the API took too long to respond' } };
+    }
+    
     return { error: { message: error instanceof Error ? error.message : 'Network error' } };
   }
 };
@@ -389,7 +554,6 @@ export const saveIntegrationCommand = async (
       return { success: false, error: 'User not authenticated' };
     }
 
-    // Check if command already exists
     const { data: existingCommand } = await supabase
       .from('integration_commands')
       .select('id')
@@ -409,7 +573,6 @@ export const saveIntegrationCommand = async (
     };
 
     if (existingCommand) {
-      // Update existing command
       const { error } = await supabase
         .from('integration_commands')
         .update(commandPayload)
@@ -419,7 +582,6 @@ export const saveIntegrationCommand = async (
         return { success: false, error: error.message };
       }
     } else {
-      // Create new command
       const { error } = await supabase
         .from('integration_commands')
         .insert(commandPayload);

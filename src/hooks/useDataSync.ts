@@ -3,6 +3,7 @@ import { useState, useEffect, useContext } from "react";
 import { SyncService, UserDataWithMeta } from "@/services/syncService";
 import { SupabaseContext } from "@/App";
 import { useToast } from "@/components/ui/use-toast";
+import { syncIntegrationsToSupabase, cleanupDuplicateIntegrations } from "@/services/supabaseIntegrationsService";
 
 export const useDataSync = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -17,6 +18,13 @@ export const useDataSync = () => {
         console.log('User logged in, syncing data...');
         setIsLoading(true);
         try {
+          // First cleanup duplicate integrations
+          await cleanupDuplicateIntegrations();
+          
+          // Then sync integrations to Supabase
+          await syncIntegrationsToSupabase();
+          
+          // Finally sync all other data
           const result = await SyncService.syncData();
           setSyncData(result);
           console.log('Data sync completed:', result.syncMetadata);
@@ -90,11 +98,6 @@ export const useDataSync = () => {
       localStorage.setItem('ai-memories', JSON.stringify(data.memories));
     }
     
-    // Apply integrations if available
-    if (data.integrations) {
-      localStorage.setItem('integrations-data', JSON.stringify(data.integrations));
-    }
-    
     // Apply commands tab settings if available
     if (data.commandsTabSettings) {
       localStorage.setItem('commands-tab-settings', JSON.stringify(data.commandsTabSettings));
@@ -109,6 +112,11 @@ export const useDataSync = () => {
     
     setIsLoading(true);
     try {
+      // Cleanup duplicates and sync integrations first
+      await cleanupDuplicateIntegrations();
+      await syncIntegrationsToSupabase();
+      
+      // Then sync all other data
       const result = await SyncService.syncData();
       setSyncData(result);
       applyDataToApp(result);

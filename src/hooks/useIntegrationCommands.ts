@@ -1,7 +1,6 @@
 
 import { useState } from 'react';
-import { executeIntegrationCommand } from '@/services/supabaseIntegrationsService';
-import { getIntegrationsContext } from '@/services/aiIntegrationHelper';
+import { executeIntegrationCommand, fetchIntegrationsFromSupabase } from '@/services/supabaseIntegrationsService';
 
 export const useIntegrationCommands = () => {
   const [isExecuting, setIsExecuting] = useState<string | null>(null);
@@ -16,9 +15,17 @@ export const useIntegrationCommands = () => {
       
       console.log(`Looking for integration with name: "${integrationName}"`);
       
-      // Get integration context to find the integration by name or category
-      const integrations = await getIntegrationsContext();
+      // Get integration from Supabase (which handles deduplication)
+      const integrations = await fetchIntegrationsFromSupabase();
       console.log('Available integrations:', integrations.map(i => ({ name: i.name, category: i.category, id: i.id })));
+      
+      if (integrations.length === 0) {
+        return { 
+          error: { 
+            message: 'No integrations found. Please check your integration configuration and sync status.' 
+          } 
+        };
+      }
       
       // Try to find by exact name first
       let integration = integrations.find(i => i.name.toLowerCase() === integrationName.toLowerCase());
@@ -45,16 +52,7 @@ export const useIntegrationCommands = () => {
         };
       }
 
-      console.log(`Found integration: ${integration.name} (${integration.category}) with ID: ${integration.supabaseId || integration.id}`);
-
-      if (!integration.supabaseId) {
-        console.error(`Integration "${integration.name}" is not synced to Supabase`);
-        return { 
-          error: { 
-            message: `Integration "${integration.name}" is not synced to Supabase. Please check your integration configuration.` 
-          } 
-        };
-      }
+      console.log(`Found integration: ${integration.name} (${integration.category}) with ID: ${integration.id}`);
 
       // Normalize command names - handle common variations
       let normalizedCommandName = commandName.toLowerCase();
@@ -76,23 +74,26 @@ export const useIntegrationCommands = () => {
         normalizedCommandName = commandMappings[normalizedCommandName];
       }
 
+      // Get available commands from config or database
+      const availableCommands = integration.config?.commands || [];
+      
       // Check if the command exists (case-insensitive)
-      const commandExists = integration.commonCommands.some(cmd => 
-        cmd.name.toLowerCase() === normalizedCommandName.toLowerCase()
+      const commandExists = availableCommands.some((cmd: any) => 
+        cmd.name?.toLowerCase() === normalizedCommandName.toLowerCase()
       );
       
-      if (!commandExists) {
-        console.error(`Command "${commandName}" not found in integration "${integration.name}". Available commands:`, integration.commonCommands.map(c => c.name));
+      if (!commandExists && availableCommands.length > 0) {
+        console.error(`Command "${commandName}" not found in integration "${integration.name}". Available commands:`, availableCommands.map((c: any) => c.name));
         return { 
           error: { 
-            message: `Command "${commandName}" not found in integration "${integration.name}". Available commands: ${integration.commonCommands.map(c => c.name).join(', ') || 'none'}` 
+            message: `Command "${commandName}" not found in integration "${integration.name}". Available commands: ${availableCommands.map((c: any) => c.name).join(', ') || 'none'}` 
           } 
         };
       }
 
       // Find the actual command name with correct casing
-      const actualCommand = integration.commonCommands.find(cmd => 
-        cmd.name.toLowerCase() === normalizedCommandName.toLowerCase()
+      const actualCommand = availableCommands.find((cmd: any) => 
+        cmd.name?.toLowerCase() === normalizedCommandName.toLowerCase()
       );
       
       const finalCommandName = actualCommand ? actualCommand.name : normalizedCommandName;
@@ -100,7 +101,7 @@ export const useIntegrationCommands = () => {
       console.log(`Executing command ${finalCommandName} on integration ${integration.name} with parameters:`, parameters);
       
       const result = await executeIntegrationCommand(
-        integration.supabaseId,
+        integration.id,
         finalCommandName,
         parameters
       );

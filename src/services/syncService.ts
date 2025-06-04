@@ -14,7 +14,6 @@ export interface UserData {
   customCommands?: Command[];
   memories?: MemoryEntry[];
   chatHistory?: ChatMessage[];
-  integrations?: any[];
   commandsTabSettings?: any;
 }
 
@@ -43,7 +42,6 @@ export interface SyncStatus {
   customCommands: boolean;
   memories: boolean;
   chatHistory: boolean;
-  integrations: boolean;
   commandsTabSettings: boolean;
 }
 
@@ -94,7 +92,6 @@ class SyncServiceImpl {
       customCommands: !!(localData.customCommands && localData.customCommands.length > 0),
       memories: !!(localData.memories && localData.memories.length > 0),
       chatHistory: !!(localData.chatHistory && localData.chatHistory.length > 0),
-      integrations: !!(localData.integrations && localData.integrations.length > 0),
       commandsTabSettings: !!(localData.commandsTabSettings && Object.keys(localData.commandsTabSettings).length > 0)
     };
   }
@@ -105,7 +102,6 @@ class SyncServiceImpl {
     localStorage.setItem(this.LOCAL_KEYS.SYNC_METADATA, JSON.stringify(updated));
   }
 
-  // New method to compare local and cloud data
   async compareDataWithCloud(dataType?: keyof UserData): Promise<DataComparisonResult> {
     try {
       const localData = this.loadLocalData();
@@ -123,14 +119,12 @@ class SyncServiceImpl {
       const differences: string[] = [];
       let isIdentical = true;
 
-      // Compare specific data type or all data
       const typesToCompare = dataType ? [dataType] : Object.keys(localData) as (keyof UserData)[];
       
       for (const type of typesToCompare) {
         const localValue = localData[type];
         const cloudValue = cloudData[type];
         
-        // Deep comparison
         const localStr = JSON.stringify(localValue || (Array.isArray(localValue) ? [] : {}));
         const cloudStr = JSON.stringify(cloudValue || (Array.isArray(cloudValue) ? [] : {}));
         
@@ -217,14 +211,6 @@ class SyncServiceImpl {
         }
       }
 
-      const integrationsStr = localStorage.getItem(this.LOCAL_KEYS.INTEGRATIONS);
-      if (integrationsStr) {
-        const parsed = JSON.parse(integrationsStr);
-        if (Array.isArray(parsed)) {
-          data.integrations = parsed;
-        }
-      }
-
       const commandsTabStr = localStorage.getItem(this.LOCAL_KEYS.COMMANDS_TAB_SETTINGS);
       if (commandsTabStr) {
         const parsed = JSON.parse(commandsTabStr);
@@ -261,9 +247,6 @@ class SyncServiceImpl {
       }
       if (data.chatHistory) {
         localStorage.setItem(this.LOCAL_KEYS.CHAT_HISTORY, JSON.stringify(data.chatHistory));
-      }
-      if (data.integrations) {
-        localStorage.setItem(this.LOCAL_KEYS.INTEGRATIONS, JSON.stringify(data.integrations));
       }
       if (data.commandsTabSettings) {
         localStorage.setItem(this.LOCAL_KEYS.COMMANDS_TAB_SETTINGS, JSON.stringify(data.commandsTabSettings));
@@ -354,7 +337,6 @@ class SyncServiceImpl {
         customCommands: this.parseJsonField(data.custom_commands),
         memories: this.parseJsonField(data.memories),
         chatHistory: this.parseJsonField(data.chat_history),
-        integrations: this.parseJsonField(data.integrations),
         commandsTabSettings: this.parseJsonField(data.commands_tab_settings),
         syncMetadata: {
           lastSyncedAt: data.last_synced_at || data.created_at,
@@ -389,11 +371,9 @@ class SyncServiceImpl {
 
       console.log("📤 Starting cloud data upload for user:", user.id);
 
-      // Get current cloud data to merge with
       const currentCloudData = await this.fetchCloudData();
       const currentLocalData = this.loadLocalData();
       
-      // Merge current cloud data with local data, then override with new data
       const mergedData = {
         model_config: data.modelConfig ? JSON.stringify(data.modelConfig) : 
                      (currentCloudData?.modelConfig ? JSON.stringify(currentCloudData.modelConfig) : 
@@ -416,23 +396,18 @@ class SyncServiceImpl {
         chat_history: data.chatHistory ? JSON.stringify(data.chatHistory) : 
                      (currentCloudData?.chatHistory ? JSON.stringify(currentCloudData.chatHistory) : 
                       (currentLocalData.chatHistory ? JSON.stringify(currentLocalData.chatHistory) : JSON.stringify([]))),
-        integrations: data.integrations ? JSON.stringify(data.integrations) : 
-                     (currentCloudData?.integrations ? JSON.stringify(currentCloudData.integrations) : 
-                      (currentLocalData.integrations ? JSON.stringify(currentLocalData.integrations) : JSON.stringify([]))),
         commands_tab_settings: data.commandsTabSettings ? JSON.stringify(data.commandsTabSettings) : 
                               (currentCloudData?.commandsTabSettings ? JSON.stringify(currentCloudData.commandsTabSettings) : 
                                (currentLocalData.commandsTabSettings ? JSON.stringify(currentLocalData.commandsTabSettings) : JSON.stringify({})))
       };
 
-      // Check data size
       const dataSize = JSON.stringify(mergedData).length;
       console.log("📊 Data size:", dataSize, "bytes");
-      if (dataSize > 2 * 1024 * 1024) { // 2MB limit
+      if (dataSize > 2 * 1024 * 1024) {
         console.error('❌ Data too large for upload:', dataSize, 'bytes');
         throw new Error('Data size exceeds 2MB limit');
       }
 
-      // Check if user already has data
       const { data: existingData, error: checkError } = await supabase
         .from('user_data')
         .select('id, data_version')
@@ -449,10 +424,8 @@ class SyncServiceImpl {
       const timestamp = new Date().toISOString();
 
       if (existingData) {
-        // UPDATE existing record - only increment version if data actually changed
         console.log("🔄 Updating existing record ID:", existingData.id);
         
-        // Check if data actually changed by comparing with current cloud data
         const comparison = await this.compareDataWithCloud();
         const nextVersion = comparison.isIdentical ? existingData.data_version : (existingData.data_version || 0) + 1;
         
@@ -484,7 +457,6 @@ class SyncServiceImpl {
 
         return true;
       } else {
-        // INSERT new record
         console.log("➕ Creating new record for user");
         
         const insertData = {
@@ -555,7 +527,6 @@ class SyncServiceImpl {
     } catch (error) {
       console.error('❌ Error during data sync:', error);
       
-      // Fallback to local data
       const localData = this.loadLocalData();
       const syncMetadata = this.getSyncMetadata();
       
@@ -571,7 +542,6 @@ class SyncServiceImpl {
       console.log('📤 Manual upload to cloud initiated');
       const localData = this.loadLocalData();
       
-      // Check if we have data to upload
       const hasData = Object.values(localData).some(value => 
         value && (
           (Array.isArray(value) && value.length > 0) || 
