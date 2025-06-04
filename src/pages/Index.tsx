@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from "react";
 import { ChatMessage } from "@/hooks/useChatHistory";
 import MessageList from "@/components/MessageList";
@@ -8,10 +7,14 @@ import { useGemini } from "@/hooks/useGemini";
 import { useChatHistory } from "@/hooks/useChatHistory";
 import { useCommands } from "@/hooks/useCommands";
 import { useGeminiConfig } from "@/hooks/useGeminiConfig";
+import { useMcpDebug } from "@/hooks/useMcpDebug";
 import { Command } from "@/services/commandsService";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LoadingDots } from "@/components/ui/loading";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Eye, EyeOff, Bug, Trash2 } from "lucide-react";
 import getMcpClient from "@/services/mcpService";
 import { syncIntegrationsToSupabase } from "@/services/supabaseIntegrationsService";
 import { useIntegrationCommands } from "@/hooks/useIntegrationCommands";
@@ -20,10 +23,19 @@ const Index = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCommandExecuting, setIsCommandExecuting] = useState<string | null>(null);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
   const { sendMessage: sendMessageToGemini } = useGemini();
   const { chatHistory, setChatHistory } = useChatHistory();
   const { commands } = useCommands();
   const { modelConfig } = useGeminiConfig();
+  const { 
+    isDebugEnabled, 
+    debugEntries, 
+    toggleDebug, 
+    logPrompt, 
+    clearDebugEntries, 
+    getDebugSummary 
+  } = useMcpDebug();
   const mcpClient = getMcpClient();
   const { executeCommand: executeIntegrationCommand } = useIntegrationCommands();
 
@@ -160,6 +172,14 @@ const Index = () => {
     
     try {
       console.log("Sending message to AI...");
+      
+      // Log the prompt being sent to AI for debugging
+      if (isDebugEnabled) {
+        logPrompt(content, { 
+          messageHistory: updatedMessages.slice(-5), // Last 5 messages for context
+          modelConfig: modelConfig?.modelName 
+        });
+      }
       
       const response = await sendMessageToGemini(content, undefined, updatedMessages);
       
@@ -386,8 +406,85 @@ const Index = () => {
     <div className="min-h-screen w-full bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-slate-800 dark:via-slate-900 dark:to-indigo-900">
       <Header modelName={getModelDisplayName()} />
       
+      {/* MCP Debug Panel */}
+      {isDebugEnabled && (
+        <div className="fixed top-20 right-4 w-80 z-50">
+          <Card className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-blue-200 dark:border-gray-700">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Bug className="h-4 w-4 text-blue-500" />
+                  MCP Debug Panel
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearDebugEntries}
+                    className="h-7 w-7 p-0"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowDebugPanel(!showDebugPanel)}
+                    className="h-7 w-7 p-0"
+                  >
+                    {showDebugPanel ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            {showDebugPanel && (
+              <CardContent className="pt-0">
+                <div className="space-y-2 max-h-60 overflow-y-auto text-xs">
+                  {debugEntries.length === 0 ? (
+                    <p className="text-gray-500">No debug entries yet...</p>
+                  ) : (
+                    debugEntries.slice(-10).map((entry) => (
+                      <div key={entry.id} className="p-2 bg-gray-50 dark:bg-gray-800 rounded border-l-2 border-blue-300">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant="outline" className="text-xs">
+                            {entry.type}
+                          </Badge>
+                          <span className="text-gray-500 text-xs">
+                            {new Date(entry.timestamp).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <pre className="whitespace-pre-wrap text-xs max-h-20 overflow-y-auto">
+                          {entry.type === 'prompt' 
+                            ? entry.content.fullMessage 
+                            : entry.type === 'request' 
+                              ? entry.content.requestDetails
+                              : entry.content.responseDetails || JSON.stringify(entry.content, null, 2)
+                          }
+                        </pre>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        </div>
+      )}
+
       <div className="pt-20 pb-32">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {/* MCP Debug Control */}
+          <div className="mb-4 flex justify-end">
+            <div className="flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-lg px-4 py-2 border">
+              <Bug className="h-4 w-4 text-blue-500" />
+              <span className="text-sm font-medium">MCP Debug</span>
+              <Switch
+                checked={isDebugEnabled}
+                onCheckedChange={toggleDebug}
+                className="data-[state=checked]:bg-blue-500"
+              />
+            </div>
+          </div>
+
           {/* Welcome message for new users */}
           {messages.length === 0 && (
             <div className="text-center py-12 space-y-6">
@@ -399,6 +496,11 @@ const Index = () => {
                   I'm here to help you with questions, creative tasks, analysis, and more. 
                   Start a conversation or try one of the quick commands below.
                 </p>
+                {isDebugEnabled && (
+                  <p className="text-sm text-blue-600 dark:text-blue-400">
+                    🔍 Debug mode is enabled - all AI prompts and external requests will be logged
+                  </p>
+                )}
               </div>
               
               {/* Quick Commands */}

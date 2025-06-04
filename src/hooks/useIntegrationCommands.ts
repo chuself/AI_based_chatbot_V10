@@ -1,9 +1,11 @@
 
 import { useState } from 'react';
 import { executeIntegrationCommand, fetchIntegrationsFromSupabase } from '@/services/supabaseIntegrationsService';
+import { useMcpDebug } from './useMcpDebug';
 
 export const useIntegrationCommands = () => {
   const [isExecuting, setIsExecuting] = useState<string | null>(null);
+  const { logRequest, logResponse } = useMcpDebug();
 
   const executeCommand = async (
     integrationName: string,
@@ -20,11 +22,13 @@ export const useIntegrationCommands = () => {
       console.log('Available integrations:', integrations.map(i => ({ name: i.name, category: i.category, id: i.id })));
       
       if (integrations.length === 0) {
-        return { 
+        const errorResult = { 
           error: { 
             message: 'No integrations found. Please check your integration configuration and sync status.' 
           } 
         };
+        logResponse(integrationName, commandName, errorResult);
+        return errorResult;
       }
       
       // Try to find by exact name first
@@ -45,11 +49,13 @@ export const useIntegrationCommands = () => {
       
       if (!integration) {
         console.error(`No integration found for "${integrationName}". Available integrations:`, integrations);
-        return { 
+        const errorResult = { 
           error: { 
             message: `Integration "${integrationName}" not found. Available integrations: ${integrations.map(i => i.name).join(', ') || 'none'}` 
           } 
         };
+        logResponse(integrationName, commandName, errorResult);
+        return errorResult;
       }
 
       console.log(`Found integration: ${integration.name} (${integration.category}) with ID: ${integration.id}`);
@@ -84,11 +90,13 @@ export const useIntegrationCommands = () => {
       
       if (!commandExists && availableCommands.length > 0) {
         console.error(`Command "${commandName}" not found in integration "${integration.name}". Available commands:`, availableCommands.map((c: any) => c.name));
-        return { 
+        const errorResult = { 
           error: { 
             message: `Command "${commandName}" not found in integration "${integration.name}". Available commands: ${availableCommands.map((c: any) => c.name).join(', ') || 'none'}` 
           } 
         };
+        logResponse(integrationName, commandName, errorResult);
+        return errorResult;
       }
 
       // Find the actual command name with correct casing
@@ -100,6 +108,16 @@ export const useIntegrationCommands = () => {
 
       console.log(`Executing command ${finalCommandName} on integration ${integration.name} with parameters:`, parameters);
       
+      // Log the request details for debugging
+      const requestDetails = {
+        integrationId: integration.id,
+        integrationName: integration.name,
+        commandName: finalCommandName,
+        parameters,
+        integrationConfig: integration.config
+      };
+      logRequest(integrationName, finalCommandName, parameters, requestDetails);
+      
       const result = await executeIntegrationCommand(
         integration.id,
         finalCommandName,
@@ -107,10 +125,16 @@ export const useIntegrationCommands = () => {
       );
 
       console.log('Integration command result:', result);
+      
+      // Log the response for debugging
+      logResponse(integrationName, finalCommandName, result);
+      
       return result;
     } catch (error) {
       console.error('Error executing integration command:', error);
-      return { error: { message: error instanceof Error ? error.message : 'Unknown error' } };
+      const errorResult = { error: { message: error instanceof Error ? error.message : 'Unknown error' } };
+      logResponse(integrationName, commandName, errorResult);
+      return errorResult;
     } finally {
       setIsExecuting(null);
     }

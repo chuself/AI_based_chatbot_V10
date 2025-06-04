@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentUser } from "./supabaseService";
 import { ChatMessage } from "@/hooks/useChatHistory";
@@ -337,7 +336,7 @@ class SyncServiceImpl {
         customCommands: this.parseJsonField(data.custom_commands),
         memories: this.parseJsonField(data.memories),
         chatHistory: this.parseJsonField(data.chat_history),
-        commandsTabSettings: this.parseJsonField(data.commands_tab_settings),
+        // Note: commands_tab_settings is not available in the database schema
         syncMetadata: {
           lastSyncedAt: data.last_synced_at || data.created_at,
           syncSource: (data.sync_source as 'local' | 'cloud' | 'merged') || 'cloud',
@@ -395,10 +394,8 @@ class SyncServiceImpl {
                   (currentLocalData.memories ? JSON.stringify(currentLocalData.memories) : JSON.stringify([]))),
         chat_history: data.chatHistory ? JSON.stringify(data.chatHistory) : 
                      (currentCloudData?.chatHistory ? JSON.stringify(currentCloudData.chatHistory) : 
-                      (currentLocalData.chatHistory ? JSON.stringify(currentLocalData.chatHistory) : JSON.stringify([]))),
-        commands_tab_settings: data.commandsTabSettings ? JSON.stringify(data.commandsTabSettings) : 
-                              (currentCloudData?.commandsTabSettings ? JSON.stringify(currentCloudData.commandsTabSettings) : 
-                               (currentLocalData.commandsTabSettings ? JSON.stringify(currentLocalData.commandsTabSettings) : JSON.stringify({})))
+                      (currentLocalData.chatHistory ? JSON.stringify(currentLocalData.chatHistory) : JSON.stringify([])))
+        // Note: commands_tab_settings removed as it doesn't exist in database
       };
 
       const dataSize = JSON.stringify(mergedData).length;

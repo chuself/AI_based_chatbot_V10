@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, useCallback } from "react";
 import { SyncService, UserDataWithMeta } from "@/services/syncService";
 import { SupabaseContext } from "@/App";
 import { useToast } from "@/components/ui/use-toast";
@@ -11,60 +11,96 @@ export const useDataSync = () => {
   const { user } = useContext(SupabaseContext);
   const { toast } = useToast();
 
-  // Initial data sync when user changes
-  useEffect(() => {
-    const initializeData = async () => {
-      if (user) {
-        console.log('User logged in, syncing data...');
-        setIsLoading(true);
-        try {
-          // First cleanup duplicate integrations
-          await cleanupDuplicateIntegrations();
-          
-          // Then sync integrations to Supabase
-          await syncIntegrationsToSupabase();
-          
-          // Finally sync all other data
-          const result = await SyncService.syncData();
-          setSyncData(result);
-          console.log('Data sync completed:', result.syncMetadata);
-          
-          // Apply synced data to app immediately (except chat history)
-          applyDataToApp(result);
-          
-          if (result.syncMetadata.syncSource === 'cloud') {
-            toast({
-              title: "Data Synced",
-              description: "Your settings and data have been loaded from the cloud",
-            });
-          }
-        } catch (error) {
-          console.error('Error during data sync:', error);
-          toast({
-            title: "Sync Warning",
-            description: "Some data may not have synced properly",
-            variant: "destructive",
-          });
-        } finally {
-          setIsLoading(false);
-        }
-      } else {
-        // User not logged in, use local data only
-        console.log('No user, loading local data only');
-        const localData = SyncService.loadLocalData();
-        const metadata = SyncService.getSyncMetadata();
-        const result = {
-          ...localData,
-          syncMetadata: metadata
-        };
+  // Function to force sync data
+  const forceSyncData = useCallback(async () => {
+    if (user) {
+      console.log('🔄 Force syncing data...');
+      setIsLoading(true);
+      try {
+        // First cleanup duplicate integrations
+        await cleanupDuplicateIntegrations();
+        
+        // Then sync integrations to Supabase
+        await syncIntegrationsToSupabase();
+        
+        // Finally sync all other data
+        const result = await SyncService.syncData();
         setSyncData(result);
+        console.log('✅ Force sync completed:', result.syncMetadata);
+        
+        // Apply synced data to app immediately (except chat history)
         applyDataToApp(result);
+        
+        if (result.syncMetadata.syncSource === 'cloud') {
+          toast({
+            title: "Data Synced",
+            description: "Your settings and data have been loaded from the cloud",
+          });
+        }
+        
+        return result;
+      } catch (error) {
+        console.error('❌ Error during force sync:', error);
+        toast({
+          title: "Sync Warning",
+          description: "Some data may not have synced properly",
+          variant: "destructive",
+        });
+        throw error;
+      } finally {
         setIsLoading(false);
       }
+    } else {
+      // User not logged in, use local data only
+      console.log('No user, loading local data only');
+      const localData = SyncService.loadLocalData();
+      const metadata = SyncService.getSyncMetadata();
+      const result = {
+        ...localData,
+        syncMetadata: metadata
+      };
+      setSyncData(result);
+      applyDataToApp(result);
+      setIsLoading(false);
+      return result;
+    }
+  }, [user?.id, toast]);
+
+  // Initial data sync when user changes or page loads
+  useEffect(() => {
+    const initializeData = async () => {
+      console.log('🚀 Initializing data sync...');
+      await forceSyncData();
     };
 
     initializeData();
-  }, [user?.id]);
+  }, [forceSyncData]);
+
+  // Listen for page reload/visibility change to trigger sync
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && user) {
+        console.log('📄 Page became visible, triggering sync...');
+        forceSyncData();
+      }
+    };
+
+    const handleFocus = () => {
+      if (user) {
+        console.log('🔍 Window focused, triggering sync...');
+        forceSyncData();
+      }
+    };
+
+    // Add event listeners for page visibility and focus
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [forceSyncData, user]);
 
   // Helper function to apply synced data to the app (excluding chat history)
   const applyDataToApp = (data: UserDataWithMeta) => {
@@ -108,31 +144,15 @@ export const useDataSync = () => {
   };
 
   const refreshSync = async () => {
-    if (!user) return false;
-    
-    setIsLoading(true);
-    try {
-      // Cleanup duplicates and sync integrations first
-      await cleanupDuplicateIntegrations();
-      await syncIntegrationsToSupabase();
-      
-      // Then sync all other data
-      const result = await SyncService.syncData();
-      setSyncData(result);
-      applyDataToApp(result);
-      return true;
-    } catch (error) {
-      console.error('Error refreshing sync:', error);
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
+    console.log('🔄 Manual refresh sync triggered');
+    return await forceSyncData();
   };
 
   return {
     syncData,
     isLoading,
     refreshSync,
+    forceSyncData,
     isLoggedIn: !!user
   };
 };
