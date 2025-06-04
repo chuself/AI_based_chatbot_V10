@@ -18,12 +18,20 @@ export const useDataSync = () => {
       setIsLoading(true);
       try {
         // First cleanup duplicate integrations
+        console.log('🧹 Cleaning up duplicate integrations...');
         await cleanupDuplicateIntegrations();
         
         // Then sync integrations to Supabase
-        await syncIntegrationsToSupabase();
+        console.log('🔄 Syncing integrations to Supabase...');
+        const syncSuccess = await syncIntegrationsToSupabase();
+        if (syncSuccess) {
+          console.log('✅ Integrations synced successfully');
+        } else {
+          console.warn('⚠️ Integration sync had issues but continuing...');
+        }
         
         // Finally sync all other data
+        console.log('🔄 Syncing user data...');
         const result = await SyncService.syncData();
         setSyncData(result);
         console.log('✅ Force sync completed:', result.syncMetadata);
@@ -46,13 +54,24 @@ export const useDataSync = () => {
           description: "Some data may not have synced properly",
           variant: "destructive",
         });
-        throw error;
+        
+        // Fallback to local data
+        const localData = SyncService.loadLocalData();
+        const metadata = SyncService.getSyncMetadata();
+        const fallbackResult = {
+          ...localData,
+          syncMetadata: metadata
+        };
+        setSyncData(fallbackResult);
+        applyDataToApp(fallbackResult);
+        
+        return fallbackResult;
       } finally {
         setIsLoading(false);
       }
     } else {
       // User not logged in, use local data only
-      console.log('No user, loading local data only');
+      console.log('📱 No user, loading local data only');
       const localData = SyncService.loadLocalData();
       const metadata = SyncService.getSyncMetadata();
       const result = {

@@ -22,8 +22,10 @@ const IntegrationsTab = () => {
   const [isCommandsOpen, setIsCommandsOpen] = useState(false);
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
+  const [storedIntegrations, setStoredIntegrations] = useState<any[]>([]);
   const [activeConnections, setActiveConnections] = useState<Record<string, boolean>>({});
   const [showReminderGuide, setShowReminderGuide] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
   // Form states
   const [integrationName, setIntegrationName] = useState("");
@@ -46,16 +48,49 @@ const IntegrationsTab = () => {
 
   // Load integrations on component mount
   useEffect(() => {
-    const loadedIntegrations = mcpClient.getServers();
-    setIntegrations(loadedIntegrations);
+    const loadIntegrations = async () => {
+      try {
+        setIsLoading(true);
+        console.log('🔄 Loading integrations...');
+        
+        // Load local MCP integrations
+        const localIntegrations = mcpClient.getServers();
+        console.log(`📊 Local integrations: ${localIntegrations.length}`);
+        setIntegrations(localIntegrations);
+        
+        // Load stored Supabase integrations
+        const storedIntegrations = await fetchIntegrationsFromSupabase();
+        console.log(`📊 Stored integrations: ${storedIntegrations.length}`);
+        setStoredIntegrations(storedIntegrations);
+        
+        // Sync integrations to ensure consistency
+        await syncIntegrationsToSupabase();
+        
+        // Reload stored integrations after sync
+        const updatedStoredIntegrations = await fetchIntegrationsFromSupabase();
+        setStoredIntegrations(updatedStoredIntegrations);
+        
+        // Check if reminder integration exists
+        const hasReminderIntegration = [...localIntegrations, ...updatedStoredIntegrations].some(integration => 
+          ['reminders', 'reminder', 'tasks', 'todo'].includes(integration.category?.toLowerCase() || '')
+        );
+        
+        setShowReminderGuide(!hasReminderIntegration);
+        
+        console.log('✅ Integrations loaded successfully');
+      } catch (error) {
+        console.error('❌ Error loading integrations:', error);
+        toast({
+          title: "Loading Error",
+          description: "Failed to load integrations. Please refresh the page.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
     
-    // Check if reminder integration exists
-    const hasReminderIntegration = isIntegrationAvailable('reminders') || 
-                                  isIntegrationAvailable('reminder') || 
-                                  isIntegrationAvailable('tasks') || 
-                                  isIntegrationAvailable('todo');
-    
-    setShowReminderGuide(!hasReminderIntegration);
+    loadIntegrations();
   }, []);
   
   // Regularly check for active connections
@@ -76,6 +111,39 @@ const IntegrationsTab = () => {
     
     fetchUser();
   }, []);
+
+  // Get combined integrations list (deduplicated)
+  const getCombinedIntegrations = () => {
+    const combined = new Map<string, any>();
+    
+    // Add stored integrations first (they have priority)
+    storedIntegrations.forEach(stored => {
+      const key = `${stored.name}-${stored.category}`;
+      combined.set(key, {
+        ...stored,
+        id: stored.id,
+        source: 'stored',
+        isStored: true,
+        commands: stored.config?.commands || [],
+        endpoints: stored.config?.endpoints || []
+      });
+    });
+    
+    // Add local integrations that aren't already stored
+    integrations.forEach(local => {
+      const key = `${local.name}-${local.category}`;
+      if (!combined.has(key)) {
+        combined.set(key, {
+          ...local,
+          source: 'local',
+          isStored: false,
+          is_active: activeConnections[local.id] || false
+        });
+      }
+    });
+    
+    return Array.from(combined.values());
+  };
 
   const resetForm = () => {
     setIntegrationName("");
@@ -115,29 +183,29 @@ const IntegrationsTab = () => {
     if (['reminders', 'reminder', 'tasks', 'todo'].includes(integrationCategory.toLowerCase()) && commands.length === 0) {
       commands = [
         {
-          name: 'get_pending_tasks',
+          name: 'getTasks',
           description: 'Retrieve all pending/incomplete tasks and reminders',
-          example: 'get_pending_tasks()',
+          example: 'getTasks()',
         },
         {
-          name: 'create_reminder',
+          name: 'createTask',
           description: 'Create a new reminder or task with title and due date',
-          example: 'create_reminder(title="Call John", due_date="2024-01-15", priority="medium")',
+          example: 'createTask(title="Call John", due_date="2024-01-15", priority="medium")',
         },
         {
-          name: 'complete_task',
-          description: 'Mark a specific task as completed using its ID',
-          example: 'complete_task(task_id="123")',
+          name: 'updateTask',
+          description: 'Update or complete a specific task using its reference',
+          example: 'updateTask(task_reference="grocery shopping", status="completed")',
         },
         {
-          name: 'search_tasks',
+          name: 'deleteTask',
+          description: 'Delete a specific task using its reference',
+          example: 'deleteTask(task_reference="call john")',
+        },
+        {
+          name: 'searchTasks',
           description: 'Search tasks and reminders by keyword or phrase',
-          example: 'search_tasks(query="grocery shopping")',
-        },
-        {
-          name: 'get_tasks_by_date',
-          description: 'Get tasks scheduled for a specific date',
-          example: 'get_tasks_by_date(date="2024-01-15")',
+          example: 'searchTasks(query="grocery shopping")',
         }
       ];
     }
@@ -154,7 +222,13 @@ const IntegrationsTab = () => {
       endpoints: integrationEndpoints.length > 0 ? integrationEndpoints : undefined
     });
     
+    // Reload integrations
     setIntegrations(mcpClient.getServers());
+    
+    // Sync to Supabase
+    await syncIntegrationsToSupabase();
+    const updatedStored = await fetchIntegrationsFromSupabase();
+    setStoredIntegrations(updatedStored);
     
     // Hide setup guide if reminder integration was added
     if (['reminders', 'reminder', 'tasks', 'todo'].includes(integrationCategory.toLowerCase())) {
@@ -351,6 +425,22 @@ const IntegrationsTab = () => {
   const mcpIntegrations = integrations.filter(i => i.type === 'mcp');
   const apiIntegrations = integrations.filter(i => i.type === 'api');
 
+  if (isLoading) {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="space-y-1">
+          <h2 className="text-xl font-medium">Integrations</h2>
+          <p className="text-sm text-gray-400">
+            Loading integrations...
+          </p>
+        </div>
+        <div className="flex items-center justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="space-y-1">
@@ -421,7 +511,7 @@ const IntegrationsTab = () => {
           </Button>
         </div>
 
-        {integrations.length === 0 ? (
+        {combinedIntegrations.length === 0 ? (
           <div className="text-center py-8 text-gray-400">
             <Cloud className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>No external integrations configured</p>
@@ -430,18 +520,18 @@ const IntegrationsTab = () => {
         ) : (
           <Tabs defaultValue="all" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="all">All ({integrations.length})</TabsTrigger>
+              <TabsTrigger value="all">All ({combinedIntegrations.length})</TabsTrigger>
               <TabsTrigger value="mcp">MCP ({mcpIntegrations.length})</TabsTrigger>
               <TabsTrigger value="api">APIs ({apiIntegrations.length})</TabsTrigger>
             </TabsList>
             
             <TabsContent value="all" className="mt-4">
               <div className="space-y-3">
-                {integrations.map((integration) => (
+                {combinedIntegrations.map((integration) => (
                   <IntegrationCard
-                    key={integration.id}
+                    key={`${integration.source}-${integration.id}`}
                     integration={integration}
-                    isActive={activeConnections[integration.id]}
+                    isActive={integration.isStored ? integration.is_active : activeConnections[integration.id]}
                     onTest={() => handleTestConnection(integration)}
                     onEdit={() => openEditDialog(integration)}
                     onCommands={() => openCommandsDialog(integration)}
@@ -455,9 +545,9 @@ const IntegrationsTab = () => {
               <div className="space-y-3">
                 {mcpIntegrations.map((integration) => (
                   <IntegrationCard
-                    key={integration.id}
+                    key={`${integration.source}-${integration.id}`}
                     integration={integration}
-                    isActive={activeConnections[integration.id]}
+                    isActive={integration.isStored ? integration.is_active : activeConnections[integration.id]}
                     onTest={() => handleTestConnection(integration)}
                     onEdit={() => openEditDialog(integration)}
                     onCommands={() => openCommandsDialog(integration)}
@@ -471,9 +561,9 @@ const IntegrationsTab = () => {
               <div className="space-y-3">
                 {apiIntegrations.map((integration) => (
                   <IntegrationCard
-                    key={integration.id}
+                    key={`${integration.source}-${integration.id}`}
                     integration={integration}
-                    isActive={activeConnections[integration.id]}
+                    isActive={integration.isStored ? integration.is_active : activeConnections[integration.id]}
                     onTest={() => handleTestConnection(integration)}
                     onEdit={() => openEditDialog(integration)}
                     onCommands={() => openCommandsDialog(integration)}
@@ -811,7 +901,7 @@ const IntegrationsTab = () => {
 
 // Integration Card Component
 const IntegrationCard: React.FC<{
-  integration: Integration;
+  integration: any;
   isActive: boolean;
   onTest: () => void;
   onEdit: () => void;
@@ -823,6 +913,13 @@ const IntegrationCard: React.FC<{
       return <Cloud className="h-5 w-5 text-blue-600 dark:text-blue-300" />;
     }
     return <Globe className="h-5 w-5 text-green-600 dark:text-green-300" />;
+  };
+
+  const getBadgeColor = () => {
+    if (integration.source === 'stored') {
+      return 'bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-300';
+    }
+    return 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300';
   };
 
   return (
@@ -837,11 +934,18 @@ const IntegrationCard: React.FC<{
             <div>
               <div className="flex items-center gap-2">
                 <h4 className="font-medium">{integration.name}</h4>
-                <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 rounded text-blue-600 dark:text-blue-300">
-                  {integration.type.toUpperCase()}
-                </span>
+                <div className="flex items-center gap-1">
+                  <span className={`text-xs px-2 py-1 rounded ${getBadgeColor()}`}>
+                    {integration.type.toUpperCase()}
+                  </span>
+                  {integration.isStored && (
+                    <span className="text-xs px-2 py-1 bg-purple-100 dark:bg-purple-900 rounded text-purple-600 dark:text-purple-300">
+                      STORED
+                    </span>
+                  )}
+                </div>
               </div>
-              <p className="text-xs text-gray-500">{integration.category} • {integration.url}</p>
+              <p className="text-xs text-gray-500">{integration.category} • {integration.url || integration.config?.url}</p>
               {integration.description && (
                 <p className="text-xs text-gray-400 mt-1">{integration.description}</p>
               )}
@@ -869,18 +973,18 @@ const IntegrationCard: React.FC<{
           </Button>
         </div>
       </div>
-      {(integration.commands && integration.commands.length > 0) || (integration.endpoints && integration.endpoints.length > 0) && (
+      {((integration.commands && integration.commands.length > 0) || (integration.endpoints && integration.endpoints.length > 0)) && (
         <div className="mt-2 pt-2 border-t">
           <p className="text-xs text-gray-500 mb-1">
             Available {integration.type === 'mcp' ? 'Commands' : 'Endpoints'}:
           </p>
           <div className="flex flex-wrap gap-1">
-            {integration.commands?.map((cmd, idx) => (
+            {integration.commands?.map((cmd: any, idx: number) => (
               <span key={idx} className="text-xs bg-blue-100 dark:bg-blue-900 px-2 py-1 rounded">
                 {cmd.name}
               </span>
             ))}
-            {integration.endpoints?.map((endpoint, idx) => (
+            {integration.endpoints?.map((endpoint: any, idx: number) => (
               <span key={idx} className="text-xs bg-green-100 dark:bg-green-900 px-2 py-1 rounded">
                 {endpoint.method} {endpoint.name}
               </span>

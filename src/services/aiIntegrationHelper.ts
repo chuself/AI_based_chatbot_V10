@@ -1,4 +1,3 @@
-
 /**
  * AI Integration Helper - Provides context and prompts for AI to understand integrations
  * 
@@ -45,7 +44,7 @@ export const getIntegrationsContext = async (): Promise<IntegrationContext[]> =>
     const storedIntegrations = await fetchIntegrationsFromSupabase();
     const storedCommands = await fetchCommandsFromSupabase();
 
-    console.log('Fetched integrations:', { 
+    console.log('📊 Fetched integrations data:', { 
       local: localIntegrations.length, 
       stored: storedIntegrations.length,
       commands: storedCommands.length 
@@ -61,6 +60,7 @@ export const getIntegrationsContext = async (): Promise<IntegrationContext[]> =>
       // Use a composite key to avoid conflicts
       const key = `${stored.name}-${stored.category}`;
       combinedIntegrations.set(key, context);
+      console.log(`✅ Added stored integration: ${stored.name} with ${commands.length} commands`);
     }
 
     // Add local integrations that aren't already stored
@@ -69,15 +69,25 @@ export const getIntegrationsContext = async (): Promise<IntegrationContext[]> =>
       if (!combinedIntegrations.has(key)) {
         const context = buildLocalIntegrationContext(local);
         combinedIntegrations.set(key, context);
+        console.log(`✅ Added local integration: ${local.name} with ${context.commonCommands.length} commands`);
+      } else {
+        console.log(`⚠️ Skipping local integration ${local.name} - already exists in stored integrations`);
       }
     }
 
     const result = Array.from(combinedIntegrations.values());
-    console.log('Final integrations context:', result.map(i => ({ name: i.name, category: i.category, commands: i.commonCommands.length })));
+    console.log('📋 Final integrations context:', result.map(i => ({ 
+      name: i.name, 
+      category: i.category, 
+      type: i.type,
+      commands: i.commonCommands.length,
+      active: i.isActive,
+      configured: i.isConfigured 
+    })));
     
     return result;
   } catch (error) {
-    console.error('Error getting integrations context:', error);
+    console.error('❌ Error getting integrations context:', error);
     // Fallback to local integrations only
     const mcpClient = getMcpClient();
     const integrations = mcpClient.getServersWithStatus();
@@ -112,8 +122,11 @@ const buildStoredIntegrationContext = (
     supabaseId: integration.id
   };
 
+  console.log(`🔍 Building context for stored integration: ${integration.name}, commands: ${commands.length}`);
+
   // CRITICAL: Only provide capabilities and examples if commands actually exist
   if (commands.length === 0) {
+    console.log(`⚠️ No commands for ${integration.name} - providing setup instructions only`);
     // No commands exist - provide NO capabilities or examples that suggest the AI can use this integration
     baseContext.capabilities = [];
     baseContext.usageExamples = [];
@@ -123,6 +136,7 @@ const buildStoredIntegrationContext = (
       '3. Add commands that define how the AI can interact with this service'
     ];
   } else {
+    console.log(`✅ ${integration.name} has ${commands.length} commands - enhancing with capabilities`);
     // Commands exist - enhance with capabilities
     return enhanceContextByCategory(baseContext);
   }
@@ -153,8 +167,11 @@ const buildLocalIntegrationContext = (integration: Integration & { isCurrentlyAc
     isConfigured: true
   };
 
+  console.log(`🔍 Building context for local integration: ${integration.name}, commands: ${integration.commands?.length || 0}`);
+
   // CRITICAL: Only provide capabilities and examples if commands actually exist
   if (!integration.commands || integration.commands.length === 0) {
+    console.log(`⚠️ No commands for ${integration.name} - providing setup instructions only`);
     // No commands exist - provide NO capabilities or examples that suggest the AI can use this integration
     baseContext.capabilities = [];
     baseContext.usageExamples = [];
@@ -164,6 +181,7 @@ const buildLocalIntegrationContext = (integration: Integration & { isCurrentlyAc
       '3. Verify the connection in Settings > Integrations'
     ];
   } else {
+    console.log(`✅ ${integration.name} has ${integration.commands.length} commands - enhancing with capabilities`);
     // Commands exist - enhance with capabilities
     return enhanceContextByCategory(baseContext);
   }
