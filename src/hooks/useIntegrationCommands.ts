@@ -114,7 +114,8 @@ export const useIntegrationCommands = () => {
         integrationName: integration.name,
         commandName: finalCommandName,
         parameters,
-        integrationConfig: integration.config
+        integrationConfig: integration.config,
+        timestamp: new Date().toISOString()
       };
       logRequest(integrationName, finalCommandName, parameters, requestDetails);
       

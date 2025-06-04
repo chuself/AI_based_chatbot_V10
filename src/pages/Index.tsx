@@ -33,6 +33,8 @@ const Index = () => {
     debugEntries, 
     toggleDebug, 
     logPrompt, 
+    logRequest,
+    logResponse,
     clearDebugEntries, 
     getDebugSummary 
   } = useMcpDebug();
@@ -101,9 +103,82 @@ const Index = () => {
     saveMessages(updatedMessages);
   };
 
-  // Helper function to format integration results in a conversational way
+  // Helper function to resolve task references to actual task IDs
+  const resolveTaskReference = async (taskReference: string, integrationName: string): Promise<string | null> => {
+    try {
+      if (isDebugEnabled) {
+        logRequest(integrationName, 'getTasks', {}, { reason: 'Resolving task reference', taskReference });
+      }
+      
+      // First, get all tasks
+      const tasksResult = await executeIntegrationCommand(integrationName, 'getTasks', {});
+      
+      if (tasksResult.result && Array.isArray(tasksResult.result.data)) {
+        const tasks = tasksResult.result.data;
+        
+        // Try to find task by various methods
+        let matchedTask = null;
+        
+        // 1. Try exact title match
+        matchedTask = tasks.find((task: any) => 
+          task.title && task.title.toLowerCase() === taskReference.toLowerCase()
+        );
+        
+        // 2. Try partial title match
+        if (!matchedTask) {
+          matchedTask = tasks.find((task: any) => 
+            task.title && task.title.toLowerCase().includes(taskReference.toLowerCase())
+          );
+        }
+        
+        // 3. Try index-based match (e.g., "first task", "second task")
+        if (!matchedTask) {
+          const indexMatches = taskReference.toLowerCase().match(/(first|second|third|fourth|fifth|\d+)/);
+          if (indexMatches) {
+            const indexMap: { [key: string]: number } = {
+              'first': 0, 'second': 1, 'third': 2, 'fourth': 3, 'fifth': 4
+            };
+            
+            let index = indexMap[indexMatches[1]] ?? parseInt(indexMatches[1]) - 1;
+            if (index >= 0 && index < tasks.length) {
+              matchedTask = tasks[index];
+            }
+          }
+        }
+        
+        if (matchedTask && matchedTask.id) {
+          if (isDebugEnabled) {
+            logResponse(integrationName, 'resolveTaskReference', { 
+              matchedTask: { id: matchedTask.id, title: matchedTask.title },
+              totalTasks: tasks.length 
+            });
+          }
+          return matchedTask.id;
+        }
+      }
+      
+      if (isDebugEnabled) {
+        logResponse(integrationName, 'resolveTaskReference', { error: 'No matching task found', taskReference });
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error resolving task reference:', error);
+      if (isDebugEnabled) {
+        logResponse(integrationName, 'resolveTaskReference', { error: error.message, taskReference });
+      }
+      return null;
+    }
+  };
+
+  // Helper function to format integration results based on debug mode
   const formatIntegrationResult = (result: any, commandName: string, integrationName: string): string => {
     if (!result) return "The command was executed successfully.";
+    
+    // In debug mode, show detailed information
+    if (isDebugEnabled) {
+      return `**Debug Mode - Raw Response:**\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\`\n\n**Command:** ${integrationName}.${commandName}`;
+    }
     
     // Handle task/reminder operations specifically
     if (integrationName.toLowerCase().includes('reminder') || integrationName.toLowerCase().includes('task')) {
@@ -177,7 +252,8 @@ const Index = () => {
       if (isDebugEnabled) {
         logPrompt(content, { 
           messageHistory: updatedMessages.slice(-5), // Last 5 messages for context
-          modelConfig: modelConfig?.modelName 
+          modelConfig: modelConfig?.modelName,
+          debugMode: isDebugEnabled
         });
       }
       
@@ -185,7 +261,7 @@ const Index = () => {
       
       console.log("AI Response received:", response);
       
-      // ONLY process integration commands if they contain actual tool_code format
+      // Process integration commands if they contain actual tool_code format
       let integrationResult = null;
       let finalResponse = response;
       
@@ -213,14 +289,50 @@ const Index = () => {
           }
         }
         
-        console.log('Executing REAL integration command:', { integrationName, commandName, parameters });
+        // Special handling for task operations that need ID resolution
+        if (['updatetask', 'deletetask', 'update_task', 'delete_task'].includes(commandName.toLowerCase())) {
+          if (parameters['task_reference'] || parameters['title']) {
+            const taskReference = parameters['task_reference'] || parameters['title'];
+            
+            if (isDebugEnabled) {
+              console.log(`Resolving task reference: "${taskReference}"`);
+            }
+            
+            const resolvedId = await resolveTaskReference(taskReference, integrationName);
+            if (resolvedId) {
+              parameters['id'] = resolvedId;
+              delete parameters['task_reference']; // Remove the reference, keep the resolved ID
+              
+              if (isDebugEnabled) {
+                console.log(`Resolved task ID: ${resolvedId}`);
+              }
+            } else {
+              // If we can't resolve the task, return an error
+              const errorMessage = `I couldn't find a task matching "${taskReference}". Please check the task name or try listing your tasks first.`;
+              
+              const assistantMessage: ChatMessage = {
+                role: 'assistant',
+                content: errorMessage,
+                timestamp: Date.now()
+              };
+              
+              const finalMessages = [...updatedMessages, assistantMessage];
+              setMessages(finalMessages);
+              saveMessages(finalMessages);
+              setIsLoading(false);
+              return;
+            }
+          }
+        }
+        
+        console.log('Executing integration command:', { integrationName, commandName, parameters });
         integrationResult = await executeIntegrationCommand(integrationName, commandName, parameters);
         
         if (integrationResult) {
-          console.log("REAL Integration command executed, result:", integrationResult);
+          console.log("Integration command executed, result:", integrationResult);
           
           if (integrationResult.result) {
-            // Format the result in a conversational way
+            // Format the result based on debug mode
             const conversationalResult = formatIntegrationResult(
               integrationResult.result, 
               commandName, 
@@ -246,7 +358,10 @@ const Index = () => {
           const mcpResponse = await mcpClient.processMcpCall(mcpCall);
           
           if (mcpResponse.result) {
-            finalResponse += `\n\nMCP Result: ${JSON.stringify(mcpResponse.result, null, 2)}`;
+            const formattedResult = isDebugEnabled 
+              ? `\n\nMCP Result: ${JSON.stringify(mcpResponse.result, null, 2)}`
+              : `\n\n${formatIntegrationResult(mcpResponse.result, mcpCall.method, mcpCall.serverId)}`;
+            finalResponse += formattedResult;
           } else if (mcpResponse.error) {
             finalResponse += `\n\nMCP Error: ${mcpResponse.error.message}`;
           }
@@ -346,7 +461,9 @@ const Index = () => {
         
         let responseContent = `Executed command: ${command.name}\n\n`;
         if (mcpResponse.result) {
-          responseContent += `Result: ${JSON.stringify(mcpResponse.result, null, 2)}`;
+          responseContent += isDebugEnabled 
+            ? `Result: ${JSON.stringify(mcpResponse.result, null, 2)}`
+            : formatIntegrationResult(mcpResponse.result, command.name, command.serverId);
         } else if (mcpResponse.error) {
           responseContent += `Error: ${mcpResponse.error.message}`;
         }
@@ -476,7 +593,7 @@ const Index = () => {
           <div className="mb-4 flex justify-end">
             <div className="flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-lg px-4 py-2 border">
               <Bug className="h-4 w-4 text-blue-500" />
-              <span className="text-sm font-medium">MCP Debug</span>
+              <span className="text-sm font-medium">Show MCP Commands</span>
               <Switch
                 checked={isDebugEnabled}
                 onCheckedChange={toggleDebug}

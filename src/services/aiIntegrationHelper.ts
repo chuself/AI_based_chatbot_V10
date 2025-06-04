@@ -1,3 +1,4 @@
+
 /**
  * AI Integration Helper - Provides context and prompts for AI to understand integrations
  * 
@@ -326,17 +327,22 @@ export const generateIntegrationsSystemPrompt = async (): Promise<string> => {
     });
 
     prompt += '\n**CRITICAL: How to use integrations:**\n';
-    prompt += '1. When users ask about tasks, reminders, emails, or other integrated services, use this EXACT format:\n';
+    prompt += '1. **ALWAYS fetch fresh data from external sources** - never use old cached responses or hallucinate data\n';
+    prompt += '2. When users ask about tasks, reminders, emails, or other integrated services, use this EXACT format:\n';
     prompt += '   ```tool_code\n';
     prompt += '   integrationName.commandName(parameter1="value1", parameter2="value2")\n';
     prompt += '   ```\n';
-    prompt += '2. For example, to get tasks: ```tool_code\nreminder.getTasks\n```\n';
-    prompt += '3. To create a task: ```tool_code\nreminder.createTask(title="Buy groceries", due_date="2024-12-15")\n```\n';
-    prompt += '4. Always use the exact integration name and command name as shown above\n';
-    prompt += '5. Always provide helpful context about what you\'re doing ("Let me check your pending tasks...")\n';
-    prompt += '6. If an integration isn\'t working, suggest checking the configuration in Settings > Integrations\n';
-    prompt += '7. **IMPORTANT: Format ALL responses in a conversational, human-friendly way. Never show raw JSON or technical output unless specifically asked. Present information naturally as if you\'re having a conversation.**\n';
-    prompt += '8. **CRITICAL: When showing API usage information, only show: API name, usage count, purpose, and response summary. Do not show full technical details unless requested.**\n';
+    prompt += '3. For example, to get tasks: ```tool_code\nreminder.getTasks\n```\n';
+    prompt += '4. To create a task: ```tool_code\nreminder.createTask(title="Buy groceries", due_date="2024-12-15")\n```\n';
+    prompt += '5. **For task operations requiring IDs:** Instead of asking users for task IDs, use task references like task title or description. The system will automatically resolve these to the correct IDs by fetching the current task list first.\n';
+    prompt += '6. To update a task: ```tool_code\nreminder.updateTask(task_reference="grocery shopping", status="completed")\n```\n';
+    prompt += '7. To delete a task: ```tool_code\nreminder.deleteTask(task_reference="call john")\n```\n';
+    prompt += '8. Always use the exact integration name and command name as shown above\n';
+    prompt += '9. Always provide helpful context about what you\'re doing ("Let me check your pending tasks...")\n';
+    prompt += '10. If an integration isn\'t working, suggest checking the configuration in Settings > Integrations\n';
+    prompt += '11. **IMPORTANT: Format ALL responses in a conversational, human-friendly way. Never show raw JSON or technical output unless debug mode is enabled.**\n';
+    prompt += '12. **CRITICAL: When showing API usage information, only show: API name, usage count, purpose, and response summary. Do not show full technical details unless requested.**\n';
+    prompt += '13. **ALWAYS call external APIs for fresh data** - never assume or use cached information from previous conversations\n';
   }
 
   // Show integrations without commands in a separate section
