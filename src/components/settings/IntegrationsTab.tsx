@@ -123,10 +123,13 @@ const IntegrationsTab = () => {
       combined.set(key, {
         ...stored,
         id: stored.id,
+        url: stored.config?.url || '',
         source: 'stored',
         isStored: true,
         commands: stored.config?.commands || [],
-        endpoints: stored.config?.endpoints || []
+        endpoints: stored.config?.endpoints || [],
+        headers: stored.config?.headers || {},
+        isActive: stored.is_active
       });
     });
     
@@ -424,8 +427,8 @@ const IntegrationsTab = () => {
   };
 
   const combinedIntegrations = getCombinedIntegrations();
-  const mcpIntegrations = integrations.filter(i => i.type === 'mcp');
-  const apiIntegrations = integrations.filter(i => i.type === 'api');
+  const mcpIntegrations = combinedIntegrations.filter(i => i.type === 'mcp');
+  const apiIntegrations = combinedIntegrations.filter(i => i.type === 'api');
 
   if (isLoading) {
     return (

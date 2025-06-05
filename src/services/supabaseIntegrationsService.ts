@@ -63,11 +63,25 @@ export const fetchIntegrationsFromSupabase = async (forceRefresh = false): Promi
 
     console.log(`✅ Fetched ${data?.length || 0} integrations from Supabase`);
     
+    // Transform and validate the data to match our types
+    const transformedData: StoredIntegration[] = (data || []).map(item => ({
+      id: item.id,
+      name: item.name,
+      type: (item.type === 'mcp' || item.type === 'api') ? item.type : 'mcp', // Default to 'mcp' if invalid
+      category: item.category,
+      description: item.description,
+      config: item.config,
+      is_active: item.is_active,
+      created_at: item.created_at,
+      updated_at: item.updated_at,
+      user_id: item.user_id
+    }));
+    
     // Update cache
-    integrationsCache = data || [];
+    integrationsCache = transformedData;
     cacheTimestamp = now;
     
-    return data || [];
+    return transformedData;
   } catch (error) {
     console.error('❌ Error in fetchIntegrationsFromSupabase:', error);
     return [];
