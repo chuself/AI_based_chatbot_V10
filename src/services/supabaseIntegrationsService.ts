@@ -12,7 +12,13 @@ export interface StoredIntegration {
   type: string;
   description?: string;
   is_active: boolean;
-  config: any;
+  config: {
+    url?: string;
+    apiKey?: string;
+    headers?: Record<string, string>;
+    commands?: any[];
+    endpoints?: any[];
+  };
   created_at: string;
   updated_at: string;
 }
@@ -195,13 +201,13 @@ export const syncIntegrationsToSupabase = async (): Promise<boolean> => {
         type: integration.type || 'mcp',
         description: integration.description || null,
         is_active: integration.isActive || false,
-        config: {
+        config: JSON.stringify({
           url: integration.url,
           apiKey: integration.apiKey || null,
           headers: integration.headers || {},
           commands: integration.commands || [],
           endpoints: integration.endpoints || []
-        } as any // Cast to any to satisfy Supabase Json type
+        })
       };
 
       if (existing) {
@@ -272,7 +278,17 @@ export const executeIntegrationCommand = async (
       return { error: { message: 'Integration is not active' } };
     }
 
-    const config = integration.config || {};
+    // Parse config safely
+    let config: any = {};
+    try {
+      config = typeof integration.config === 'string' 
+        ? JSON.parse(integration.config) 
+        : integration.config || {};
+    } catch (parseError) {
+      console.error('❌ Error parsing integration config:', parseError);
+      return { error: { message: 'Invalid integration configuration' } };
+    }
+
     const baseUrl = config.url;
     
     if (!baseUrl) {

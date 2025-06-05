@@ -7,35 +7,30 @@ import { Bot, User, Volume2, VolumeX, Mail } from "lucide-react";
 import LoadingDots from "./LoadingDots";
 import { Button } from "./ui/button";
 import { useSpeech } from "@/hooks/useSpeech";
-
-export interface Message {
-  id: string;
-  text: string;
-  isUser: boolean;
-  timestamp: Date;
-  isLoading?: boolean;
-  isMcpResult?: boolean;
-}
+import { ChatMessage } from "@/hooks/useChatHistory";
 
 interface MessageItemProps {
-  message: Message;
+  message: ChatMessage;
   autoPlaySpeech?: boolean;
 }
 
 const MessageItem: React.FC<MessageItemProps> = ({ message, autoPlaySpeech = false }) => {
   const { speak, stop, isSpeaking, autoPlay } = useSpeech();
   
-  const formatTimestamp = (timestamp: Date) => {
-    return timestamp.toLocaleTimeString([], { 
+  const formatTimestamp = (timestamp: number) => {
+    return new Date(timestamp).toLocaleTimeString([], { 
       hour: '2-digit', 
       minute: '2-digit'
     });
   };
 
+  const isUser = message.role === 'user';
+  const isAssistant = message.role === 'assistant';
+
   // Auto-play text if it's an AI message and autoPlay is enabled
   useEffect(() => {
-    if (!message.isUser && !message.isLoading && (autoPlaySpeech || autoPlay) && message.text && !message.isMcpResult) {
-      speak(message.text);
+    if (isAssistant && !message.isMcpResult && (autoPlaySpeech || autoPlay) && message.content) {
+      speak(message.content);
     }
     
     return () => {
@@ -43,33 +38,53 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, autoPlaySpeech = fal
         stop();
       }
     };
-  }, [message.text, message.isLoading, message.isUser, autoPlaySpeech, autoPlay, message.isMcpResult]);
+  }, [message.content, isAssistant, autoPlaySpeech, autoPlay, message.isMcpResult]);
 
   const handlePlaySpeech = () => {
     if (isSpeaking) {
       stop();
     } else {
-      speak(message.text);
+      speak(message.content);
+    }
+  };
+
+  // Determine background based on message type and source
+  const getMessageBackground = () => {
+    if (isUser) {
+      return "bg-gemini-primary text-white";
+    }
+    
+    // For assistant messages, determine background based on source
+    if (message.isMcpResult) {
+      // Integration response
+      if (message.content.includes('Error:') || message.content.includes('failed')) {
+        return "bg-white border-gray-200 text-gray-800"; // Normal background for failed integration
+      } else {
+        return "bg-green-50 border-green-200 text-green-900 dark:bg-green-900/20 dark:border-green-700 dark:text-green-100"; // Success integration background
+      }
+    } else {
+      // Direct model response
+      return "bg-blue-50 border-blue-200 text-blue-900 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-100"; // Model-generated background
     }
   };
 
   // Check if the message appears to be a JSON string from MCP result
-  const isMcpJsonResult = !message.isUser && message.isMcpResult && message.text.trim().startsWith('{');
+  const isMcpJsonResult = isAssistant && message.isMcpResult && message.content.trim().startsWith('{');
 
   // Render MCP JSON result with formatting
   const renderMcpResult = () => {
     try {
       // Check if it starts with "Error:"
-      if (message.text.startsWith('Error:')) {
+      if (message.content.startsWith('Error:')) {
         return (
           <div className="text-red-400">
-            <p className="font-medium">{message.text}</p>
+            <p className="font-medium">{message.content}</p>
           </div>
         );
       }
       
       // Try to parse and pretty print the JSON
-      const jsonData = JSON.parse(message.text);
+      const jsonData = JSON.parse(message.content);
       
       // Determine if it looks like Gmail data
       const isGmailData = jsonData && 
@@ -113,67 +128,56 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, autoPlaySpeech = fal
       );
     } catch (e) {
       // If parsing fails, just render the text
-      return <div className="whitespace-pre-wrap">{message.text}</div>;
+      return <div className="whitespace-pre-wrap">{message.content}</div>;
     }
   };
 
   return (
     <div className={cn(
       "flex w-full mb-4", 
-      message.isUser ? "justify-end" : "justify-start"
+      isUser ? "justify-end" : "justify-start"
     )}>
       <div className={cn(
         "flex max-w-[80%] md:max-w-[70%]", 
-        message.isUser ? "flex-row-reverse" : "flex-row"
+        isUser ? "flex-row-reverse" : "flex-row"
       )}>
         <Avatar className={cn(
           "h-8 w-8 mt-1", 
-          message.isUser ? "ml-2" : "mr-2"
+          isUser ? "ml-2" : "mr-2"
         )}>
           <AvatarFallback>
-            {message.isUser ? <User size={14} /> : <Bot size={14} />}
+            {isUser ? <User size={14} /> : <Bot size={14} />}
           </AvatarFallback>
-          <AvatarImage src={message.isUser ? "/user-avatar.png" : "/bot-avatar.png"} />
+          <AvatarImage src={isUser ? "/user-avatar.png" : "/bot-avatar.png"} />
         </Avatar>
         
         <div>
           <Card className={cn(
             "px-4 py-3 mb-1 relative group",
-            message.isUser 
-              ? "bg-gemini-primary text-white" 
-              : "bg-white border-gray-200 text-gray-800",
-            message.isMcpResult ? "bg-slate-800 text-white border-blue-500/30" : ""
+            getMessageBackground()
           )}>
-            {message.isLoading ? (
-              <div className="p-4 min-w-[120px] flex items-center justify-center">
-                <LoadingDots className="scale-150 opacity-100" />
+            {isMcpJsonResult ? renderMcpResult() : (
+              <div className="whitespace-pre-wrap">{message.content}</div>
+            )}
+            
+            {/* Speech Controls - Only show for AI messages that aren't MCP results */}
+            {isAssistant && !message.isMcpResult && (
+              <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button 
+                  size="icon" 
+                  variant="ghost" 
+                  className="h-6 w-6" 
+                  onClick={handlePlaySpeech}
+                >
+                  {isSpeaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                </Button>
               </div>
-            ) : (
-              <>
-                {isMcpJsonResult ? renderMcpResult() : (
-                  <div className="whitespace-pre-wrap">{message.text}</div>
-                )}
-                
-                {/* Speech Controls - Only show for AI messages that aren't MCP results */}
-                {!message.isUser && !message.isMcpResult && (
-                  <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button 
-                      size="icon" 
-                      variant="ghost" 
-                      className="h-6 w-6" 
-                      onClick={handlePlaySpeech}
-                    >
-                      {isSpeaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                    </Button>
-                  </div>
-                )}
-              </>
             )}
           </Card>
           
           <div className={cn(
             "text-xs text-gray-500 flex items-center",
-            message.isUser ? "justify-end" : "justify-start"
+            isUser ? "justify-end" : "justify-start"
           )}>
             <span>{formatTimestamp(message.timestamp)}</span>
           </div>

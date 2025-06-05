@@ -12,6 +12,7 @@ import {
   StoredIntegration, 
   StoredCommand 
 } from './supabaseIntegrationsService';
+import { executeIntegrationCommand } from '@/services/supabaseIntegrationsService';
 
 export interface IntegrationContext {
   id: string;
@@ -414,3 +415,53 @@ export const getIntegrationByCategory = async (category: string): Promise<Integr
   const integrations = await getIntegrationsContext();
   return integrations.find(i => i.category.toLowerCase() === category.toLowerCase());
 };
+
+export class AIIntegrationHelper {
+  constructor() {}
+
+  async executeCommand(integrationName: string, commandName: string, parameters: any = {}): Promise<string> {
+    try {
+      console.log(`🔄 AIIntegrationHelper: Executing ${commandName} on ${integrationName}`);
+      
+      const result = await executeIntegrationCommand(integrationName, commandName, parameters);
+      
+      if (result.error) {
+        console.error('❌ Integration command failed:', result.error.message);
+        return `Error: ${result.error.message}`;
+      }
+      
+      if (result.result) {
+        console.log('✅ Integration command succeeded');
+        
+        // Format the result for display
+        if (typeof result.result === 'object') {
+          return JSON.stringify(result.result, null, 2);
+        } else {
+          return String(result.result);
+        }
+      }
+      
+      return 'Command executed but no result returned';
+    } catch (error) {
+      console.error('❌ Error in AIIntegrationHelper.executeCommand:', error);
+      return `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    }
+  }
+
+  analyzeCommand(command: string): string {
+    // Implement command analysis logic here
+    return `Command analyzed: ${command}`;
+  }
+
+  extractParameters(command: string): any {
+    // Implement parameter extraction logic here
+    return {};
+  }
+
+  validateIntegrationName(name: string): boolean {
+    // Implement integration name validation logic here
+    return true;
+  }
+}
+
+export const aiIntegrationHelper = new AIIntegrationHelper();

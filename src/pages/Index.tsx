@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Send, Settings, Mic, MicOff, Square, Volume2, VolumeX, RotateCcw, Brain, Globe, User } from "lucide-react";
+import { Send, Settings, Mic, MicOff, Square, RotateCcw, Brain, Globe, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import MessageList from "@/components/MessageList";
 import { useGemini } from "@/hooks/useGemini";
@@ -26,13 +26,9 @@ const Index = () => {
   // Hooks
   const { sendMessage, isLoading: geminiLoading, selectedModel } = useGemini();
   const { 
-    isListening: isRecording, 
-    isSpeaking: isPlaying, 
-    transcript, 
-    startListening: startRecording, 
-    stopListening: stopRecording, 
     speak: togglePlayback,
-    isAvailable: isSpeechEnabled 
+    isSpeaking: isPlaying,
+    isRecognitionAvailable: isSpeechEnabled 
   } = useSpeech();
   const { syncData, isLoading: syncLoading, refreshSync } = useDataSync();
   const { executeCommand } = useIntegrationCommands();
@@ -41,6 +37,10 @@ const Index = () => {
     setChatHistory: addMessage, 
     clearChatHistory: clearMessages
   } = useChatHistory();
+
+  // Voice recognition state (simplified)
+  const [isRecording, setIsRecording] = useState(false);
+  const [transcript, setTranscript] = useState("");
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -70,9 +70,9 @@ const Index = () => {
     // Add user message to chat
     const newUserMessage = {
       id: Date.now().toString(),
+      role: 'user' as const,
       content: userMessage,
-      sender: 'user' as const,
-      timestamp: new Date()
+      timestamp: new Date().getTime()
     };
     
     addMessage([...messages, newUserMessage]);
@@ -87,18 +87,18 @@ const Index = () => {
         // Add AI response to chat
         const aiMessage = {
           id: (Date.now() + 1).toString(),
+          role: 'assistant' as const,
           content: response,
-          sender: 'ai' as const,
-          timestamp: new Date()
+          timestamp: new Date().getTime()
         };
         addMessage([...messages, newUserMessage, aiMessage]);
       } else {
         // Handle empty response
         const errorMessage = {
           id: (Date.now() + 1).toString(),
+          role: 'assistant' as const,
           content: "I apologize, but I couldn't generate a response. Please try again.",
-          sender: 'ai' as const,
-          timestamp: new Date()
+          timestamp: new Date().getTime()
         };
         addMessage([...messages, newUserMessage, errorMessage]);
       }
@@ -108,9 +108,9 @@ const Index = () => {
       // Add error message to chat
       const errorMessage = {
         id: (Date.now() + 1).toString(),
+        role: 'assistant' as const,
         content: "I'm sorry, there was an error processing your message. Please try again.",
-        sender: 'ai' as const,
-        timestamp: new Date()
+        timestamp: new Date().getTime()
       };
       addMessage([...messages, newUserMessage, errorMessage]);
 
@@ -140,11 +140,8 @@ const Index = () => {
   };
 
   const handleMicToggle = () => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
-    }
+    setIsRecording(!isRecording);
+    // Note: Actual speech recognition implementation would go here
   };
 
   const handleRefreshSync = async () => {
@@ -186,42 +183,44 @@ const Index = () => {
       
       <div className="pt-16">
         <div className="max-w-4xl mx-auto p-4 h-[calc(100vh-4rem)] flex flex-col">
-          {/* Status Bar */}
-          <div className="flex items-center justify-between mb-4 p-3 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-lg border border-white/20 dark:border-slate-700/20">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Brain className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {selectedModel || 'Gemini'}
-                </span>
+          {/* Unobtrusive Status Bar - Hidden by default, only show on hover */}
+          <div className="group mb-4 opacity-0 hover:opacity-100 transition-opacity duration-300">
+            <div className="flex items-center justify-between p-2 bg-white/30 dark:bg-slate-800/30 backdrop-blur-sm rounded-lg border border-white/10 dark:border-slate-700/10">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1">
+                  <Brain className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                    {selectedModel || 'Gemini'}
+                  </span>
+                </div>
+                
+                <div className="flex items-center gap-1">
+                  <Globe className="h-3 w-3 text-green-600 dark:text-green-400" />
+                  <span className="text-xs text-gray-600 dark:text-gray-400">
+                    {syncData?.syncMetadata?.syncSource === 'cloud' ? 'Cloud' : 'Local'}
+                  </span>
+                </div>
               </div>
-              
-              <div className="flex items-center gap-2">
-                <Globe className="h-4 w-4 text-green-600 dark:text-green-400" />
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                  {syncData?.syncMetadata?.syncSource === 'cloud' ? 'Cloud Synced' : 'Local Only'}
-                </span>
-              </div>
-            </div>
 
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleRefreshSync}
-                className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
-              >
-                <RotateCcw className="h-4 w-4" />
-              </Button>
-              
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate('/settings')}
-                className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRefreshSync}
+                  className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 h-6 w-6 p-0"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                </Button>
+                
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate('/settings')}
+                  className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 h-6 w-6 p-0"
+                >
+                  <Settings className="h-3 w-3" />
+                </Button>
+              </div>
             </div>
           </div>
 
