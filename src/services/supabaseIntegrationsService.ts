@@ -1,6 +1,35 @@
+
 import { supabase } from '@/integrations/supabase/client';
 import getMcpClient from './mcpService';
 import type { Integration } from './mcpService';
+
+// Types for stored integrations and commands
+export interface StoredIntegration {
+  id: string;
+  user_id: string;
+  name: string;
+  category: string;
+  type: string;
+  description?: string;
+  is_active: boolean;
+  config: any;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StoredCommand {
+  id: string;
+  integration_id: string;
+  name: string;
+  description?: string;
+  example?: string;
+  parameters: any;
+  method: string;
+  endpoint?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 // Cache for integrations to avoid excessive fetching
 let integrationsCache: any[] | null = null;
@@ -48,6 +77,86 @@ export const fetchIntegrationsFromSupabase = async (forceBypassCache = false): P
   }
 };
 
+export const fetchCommandsFromSupabase = async (): Promise<StoredCommand[]> => {
+  try {
+    console.log('🔄 Fetching commands from Supabase...');
+    
+    const { data: commands, error } = await supabase
+      .from('integration_commands')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ Error fetching commands:', error);
+      return [];
+    }
+
+    console.log(`✅ Fetched ${commands?.length || 0} commands from Supabase`);
+    return commands || [];
+  } catch (error) {
+    console.error('❌ Unexpected error fetching commands:', error);
+    return [];
+  }
+};
+
+export const saveIntegrationCommand = async (integrationId: string, commandData: any): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return { success: false, error: 'User not authenticated' };
+    }
+
+    const { error } = await supabase
+      .from('integration_commands')
+      .insert({
+        integration_id: integrationId,
+        name: commandData.name,
+        description: commandData.description,
+        example: commandData.example,
+        parameters: commandData.parameters,
+        method: commandData.method,
+        endpoint: commandData.endpoint,
+        is_active: true
+      });
+
+    if (error) {
+      console.error('❌ Error saving command:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('✅ Command saved successfully');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Unexpected error saving command:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+};
+
+export const deleteIntegrationCommand = async (commandId: string): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return { success: false, error: 'User not authenticated' };
+    }
+
+    const { error } = await supabase
+      .from('integration_commands')
+      .delete()
+      .eq('id', commandId);
+
+    if (error) {
+      console.error('❌ Error deleting command:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('✅ Command deleted successfully');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Unexpected error deleting command:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+};
+
 export const syncIntegrationsToSupabase = async (): Promise<boolean> => {
   try {
     console.log('🔄 Starting integration sync to Supabase...');
@@ -92,7 +201,7 @@ export const syncIntegrationsToSupabase = async (): Promise<boolean> => {
           headers: integration.headers || {},
           commands: integration.commands || [],
           endpoints: integration.endpoints || []
-        }
+        } as any // Cast to any to satisfy Supabase Json type
       };
 
       if (existing) {

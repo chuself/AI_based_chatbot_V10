@@ -24,24 +24,22 @@ const Index = () => {
   const { toast } = useToast();
 
   // Hooks
-  const { sendMessage, isLoading: geminiLoading, currentModel } = useGemini();
+  const { sendMessage, isLoading: geminiLoading, selectedModel } = useGemini();
   const { 
-    isRecording, 
-    isPlaying, 
+    isListening: isRecording, 
+    isSpeaking: isPlaying, 
     transcript, 
-    startRecording, 
-    stopRecording, 
-    togglePlayback,
-    isSpeechEnabled 
+    startListening: startRecording, 
+    stopListening: stopRecording, 
+    speak: togglePlayback,
+    isAvailable: isSpeechEnabled 
   } = useSpeech();
   const { syncData, isLoading: syncLoading, refreshSync } = useDataSync();
   const { executeCommand } = useIntegrationCommands();
   const { 
-    messages, 
-    addMessage, 
-    updateLastMessage, 
-    clearMessages,
-    isLoading: chatLoading 
+    chatHistory: messages, 
+    setChatHistory: addMessage, 
+    clearChatHistory: clearMessages
   } = useChatHistory();
 
   // Auto-scroll to bottom when new messages arrive
@@ -70,46 +68,51 @@ const Index = () => {
     console.log('📤 Sending message:', userMessage);
 
     // Add user message to chat
-    addMessage({
+    const newUserMessage = {
       id: Date.now().toString(),
       content: userMessage,
-      sender: 'user',
+      sender: 'user' as const,
       timestamp: new Date()
-    });
+    };
+    
+    addMessage([...messages, newUserMessage]);
 
     try {
       // Send message to Gemini and get response
-      const response = await sendMessage(userMessage, messages);
+      const response = await sendMessage(userMessage);
       
       console.log('📥 Received response:', response);
 
       if (response) {
         // Add AI response to chat
-        addMessage({
+        const aiMessage = {
           id: (Date.now() + 1).toString(),
           content: response,
-          sender: 'ai',
+          sender: 'ai' as const,
           timestamp: new Date()
-        });
+        };
+        addMessage([...messages, newUserMessage, aiMessage]);
       } else {
         // Handle empty response
-        addMessage({
+        const errorMessage = {
           id: (Date.now() + 1).toString(),
           content: "I apologize, but I couldn't generate a response. Please try again.",
-          sender: 'ai',
+          sender: 'ai' as const,
           timestamp: new Date()
-        });
+        };
+        addMessage([...messages, newUserMessage, errorMessage]);
       }
     } catch (error) {
       console.error('❌ Error sending message:', error);
       
       // Add error message to chat
-      addMessage({
+      const errorMessage = {
         id: (Date.now() + 1).toString(),
         content: "I'm sorry, there was an error processing your message. Please try again.",
-        sender: 'ai',
+        sender: 'ai' as const,
         timestamp: new Date()
-      });
+      };
+      addMessage([...messages, newUserMessage, errorMessage]);
 
       toast({
         title: "Error",
@@ -175,7 +178,7 @@ const Index = () => {
     );
   }
 
-  const isAnyLoading = geminiLoading || chatLoading || isTyping;
+  const isAnyLoading = geminiLoading || isTyping;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-slate-800 dark:via-slate-900 dark:to-indigo-900">
@@ -189,7 +192,7 @@ const Index = () => {
               <div className="flex items-center gap-2">
                 <Brain className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {currentModel || 'Gemini'}
+                  {selectedModel || 'Gemini'}
                 </span>
               </div>
               
