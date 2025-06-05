@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentUser } from "./supabaseService";
 import getMcpClient, { Integration } from './mcpService';
@@ -45,34 +46,39 @@ export interface StoredCommand {
   updated_at: string;
 }
 
+// Clear all caches aggressively to prevent stale data
 let cachedIntegrations: StoredIntegration[] | null = null;
 let cachedCommands: StoredCommand[] | null = null;
 let lastFetchTime = 0;
-const CACHE_DURATION = 30000; // 30 seconds
+const CACHE_DURATION = 5000; // Reduced to 5 seconds to prevent stale data
 
-// Clear cache when needed
+// Enhanced cache clearing
 export const clearIntegrationsCache = () => {
+  console.log('🧹 Clearing all integration caches');
   cachedIntegrations = null;
   cachedCommands = null;
   lastFetchTime = 0;
 };
 
-export const fetchIntegrationsFromSupabase = async (): Promise<StoredIntegration[]> => {
+// Force fresh data fetch without cache
+export const fetchIntegrationsFromSupabase = async (bypassCache = false): Promise<StoredIntegration[]> => {
   try {
-    // Check cache first
     const now = Date.now();
-    if (cachedIntegrations && (now - lastFetchTime) < CACHE_DURATION) {
+    
+    // Check cache only if not bypassing and within duration
+    if (!bypassCache && cachedIntegrations && (now - lastFetchTime) < CACHE_DURATION) {
       console.log('📋 Using cached integrations');
       return cachedIntegrations;
     }
+
+    console.log('🔄 Fetching fresh integrations from Supabase...');
+    clearIntegrationsCache(); // Clear before fresh fetch
 
     const user = await getCurrentUser();
     if (!user) {
       console.log('❌ No authenticated user for fetching integrations');
       return [];
     }
-
-    console.log('📥 Fetching integrations from Supabase for user:', user.id);
 
     const { data, error } = await supabase
       .from('integrations')
@@ -86,38 +92,44 @@ export const fetchIntegrationsFromSupabase = async (): Promise<StoredIntegration
       return [];
     }
 
-    const integrations = data || [];
-    console.log('✅ Fetched integrations from Supabase:', integrations.length);
+    // Type assertion to handle Supabase type mismatch
+    const integrations = (data || []).map(item => ({
+      ...item,
+      type: item.type as 'mcp' | 'api',
+      config: item.config as StoredIntegration['config']
+    }));
     
-    // Update cache
+    console.log('✅ Fetched fresh integrations from Supabase:', integrations.length);
+    
+    // Update cache with fresh data
     cachedIntegrations = integrations;
     lastFetchTime = now;
     
     return integrations;
   } catch (error) {
     console.error('❌ Network error fetching integrations:', error);
+    clearIntegrationsCache(); // Clear cache on error
     return [];
   }
 };
 
-export const fetchCommandsFromSupabase = async (): Promise<StoredCommand[]> => {
+export const fetchCommandsFromSupabase = async (bypassCache = false): Promise<StoredCommand[]> => {
   try {
-    // Check cache first
     const now = Date.now();
-    if (cachedCommands && (now - lastFetchTime) < CACHE_DURATION) {
+    
+    if (!bypassCache && cachedCommands && (now - lastFetchTime) < CACHE_DURATION) {
       console.log('📋 Using cached commands');
       return cachedCommands;
     }
 
+    console.log('🔄 Fetching fresh commands from Supabase...');
+    
     const user = await getCurrentUser();
     if (!user) {
       console.log('❌ No authenticated user for fetching commands');
       return [];
     }
 
-    console.log('📥 Fetching commands from Supabase for user:', user.id);
-
-    // Get all commands for user's integrations
     const { data, error } = await supabase
       .from('integration_commands')
       .select(`
@@ -133,10 +145,14 @@ export const fetchCommandsFromSupabase = async (): Promise<StoredCommand[]> => {
       return [];
     }
 
-    const commands = data || [];
-    console.log('✅ Fetched commands from Supabase:', commands.length);
+    // Type assertion to handle Supabase JSON type
+    const commands = (data || []).map(item => ({
+      ...item,
+      parameters: item.parameters as Record<string, any>
+    }));
     
-    // Update cache
+    console.log('✅ Fetched fresh commands from Supabase:', commands.length);
+    
     cachedCommands = commands;
     lastFetchTime = now;
     
@@ -156,8 +172,8 @@ export const executeIntegrationCommand = async (
     console.log(`🚀 Executing command ${commandName} on integration ${integrationId}`);
     console.log('📊 Parameters:', parameters);
 
-    // Get the integration details
-    const integrations = await fetchIntegrationsFromSupabase();
+    // Force fresh integration data to avoid stale connections
+    const integrations = await fetchIntegrationsFromSupabase(true);
     const integration = integrations.find(i => i.id === integrationId);
 
     if (!integration) {
@@ -167,8 +183,8 @@ export const executeIntegrationCommand = async (
 
     console.log(`📍 Found integration: ${integration.name} (${integration.category})`);
 
-    // Get the command details
-    const commands = await fetchCommandsFromSupabase();
+    // Force fresh command data
+    const commands = await fetchCommandsFromSupabase(true);
     const command = commands.find(c => 
       c.integration_id === integrationId && 
       c.name.toLowerCase() === commandName.toLowerCase()
@@ -187,9 +203,13 @@ export const executeIntegrationCommand = async (
 
     // Execute based on integration type
     if (integration.type === 'mcp') {
-      // Use MCP client for MCP integrations
+      // Use MCP client for MCP integrations - ensure fresh connection
       const mcpClient = getMcpClient();
-      return await mcpClient.executeCommand(integration.name, command.name, parameters);
+      
+      // Force reconnection to ensure fresh state
+      console.log('🔄 Ensuring fresh MCP connection...');
+      
+      return await mcpClient.call(integration.name, command.name, parameters);
     } else {
       // Execute API call for direct API integrations
       return await executeApiCommand(integration, command, parameters);
@@ -222,9 +242,11 @@ const executeApiCommand = async (
       url = url.endsWith('/') ? url + command.endpoint.replace(/^\//, '') : url + command.endpoint;
     }
 
-    // Prepare headers
+    // Prepare headers with fresh timestamp to avoid caching
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache',
+      'X-Timestamp': Date.now().toString(),
       ...integration.config.headers
     };
 
@@ -235,26 +257,29 @@ const executeApiCommand = async (
     // Prepare request options
     const requestOptions: RequestInit = {
       method: command.method || 'GET',
-      headers
+      headers,
+      cache: 'no-cache' // Prevent browser caching
     };
 
     // Add body for POST/PUT requests
     if (['POST', 'PUT', 'PATCH'].includes(command.method || 'GET')) {
       requestOptions.body = JSON.stringify(parameters);
     } else if (Object.keys(parameters).length > 0) {
-      // Add query parameters for GET requests
+      // Add query parameters for GET requests with timestamp
       const searchParams = new URLSearchParams();
       Object.entries(parameters).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
           searchParams.append(key, String(value));
         }
       });
+      // Add timestamp to prevent caching
+      searchParams.append('_t', Date.now().toString());
       if (searchParams.toString()) {
         url += (url.includes('?') ? '&' : '?') + searchParams.toString();
       }
     }
 
-    console.log(`🌐 Making ${command.method || 'GET'} request to: ${url}`);
+    console.log(`🌐 Making fresh ${command.method || 'GET'} request to: ${url}`);
 
     const response = await fetch(url, requestOptions);
     
@@ -269,7 +294,7 @@ const executeApiCommand = async (
     }
 
     const result = await response.json();
-    console.log('✅ API command executed successfully');
+    console.log('✅ API command executed successfully with fresh data');
     
     return { result };
 
@@ -280,6 +305,48 @@ const executeApiCommand = async (
         message: error instanceof Error ? error.message : 'Unknown API error' 
       } 
     };
+  }
+};
+
+// Add missing export functions
+export const saveIntegrationCommand = async (command: Partial<StoredCommand>): Promise<boolean> => {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return false;
+
+    const { error } = await supabase
+      .from('integration_commands')
+      .upsert({
+        ...command,
+        updated_at: new Date().toISOString()
+      });
+
+    if (!error) {
+      clearIntegrationsCache();
+    }
+
+    return !error;
+  } catch (error) {
+    console.error('Error saving integration command:', error);
+    return false;
+  }
+};
+
+export const deleteIntegrationCommand = async (commandId: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('integration_commands')
+      .delete()
+      .eq('id', commandId);
+
+    if (!error) {
+      clearIntegrationsCache();
+    }
+
+    return !error;
+  } catch (error) {
+    console.error('Error deleting integration command:', error);
+    return false;
   }
 };
 
@@ -327,6 +394,25 @@ export const syncIntegrationsToSupabase = async (): Promise<boolean> => {
 
         let integrationId: string;
 
+        // Type-safe config preparation
+        const configData = {
+          url: localIntegration.url,
+          apiKey: localIntegration.apiKey,
+          headers: localIntegration.headers || {},
+          commands: (localIntegration.commands || []).map(cmd => ({
+            name: cmd.name,
+            description: cmd.description,
+            example: cmd.example,
+            parameters: cmd.parameters || {}
+          })),
+          endpoints: (localIntegration.endpoints || []).map(endpoint => ({
+            name: endpoint.name,
+            path: endpoint.path,
+            method: endpoint.method,
+            description: endpoint.description
+          }))
+        };
+
         if (existingIntegration) {
           // Update existing integration
           console.log(`🔄 Updating existing integration: ${existingIntegration.id}`);
@@ -335,13 +421,7 @@ export const syncIntegrationsToSupabase = async (): Promise<boolean> => {
             .from('integrations')
             .update({
               description: localIntegration.description,
-              config: {
-                url: localIntegration.url,
-                apiKey: localIntegration.apiKey,
-                headers: localIntegration.headers,
-                commands: localIntegration.commands,
-                endpoints: localIntegration.endpoints
-              },
+              config: configData,
               is_active: true,
               updated_at: new Date().toISOString()
             })
@@ -367,13 +447,7 @@ export const syncIntegrationsToSupabase = async (): Promise<boolean> => {
               type: localIntegration.type,
               category: localIntegration.category,
               description: localIntegration.description,
-              config: {
-                url: localIntegration.url,
-                apiKey: localIntegration.apiKey,
-                headers: localIntegration.headers,
-                commands: localIntegration.commands,
-                endpoints: localIntegration.endpoints
-              },
+              config: configData,
               is_active: true
             })
             .select('id')

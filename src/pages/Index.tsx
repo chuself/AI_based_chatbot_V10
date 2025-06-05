@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { ChatMessage } from "@/hooks/useChatHistory";
 import MessageList from "@/components/MessageList";
 import MessageInput from "@/components/MessageInput";
@@ -24,6 +24,11 @@ const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isCommandExecuting, setIsCommandExecuting] = useState<string | null>(null);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
+  
+  // Prevent duplicate message processing
+  const processingMessages = useRef(new Set<string>());
+  const lastMessageTime = useRef(0);
+  
   const { sendMessage: sendMessageToGemini } = useGemini();
   const { chatHistory, setChatHistory } = useChatHistory();
   const { commands } = useCommands();
@@ -39,7 +44,7 @@ const Index = () => {
     getDebugSummary 
   } = useMcpDebug();
   const mcpClient = getMcpClient();
-  const { executeCommand: executeIntegrationCommand } = useIntegrationCommands();
+  const { executeCommand: executeIntegrationCommand, clearExecutionTracking } = useIntegrationCommands();
 
   useEffect(() => {
     setMessages(chatHistory);
@@ -110,7 +115,7 @@ const Index = () => {
         logRequest(integrationName, 'getTasks', {}, { reason: 'Resolving task reference', taskReference });
       }
       
-      // First, get all tasks
+      // First, get all tasks with fresh data
       const tasksResult = await executeIntegrationCommand(integrationName, 'getTasks', {});
       
       if (tasksResult.result && Array.isArray(tasksResult.result.data)) {
@@ -233,33 +238,53 @@ const Index = () => {
   const sendMessage = async (content: string) => {
     if (!content.trim()) return;
     
-    const userMessage: ChatMessage = { 
-      role: 'user', 
-      content,
-      timestamp: Date.now()
-    };
+    // Create unique message key to prevent duplicates
+    const messageKey = `${content}-${Date.now()}`;
     
-    const updatedMessages = [...messages, userMessage];
-    setMessages(updatedMessages);
-    saveMessages(updatedMessages);
+    // Prevent duplicate processing
+    if (processingMessages.current.has(messageKey) || isLoading) {
+      console.log('⚠️ Message already being processed or system is busy');
+      return;
+    }
     
-    setIsLoading(true);
+    // Add cooldown to prevent rapid message sending
+    const now = Date.now();
+    if (now - lastMessageTime.current < 1000) { // 1 second cooldown
+      console.log('⚠️ Message sent too quickly, please wait');
+      return;
+    }
     
     try {
-      console.log("Sending message to AI...");
+      processingMessages.current.add(messageKey);
+      lastMessageTime.current = now;
+      
+      const userMessage: ChatMessage = { 
+        role: 'user', 
+        content,
+        timestamp: Date.now()
+      };
+      
+      const updatedMessages = [...messages, userMessage];
+      setMessages(updatedMessages);
+      saveMessages(updatedMessages);
+      
+      setIsLoading(true);
+      
+      console.log("🚀 Processing new message:", content);
       
       // Log the prompt being sent to AI for debugging
       if (isDebugEnabled) {
         logPrompt(content, { 
           messageHistory: updatedMessages.slice(-5), // Last 5 messages for context
           modelConfig: modelConfig?.modelName,
-          debugMode: isDebugEnabled
+          debugMode: isDebugEnabled,
+          messageKey
         });
       }
       
       const response = await sendMessageToGemini(content, undefined, updatedMessages);
       
-      console.log("AI Response received:", response);
+      console.log("✅ AI Response received:", response);
       
       // Process integration commands if they contain actual tool_code format
       let integrationResult = null;
@@ -269,7 +294,7 @@ const Index = () => {
       const toolCodeMatch = response.match(/```tool_code\s*\n\s*([^.]+)\.([^(\s]+)(?:\(([^)]*)\))?\s*\n\s*```/);
       
       if (toolCodeMatch) {
-        console.log("Found tool_code pattern:", toolCodeMatch);
+        console.log("🛠️ Found tool_code pattern:", toolCodeMatch);
         const [, integrationName, commandName, parametersStr] = toolCodeMatch;
         let parameters = {};
         
@@ -295,7 +320,7 @@ const Index = () => {
             const taskReference = parameters['task_reference'] || parameters['title'];
             
             if (isDebugEnabled) {
-              console.log(`Resolving task reference: "${taskReference}"`);
+              console.log(`🔍 Resolving task reference: "${taskReference}"`);
             }
             
             const resolvedId = await resolveTaskReference(taskReference, integrationName);
@@ -304,7 +329,7 @@ const Index = () => {
               delete parameters['task_reference']; // Remove the reference, keep the resolved ID
               
               if (isDebugEnabled) {
-                console.log(`Resolved task ID: ${resolvedId}`);
+                console.log(`✅ Resolved task ID: ${resolvedId}`);
               }
             } else {
               // If we can't resolve the task, return an error
@@ -319,17 +344,16 @@ const Index = () => {
               const finalMessages = [...updatedMessages, assistantMessage];
               setMessages(finalMessages);
               saveMessages(finalMessages);
-              setIsLoading(false);
               return;
             }
           }
         }
         
-        console.log('Executing integration command:', { integrationName, commandName, parameters });
+        console.log('📡 Executing integration command with fresh connection:', { integrationName, commandName, parameters });
         integrationResult = await executeIntegrationCommand(integrationName, commandName, parameters);
         
         if (integrationResult) {
-          console.log("Integration command executed, result:", integrationResult);
+          console.log("✅ Integration command executed successfully:", integrationResult);
           
           if (integrationResult.result) {
             // Format the result based on debug mode
@@ -343,27 +367,27 @@ const Index = () => {
             finalResponse = response.replace(/```tool_code[\s\S]*?```/g, '').trim() + 
                            (finalResponse.trim() ? '\n\n' : '') + conversationalResult;
           } else if (integrationResult.error) {
-            console.error("Integration command error:", integrationResult.error);
+            console.error("❌ Integration command error:", integrationResult.error);
             finalResponse = response.replace(/```tool_code[\s\S]*?```/g, '').trim() + 
                            `\n\nI encountered an error: ${integrationResult.error.message}`;
           }
         }
       } else if (mcpClient.hasMcpCall(response)) {
-        console.log("Response contains MCP call, processing...");
+        console.log("🔧 Response contains MCP call, processing...");
         const mcpCall = mcpClient.extractMcpCall(response);
         
         if (mcpCall) {
-          console.log("Extracted MCP call:", mcpCall);
+          console.log("📞 Extracted MCP call:", mcpCall);
           
           const mcpResponse = await mcpClient.processMcpCall(mcpCall);
           
           if (mcpResponse.result) {
             const formattedResult = isDebugEnabled 
-              ? `\n\nMCP Result: ${JSON.stringify(mcpResponse.result, null, 2)}`
+              ? `\n\n**MCP Result:** ${JSON.stringify(mcpResponse.result, null, 2)}`
               : `\n\n${formatIntegrationResult(mcpResponse.result, mcpCall.method, mcpCall.serverId)}`;
             finalResponse += formattedResult;
           } else if (mcpResponse.error) {
-            finalResponse += `\n\nMCP Error: ${mcpResponse.error.message}`;
+            finalResponse += `\n\n**MCP Error:** ${mcpResponse.error.message}`;
           }
         }
       }
@@ -379,8 +403,10 @@ const Index = () => {
       setMessages(finalMessages);
       saveMessages(finalMessages);
       
+      console.log("✅ Message processing completed successfully");
+      
     } catch (error) {
-      console.error("Error sending message:", error);
+      console.error("❌ Error sending message:", error);
       const errorMessage: ChatMessage = { 
         role: 'assistant', 
         content: "I apologize, but I encountered an error while processing your request. Please try again.",
@@ -392,6 +418,7 @@ const Index = () => {
       saveMessages(errorMessages);
     } finally {
       setIsLoading(false);
+      processingMessages.current.delete(messageKey);
     }
   };
 
@@ -518,6 +545,11 @@ const Index = () => {
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
   };
+
+  // Reset execution tracking when debug mode changes
+  useEffect(() => {
+    clearExecutionTracking();
+  }, [isDebugEnabled, clearExecutionTracking]);
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-slate-800 dark:via-slate-900 dark:to-indigo-900">

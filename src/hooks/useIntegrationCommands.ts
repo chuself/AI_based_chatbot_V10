@@ -1,24 +1,41 @@
 
-import { useState } from 'react';
-import { executeIntegrationCommand, fetchIntegrationsFromSupabase } from '@/services/supabaseIntegrationsService';
+import { useState, useRef } from 'react';
+import { executeIntegrationCommand, fetchIntegrationsFromSupabase, clearIntegrationsCache } from '@/services/supabaseIntegrationsService';
 import { useMcpDebug } from './useMcpDebug';
 
 export const useIntegrationCommands = () => {
   const [isExecuting, setIsExecuting] = useState<string | null>(null);
   const { logRequest, logResponse } = useMcpDebug();
+  
+  // Track execution to prevent duplicates
+  const executingCommands = useRef(new Set<string>());
 
   const executeCommand = async (
     integrationName: string,
     commandName: string,
     parameters: Record<string, any> = {}
   ): Promise<{ result?: any; error?: { message: string } }> => {
+    // Create unique execution key to prevent duplicates
+    const executionKey = `${integrationName}.${commandName}.${JSON.stringify(parameters)}`;
+    
+    // Check if this exact command is already executing
+    if (executingCommands.current.has(executionKey)) {
+      console.log(`⚠️ Command already executing: ${executionKey}`);
+      return { error: { message: 'Command is already being executed' } };
+    }
+
     try {
+      // Mark this command as executing
+      executingCommands.current.add(executionKey);
       setIsExecuting(`${integrationName}.${commandName}`);
       
       console.log(`🔍 Looking for integration with name: "${integrationName}"`);
       
-      // Get integration from Supabase (which handles deduplication)
-      const integrations = await fetchIntegrationsFromSupabase();
+      // Force fresh integrations fetch to avoid stale data
+      console.log('🔄 Forcing fresh integration data fetch...');
+      clearIntegrationsCache(); // Clear any existing cache
+      const integrations = await fetchIntegrationsFromSupabase(true); // Force bypass cache
+      
       console.log('📊 Available integrations:', integrations.map(i => ({ 
         name: i.name, 
         category: i.category, 
@@ -78,10 +95,13 @@ export const useIntegrationCommands = () => {
         commandName: finalCommandName,
         parameters,
         integrationConfig: integration.config,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        executionKey
       };
       logRequest(integrationName, finalCommandName, parameters, requestDetails);
       
+      // Execute with fresh connection
+      console.log('📡 Executing with fresh connection to external API...');
       const result = await executeIntegrationCommand(
         integration.id,
         finalCommandName,
@@ -100,6 +120,8 @@ export const useIntegrationCommands = () => {
       logResponse(integrationName, commandName, errorResult);
       return errorResult;
     } finally {
+      // Always clean up execution tracking
+      executingCommands.current.delete(executionKey);
       setIsExecuting(null);
     }
   };
@@ -108,10 +130,17 @@ export const useIntegrationCommands = () => {
     return isExecuting === `${integrationName}.${commandName}`;
   };
 
+  // Clear all execution tracking (useful for reset)
+  const clearExecutionTracking = () => {
+    executingCommands.current.clear();
+    setIsExecuting(null);
+  };
+
   return {
     executeCommand,
     isExecuting,
-    isCommandExecuting
+    isCommandExecuting,
+    clearExecutionTracking
   };
 };
 

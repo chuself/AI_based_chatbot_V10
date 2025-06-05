@@ -1,22 +1,40 @@
 
-import { useState, useEffect, useContext, useCallback } from "react";
+import { useState, useEffect, useContext, useCallback, useRef } from "react";
 import { SyncService, UserDataWithMeta } from "@/services/syncService";
 import { SupabaseContext } from "@/App";
 import { useToast } from "@/components/ui/use-toast";
-import { syncIntegrationsToSupabase, cleanupDuplicateIntegrations } from "@/services/supabaseIntegrationsService";
+import { syncIntegrationsToSupabase, cleanupDuplicateIntegrations, clearIntegrationsCache } from "@/services/supabaseIntegrationsService";
 
 export const useDataSync = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [syncData, setSyncData] = useState<UserDataWithMeta | null>(null);
   const { user } = useContext(SupabaseContext);
   const { toast } = useToast();
+  
+  // Prevent duplicate sync operations
+  const syncInProgress = useRef(false);
+  const lastSyncTime = useRef(0);
+  const SYNC_COOLDOWN = 2000; // 2 seconds cooldown between syncs
 
   // Function to force sync data
   const forceSyncData = useCallback(async () => {
+    // Prevent duplicate sync calls
+    const now = Date.now();
+    if (syncInProgress.current || (now - lastSyncTime.current) < SYNC_COOLDOWN) {
+      console.log('🔄 Sync already in progress or in cooldown, skipping...');
+      return syncData;
+    }
+
+    syncInProgress.current = true;
+    lastSyncTime.current = now;
+
     if (user) {
       console.log('🔄 Force syncing data...');
       setIsLoading(true);
       try {
+        // Clear integration cache first to prevent stale data
+        clearIntegrationsCache();
+        
         // First cleanup duplicate integrations
         console.log('🧹 Cleaning up duplicate integrations...');
         await cleanupDuplicateIntegrations();
@@ -68,6 +86,7 @@ export const useDataSync = () => {
         return fallbackResult;
       } finally {
         setIsLoading(false);
+        syncInProgress.current = false;
       }
     } else {
       // User not logged in, use local data only
@@ -81,13 +100,16 @@ export const useDataSync = () => {
       setSyncData(result);
       applyDataToApp(result);
       setIsLoading(false);
+      syncInProgress.current = false;
       return result;
     }
-  }, [user?.id, toast]);
+  }, [user?.id, toast, syncData]);
 
-  // Initial data sync when user changes or page loads
+  // Initial data sync when user changes or page loads - with debouncing
   useEffect(() => {
     const initializeData = async () => {
+      // Small delay to prevent rapid successive calls
+      await new Promise(resolve => setTimeout(resolve, 100));
       console.log('🚀 Initializing data sync...');
       await forceSyncData();
     };
@@ -95,19 +117,28 @@ export const useDataSync = () => {
     initializeData();
   }, [forceSyncData]);
 
-  // Listen for page reload/visibility change to trigger sync
+  // Listen for page reload/visibility change to trigger sync - with throttling
   useEffect(() => {
+    let visibilityTimeout: NodeJS.Timeout;
+    let focusTimeout: NodeJS.Timeout;
+
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && user) {
-        console.log('📄 Page became visible, triggering sync...');
-        forceSyncData();
+      if (document.visibilityState === 'visible' && user && !syncInProgress.current) {
+        console.log('📄 Page became visible, scheduling sync...');
+        clearTimeout(visibilityTimeout);
+        visibilityTimeout = setTimeout(() => {
+          forceSyncData();
+        }, 500); // Debounce visibility changes
       }
     };
 
     const handleFocus = () => {
-      if (user) {
-        console.log('🔍 Window focused, triggering sync...');
-        forceSyncData();
+      if (user && !syncInProgress.current) {
+        console.log('🔍 Window focused, scheduling sync...');
+        clearTimeout(focusTimeout);
+        focusTimeout = setTimeout(() => {
+          forceSyncData();
+        }, 500); // Debounce focus events
       }
     };
 
@@ -118,6 +149,8 @@ export const useDataSync = () => {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
+      clearTimeout(visibilityTimeout);
+      clearTimeout(focusTimeout);
     };
   }, [forceSyncData, user]);
 
@@ -164,6 +197,8 @@ export const useDataSync = () => {
 
   const refreshSync = async () => {
     console.log('🔄 Manual refresh sync triggered');
+    // Reset cooldown for manual refresh
+    lastSyncTime.current = 0;
     return await forceSyncData();
   };
 
