@@ -1,165 +1,139 @@
+import { supabase } from '@/integrations/supabase/client';
+import getMcpClient from './mcpService';
+import type { Integration } from './mcpService';
 
-import { supabase } from "@/integrations/supabase/client";
-import { getCurrentUser } from "./supabaseService";
-import getMcpClient, { Integration } from './mcpService';
+// Cache for integrations to avoid excessive fetching
+let integrationsCache: any[] | null = null;
+let lastCacheTime = 0;
+const CACHE_DURATION = 30000; // 30 seconds
 
-export interface StoredIntegration {
-  id: string;
-  name: string;
-  type: 'mcp' | 'api';
-  category: string;
-  description?: string;
-  config: {
-    url?: string;
-    apiKey?: string;
-    headers?: Record<string, string>;
-    commands?: Array<{
-      name: string;
-      description?: string;
-      example?: string;
-      parameters?: Record<string, any>;
-    }>;
-    endpoints?: Array<{
-      name: string;
-      path: string;
-      method: string;
-      description?: string;
-    }>;
-  };
-  is_active: boolean;
-  user_id: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface StoredCommand {
-  id: string;
-  integration_id: string;
-  name: string;
-  description?: string;
-  example?: string;
-  parameters?: Record<string, any>;
-  method?: string;
-  endpoint?: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-// Clear all caches aggressively to prevent stale data
-let cachedIntegrations: StoredIntegration[] | null = null;
-let cachedCommands: StoredCommand[] | null = null;
-let lastFetchTime = 0;
-const CACHE_DURATION = 5000; // Reduced to 5 seconds to prevent stale data
-
-// Enhanced cache clearing
 export const clearIntegrationsCache = () => {
-  console.log('🧹 Clearing all integration caches');
-  cachedIntegrations = null;
-  cachedCommands = null;
-  lastFetchTime = 0;
+  console.log('🗑️ Clearing integrations cache...');
+  integrationsCache = null;
+  lastCacheTime = 0;
 };
 
-// Force fresh data fetch without cache
-export const fetchIntegrationsFromSupabase = async (bypassCache = false): Promise<StoredIntegration[]> => {
+export const fetchIntegrationsFromSupabase = async (forceBypassCache = false): Promise<any[]> => {
+  const now = Date.now();
+  
+  // Return cached data if available and not expired (unless forcing bypass)
+  if (!forceBypassCache && integrationsCache && (now - lastCacheTime) < CACHE_DURATION) {
+    console.log('📦 Returning cached integrations data');
+    return integrationsCache;
+  }
+
   try {
-    const now = Date.now();
+    console.log('🔄 Fetching integrations from Supabase...');
     
-    // Check cache only if not bypassing and within duration
-    if (!bypassCache && cachedIntegrations && (now - lastFetchTime) < CACHE_DURATION) {
-      console.log('📋 Using cached integrations');
-      return cachedIntegrations;
-    }
-
-    console.log('🔄 Fetching fresh integrations from Supabase...');
-    clearIntegrationsCache(); // Clear before fresh fetch
-
-    const user = await getCurrentUser();
-    if (!user) {
-      console.log('❌ No authenticated user for fetching integrations');
-      return [];
-    }
-
-    const { data, error } = await supabase
+    const { data: integrations, error } = await supabase
       .from('integrations')
       .select('*')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('❌ Error fetching integrations:', error.message, error.details);
+      console.error('❌ Error fetching integrations:', error);
       return [];
     }
 
-    // Type assertion to handle Supabase type mismatch
-    const integrations = (data || []).map(item => ({
-      ...item,
-      type: item.type as 'mcp' | 'api',
-      config: item.config as StoredIntegration['config']
-    }));
+    console.log(`✅ Fetched ${integrations?.length || 0} integrations from Supabase`);
     
-    console.log('✅ Fetched fresh integrations from Supabase:', integrations.length);
+    // Update cache
+    integrationsCache = integrations || [];
+    lastCacheTime = now;
     
-    // Update cache with fresh data
-    cachedIntegrations = integrations;
-    lastFetchTime = now;
-    
-    return integrations;
+    return integrations || [];
   } catch (error) {
-    console.error('❌ Network error fetching integrations:', error);
-    clearIntegrationsCache(); // Clear cache on error
+    console.error('❌ Unexpected error fetching integrations:', error);
     return [];
   }
 };
 
-export const fetchCommandsFromSupabase = async (bypassCache = false): Promise<StoredCommand[]> => {
+export const syncIntegrationsToSupabase = async (): Promise<boolean> => {
   try {
-    const now = Date.now();
+    console.log('🔄 Starting integration sync to Supabase...');
     
-    if (!bypassCache && cachedCommands && (now - lastFetchTime) < CACHE_DURATION) {
-      console.log('📋 Using cached commands');
-      return cachedCommands;
-    }
-
-    console.log('🔄 Fetching fresh commands from Supabase...');
-    
-    const user = await getCurrentUser();
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      console.log('❌ No authenticated user for fetching commands');
-      return [];
+      console.log('⚠️ No authenticated user, skipping integration sync');
+      return false;
     }
 
-    const { data, error } = await supabase
-      .from('integration_commands')
-      .select(`
-        *,
-        integrations!inner(user_id)
-      `)
-      .eq('integrations.user_id', user.id)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('❌ Error fetching commands:', error.message, error.details);
-      return [];
+    const mcpClient = getMcpClient();
+    const localIntegrations = mcpClient.getServers();
+    
+    console.log(`📊 Local integrations to sync: ${localIntegrations.length}`);
+    
+    if (localIntegrations.length === 0) {
+      console.log('📝 No local integrations to sync');
+      return true;
     }
 
-    // Type assertion to handle Supabase JSON type
-    const commands = (data || []).map(item => ({
-      ...item,
-      parameters: item.parameters as Record<string, any>
-    }));
+    // Get existing integrations from Supabase
+    const existingIntegrations = await fetchIntegrationsFromSupabase(true); // Force fresh fetch
     
-    console.log('✅ Fetched fresh commands from Supabase:', commands.length);
+    for (const integration of localIntegrations) {
+      // Check if integration already exists
+      const existing = existingIntegrations.find(existing => 
+        existing.name === integration.name && 
+        existing.category === integration.category &&
+        existing.user_id === user.id
+      );
+
+      const integrationData = {
+        user_id: user.id,
+        name: integration.name,
+        category: integration.category || 'custom',
+        type: integration.type || 'mcp',
+        description: integration.description || null,
+        is_active: integration.isActive || false,
+        config: {
+          url: integration.url,
+          apiKey: integration.apiKey || null,
+          headers: integration.headers || {},
+          commands: integration.commands || [],
+          endpoints: integration.endpoints || []
+        }
+      };
+
+      if (existing) {
+        // Update existing integration
+        console.log(`🔄 Updating existing integration: ${integration.name}`);
+        
+        const { error: updateError } = await supabase
+          .from('integrations')
+          .update(integrationData)
+          .eq('id', existing.id)
+          .eq('user_id', user.id);
+
+        if (updateError) {
+          console.error(`❌ Error updating integration ${integration.name}:`, updateError);
+        } else {
+          console.log(`✅ Updated integration: ${integration.name}`);
+        }
+      } else {
+        // Insert new integration
+        console.log(`➕ Inserting new integration: ${integration.name}`);
+        
+        const { error: insertError } = await supabase
+          .from('integrations')
+          .insert(integrationData);
+
+        if (insertError) {
+          console.error(`❌ Error inserting integration ${integration.name}:`, insertError);
+        } else {
+          console.log(`✅ Inserted integration: ${integration.name}`);
+        }
+      }
+    }
+
+    // Clear cache to force fresh fetch next time
+    clearIntegrationsCache();
     
-    cachedCommands = commands;
-    lastFetchTime = now;
-    
-    return commands;
+    console.log('✅ Integration sync completed successfully');
+    return true;
   } catch (error) {
-    console.error('❌ Network error fetching commands:', error);
-    return [];
+    console.error('❌ Error syncing integrations to Supabase:', error);
+    return false;
   }
 };
 
@@ -169,493 +143,245 @@ export const executeIntegrationCommand = async (
   parameters: Record<string, any> = {}
 ): Promise<{ result?: any; error?: { message: string } }> => {
   try {
-    console.log(`🚀 Executing command ${commandName} on integration ${integrationId}`);
-    console.log('📊 Parameters:', parameters);
+    console.log(`🚀 Executing integration command: ${commandName} on integration ${integrationId}`);
+    
+    // Get the integration from Supabase
+    const { data: integration, error } = await supabase
+      .from('integrations')
+      .select('*')
+      .eq('id', integrationId)
+      .single();
 
-    // Force fresh integration data to avoid stale connections
-    const integrations = await fetchIntegrationsFromSupabase(true);
-    const integration = integrations.find(i => i.id === integrationId);
-
-    if (!integration) {
-      console.error(`❌ Integration ${integrationId} not found`);
-      return { error: { message: `Integration ${integrationId} not found` } };
+    if (error || !integration) {
+      console.error('❌ Integration not found:', error);
+      return { error: { message: 'Integration not found' } };
     }
 
-    console.log(`📍 Found integration: ${integration.name} (${integration.category})`);
+    // Check if integration is active
+    if (!integration.is_active) {
+      console.error('❌ Integration is not active');
+      return { error: { message: 'Integration is not active' } };
+    }
 
-    // Force fresh command data
-    const commands = await fetchCommandsFromSupabase(true);
-    const command = commands.find(c => 
-      c.integration_id === integrationId && 
-      c.name.toLowerCase() === commandName.toLowerCase()
-    );
+    const config = integration.config || {};
+    const baseUrl = config.url;
+    
+    if (!baseUrl) {
+      return { error: { message: 'Integration URL not configured' } };
+    }
 
-    if (!command) {
-      console.error(`❌ Command ${commandName} not found for integration ${integration.name}`);
-      return { 
-        error: { 
-          message: `Command ${commandName} not found for integration ${integration.name}` 
-        } 
+    // Build the request based on integration type
+    let requestUrl = baseUrl;
+    let requestOptions: RequestInit = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(config.headers || {})
+      }
+    };
+
+    // Add API key if configured
+    if (config.apiKey) {
+      requestOptions.headers = {
+        ...requestOptions.headers,
+        'Authorization': `Bearer ${config.apiKey}`
       };
     }
 
-    console.log(`📍 Found command: ${command.name}`);
-
-    // Execute based on integration type
-    if (integration.type === 'mcp') {
-      // Use MCP client for MCP integrations - ensure fresh connection
-      const mcpClient = getMcpClient();
+    if (integration.type === 'api') {
+      // For API integrations, find the matching endpoint
+      const endpoints = config.endpoints || [];
+      const endpoint = endpoints.find((ep: any) => ep.name === commandName);
       
-      // Force reconnection to ensure fresh state
-      console.log('🔄 Ensuring fresh MCP connection...');
-      
-      return await mcpClient.call(integration.name, command.name, parameters);
-    } else {
-      // Execute API call for direct API integrations
-      return await executeApiCommand(integration, command, parameters);
-    }
-
-  } catch (error) {
-    console.error('❌ Error executing integration command:', error);
-    return { 
-      error: { 
-        message: error instanceof Error ? error.message : 'Unknown error during command execution' 
-      } 
-    };
-  }
-};
-
-const executeApiCommand = async (
-  integration: StoredIntegration,
-  command: StoredCommand,
-  parameters: Record<string, any>
-): Promise<{ result?: any; error?: { message: string } }> => {
-  try {
-    const baseUrl = integration.config.url;
-    if (!baseUrl) {
-      return { error: { message: 'No base URL configured for integration' } };
-    }
-
-    // Build the request URL
-    let url = baseUrl;
-    if (command.endpoint) {
-      url = url.endsWith('/') ? url + command.endpoint.replace(/^\//, '') : url + command.endpoint;
-    }
-
-    // Prepare headers with fresh timestamp to avoid caching
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-cache',
-      'X-Timestamp': Date.now().toString(),
-      ...integration.config.headers
-    };
-
-    if (integration.config.apiKey) {
-      headers['Authorization'] = `Bearer ${integration.config.apiKey}`;
-    }
-
-    // Prepare request options
-    const requestOptions: RequestInit = {
-      method: command.method || 'GET',
-      headers,
-      cache: 'no-cache' // Prevent browser caching
-    };
-
-    // Add body for POST/PUT requests
-    if (['POST', 'PUT', 'PATCH'].includes(command.method || 'GET')) {
-      requestOptions.body = JSON.stringify(parameters);
-    } else if (Object.keys(parameters).length > 0) {
-      // Add query parameters for GET requests with timestamp
-      const searchParams = new URLSearchParams();
-      Object.entries(parameters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          searchParams.append(key, String(value));
-        }
-      });
-      // Add timestamp to prevent caching
-      searchParams.append('_t', Date.now().toString());
-      if (searchParams.toString()) {
-        url += (url.includes('?') ? '&' : '?') + searchParams.toString();
+      if (!endpoint) {
+        return { error: { message: `Endpoint ${commandName} not found` } };
       }
+
+      requestUrl = `${baseUrl}${endpoint.path}`;
+      requestOptions.method = endpoint.method || 'GET';
+      
+      if (['POST', 'PUT', 'PATCH'].includes(requestOptions.method) && Object.keys(parameters).length > 0) {
+        requestOptions.body = JSON.stringify(parameters);
+      } else if (requestOptions.method === 'GET' && Object.keys(parameters).length > 0) {
+        const searchParams = new URLSearchParams(parameters);
+        requestUrl += `?${searchParams.toString()}`;
+      }
+    } else {
+      // For MCP integrations, use the standard MCP protocol
+      requestOptions.body = JSON.stringify({
+        command: commandName,
+        parameters
+      });
     }
 
-    console.log(`🌐 Making fresh ${command.method || 'GET'} request to: ${url}`);
+    console.log(`📡 Making request to: ${requestUrl}`);
+    console.log(`📋 Request options:`, { ...requestOptions, headers: { ...requestOptions.headers } });
 
-    const response = await fetch(url, requestOptions);
+    const response = await fetch(requestUrl, requestOptions);
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ API request failed: ${response.status} ${response.statusText}`, errorText);
+      console.error(`❌ Request failed with status ${response.status}:`, errorText);
       return { 
         error: { 
-          message: `API request failed: ${response.status} ${response.statusText}. ${errorText}` 
+          message: `Request failed: ${response.status} ${response.statusText}. ${errorText}` 
         } 
       };
     }
 
     const result = await response.json();
-    console.log('✅ API command executed successfully with fresh data');
-    
-    return { result };
+    console.log('✅ Command executed successfully:', result);
 
+    return { result };
   } catch (error) {
-    console.error('❌ Error executing API command:', error);
+    console.error('❌ Error executing integration command:', error);
     return { 
       error: { 
-        message: error instanceof Error ? error.message : 'Unknown API error' 
+        message: error instanceof Error ? error.message : 'Unknown error occurred' 
       } 
     };
   }
 };
 
-// Add missing export functions
-export const saveIntegrationCommand = async (command: Partial<StoredCommand>): Promise<boolean> => {
+export const cleanupDuplicateIntegrations = async (): Promise<boolean> => {
   try {
-    const user = await getCurrentUser();
-    if (!user) return false;
-
-    const { error } = await supabase
-      .from('integration_commands')
-      .upsert({
-        ...command,
-        updated_at: new Date().toISOString()
-      });
-
-    if (!error) {
-      clearIntegrationsCache();
-    }
-
-    return !error;
-  } catch (error) {
-    console.error('Error saving integration command:', error);
-    return false;
-  }
-};
-
-export const deleteIntegrationCommand = async (commandId: string): Promise<boolean> => {
-  try {
-    const { error } = await supabase
-      .from('integration_commands')
-      .delete()
-      .eq('id', commandId);
-
-    if (!error) {
-      clearIntegrationsCache();
-    }
-
-    return !error;
-  } catch (error) {
-    console.error('Error deleting integration command:', error);
-    return false;
-  }
-};
-
-export const syncIntegrationsToSupabase = async (): Promise<boolean> => {
-  try {
-    console.log('🔄 Starting integration sync to Supabase...');
+    console.log('🧹 Starting cleanup of duplicate integrations...');
     
-    const user = await getCurrentUser();
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      console.log('❌ No authenticated user, cannot sync integrations');
+      console.log('⚠️ No authenticated user, skipping cleanup');
       return false;
     }
 
-    const mcpClient = getMcpClient();
-    const localIntegrations = mcpClient.getServers();
-    
-    console.log(`📊 Found ${localIntegrations.length} local integrations to sync`);
+    // Get all integrations for the user
+    const { data: integrations, error } = await supabase
+      .from('integrations')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true }); // Keep the oldest ones
 
-    if (localIntegrations.length === 0) {
-      console.log('ℹ️ No local integrations to sync');
+    if (error) {
+      console.error('❌ Error fetching integrations for cleanup:', error);
+      return false;
+    }
+
+    if (!integrations || integrations.length === 0) {
+      console.log('📝 No integrations found for cleanup');
       return true;
     }
 
-    // Clear cache before syncing
-    clearIntegrationsCache();
-
-    for (const localIntegration of localIntegrations) {
-      try {
-        console.log(`🔄 Syncing integration: ${localIntegration.name}`);
-
-        // Check if integration already exists
-        const { data: existingIntegration, error: fetchError } = await supabase
-          .from('integrations')
-          .select('id, name, category, type')
-          .eq('user_id', user.id)
-          .eq('name', localIntegration.name)
-          .eq('category', localIntegration.category)
-          .eq('type', localIntegration.type)
-          .maybeSingle();
-
-        if (fetchError && fetchError.code !== 'PGRST116') {
-          console.error('❌ Error checking existing integration:', fetchError.message);
-          continue;
-        }
-
-        let integrationId: string;
-
-        // Type-safe config preparation
-        const configData = {
-          url: localIntegration.url,
-          apiKey: localIntegration.apiKey,
-          headers: localIntegration.headers || {},
-          commands: (localIntegration.commands || []).map(cmd => ({
-            name: cmd.name,
-            description: cmd.description,
-            example: cmd.example,
-            parameters: cmd.parameters || {}
-          })),
-          endpoints: (localIntegration.endpoints || []).map(endpoint => ({
-            name: endpoint.name,
-            path: endpoint.path,
-            method: endpoint.method,
-            description: endpoint.description
-          }))
-        };
-
-        if (existingIntegration) {
-          // Update existing integration
-          console.log(`🔄 Updating existing integration: ${existingIntegration.id}`);
-          
-          const { data: updatedIntegration, error: updateError } = await supabase
-            .from('integrations')
-            .update({
-              description: localIntegration.description,
-              config: configData,
-              is_active: true,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', existingIntegration.id)
-            .select('id')
-            .single();
-
-          if (updateError) {
-            console.error('❌ Error updating integration:', updateError.message);
-            continue;
-          }
-
-          integrationId = updatedIntegration.id;
-        } else {
-          // Create new integration
-          console.log(`➕ Creating new integration: ${localIntegration.name}`);
-          
-          const { data: newIntegration, error: insertError } = await supabase
-            .from('integrations')
-            .insert({
-              user_id: user.id,
-              name: localIntegration.name,
-              type: localIntegration.type,
-              category: localIntegration.category,
-              description: localIntegration.description,
-              config: configData,
-              is_active: true
-            })
-            .select('id')
-            .single();
-
-          if (insertError) {
-            console.error('❌ Error creating integration:', insertError.message);
-            continue;
-          }
-
-          integrationId = newIntegration.id;
-        }
-
-        // Sync commands for this integration
-        await syncCommandsForIntegration(integrationId, localIntegration);
-
-      } catch (error) {
-        console.error(`❌ Error syncing integration ${localIntegration.name}:`, error);
-        continue;
-      }
-    }
-
-    // Clear cache after successful sync
-    clearIntegrationsCache();
+    // Group by name and category to find duplicates
+    const groupedIntegrations = new Map<string, any[]>();
     
-    console.log('✅ Integration sync completed successfully');
-    return true;
-
-  } catch (error) {
-    console.error('❌ Error during integration sync:', error);
-    return false;
-  }
-};
-
-const syncCommandsForIntegration = async (
-  integrationId: string,
-  localIntegration: Integration
-): Promise<void> => {
-  try {
-    console.log(`🔄 Syncing commands for integration: ${localIntegration.name}`);
-
-    // Deactivate existing commands first
-    await supabase
-      .from('integration_commands')
-      .update({ is_active: false })
-      .eq('integration_id', integrationId);
-
-    // Process commands from integration config
-    const commandsToSync = [
-      ...(localIntegration.commands || []).map(cmd => ({
-        name: cmd.name,
-        description: cmd.description,
-        example: cmd.example,
-        parameters: cmd.parameters || {},
-        method: 'POST',
-        endpoint: null
-      })),
-      ...(localIntegration.endpoints || []).map(endpoint => ({
-        name: endpoint.name,
-        description: endpoint.description,
-        example: `${endpoint.method} ${endpoint.path}`,
-        parameters: {},
-        method: endpoint.method,
-        endpoint: endpoint.path
-      }))
-    ];
-
-    console.log(`📊 Found ${commandsToSync.length} commands to sync`);
-
-    for (const commandData of commandsToSync) {
-      try {
-        // Check if command already exists
-        const { data: existingCommand, error: fetchError } = await supabase
-          .from('integration_commands')
-          .select('id')
-          .eq('integration_id', integrationId)
-          .eq('name', commandData.name)
-          .maybeSingle();
-
-        if (fetchError && fetchError.code !== 'PGRST116') {
-          console.error('❌ Error checking existing command:', fetchError.message);
-          continue;
-        }
-
-        if (existingCommand) {
-          // Update existing command
-          const { error: updateError } = await supabase
-            .from('integration_commands')
-            .update({
-              description: commandData.description,
-              example: commandData.example,
-              parameters: commandData.parameters,
-              method: commandData.method,
-              endpoint: commandData.endpoint,
-              is_active: true,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', existingCommand.id);
-
-          if (updateError) {
-            console.error('❌ Error updating command:', updateError.message);
-          } else {
-            console.log(`✅ Updated command: ${commandData.name}`);
-          }
-        } else {
-          // Create new command
-          const { error: insertError } = await supabase
-            .from('integration_commands')
-            .insert({
-              integration_id: integrationId,
-              name: commandData.name,
-              description: commandData.description,
-              example: commandData.example,
-              parameters: commandData.parameters,
-              method: commandData.method,
-              endpoint: commandData.endpoint,
-              is_active: true
-            });
-
-          if (insertError) {
-            console.error('❌ Error creating command:', insertError.message);
-          } else {
-            console.log(`✅ Created command: ${commandData.name}`);
-          }
-        }
-      } catch (error) {
-        console.error(`❌ Error syncing command ${commandData.name}:`, error);
-      }
-    }
-
-    console.log(`✅ Commands sync completed for integration: ${localIntegration.name}`);
-  } catch (error) {
-    console.error('❌ Error syncing commands:', error);
-  }
-};
-
-export const cleanupDuplicateIntegrations = async (): Promise<void> => {
-  try {
-    console.log('🧹 Cleaning up duplicate integrations...');
-    
-    const user = await getCurrentUser();
-    if (!user) {
-      console.log('❌ No authenticated user for cleanup');
-      return;
-    }
-
-    // Get all integrations for the user
-    const { data: allIntegrations, error } = await supabase
-      .from('integrations')
-      .select('id, name, category, type, created_at')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('❌ Error fetching integrations for cleanup:', error.message);
-      return;
-    }
-
-    if (!allIntegrations || allIntegrations.length === 0) {
-      console.log('ℹ️ No integrations found for cleanup');
-      return;
-    }
-
-    // Group by unique key (name + category + type)
-    const groupedIntegrations = new Map<string, typeof allIntegrations>();
-    
-    for (const integration of allIntegrations) {
-      const key = `${integration.name}-${integration.category}-${integration.type}`;
+    for (const integration of integrations) {
+      const key = `${integration.name}-${integration.category}`;
       if (!groupedIntegrations.has(key)) {
         groupedIntegrations.set(key, []);
       }
       groupedIntegrations.get(key)!.push(integration);
     }
 
-    // Find and remove duplicates (keep the most recent one)
-    for (const [key, duplicates] of groupedIntegrations) {
-      if (duplicates.length > 1) {
-        console.log(`🔍 Found ${duplicates.length} duplicates for: ${key}`);
+    let duplicatesRemoved = 0;
+
+    // Remove duplicates (keep the first/oldest one)
+    for (const [key, group] of groupedIntegrations.entries()) {
+      if (group.length > 1) {
+        console.log(`🔍 Found ${group.length} duplicates for ${key}`);
         
-        // Keep the first one (most recent due to order by created_at desc)
-        const toKeep = duplicates[0];
-        const toDelete = duplicates.slice(1);
+        // Keep the first one, remove the rest
+        const toKeep = group[0];
+        const toRemove = group.slice(1);
         
-        console.log(`📌 Keeping integration: ${toKeep.id} (${toKeep.created_at})`);
-        
-        for (const duplicate of toDelete) {
-          console.log(`🗑️ Deleting duplicate: ${duplicate.id} (${duplicate.created_at})`);
-          
-          // Delete associated commands first
-          await supabase
-            .from('integration_commands')
-            .delete()
-            .eq('integration_id', duplicate.id);
-          
-          // Delete the integration
-          await supabase
+        for (const duplicate of toRemove) {
+          const { error: deleteError } = await supabase
             .from('integrations')
             .delete()
-            .eq('id', duplicate.id);
+            .eq('id', duplicate.id)
+            .eq('user_id', user.id);
+
+          if (deleteError) {
+            console.error(`❌ Error removing duplicate ${duplicate.id}:`, deleteError);
+          } else {
+            console.log(`🗑️ Removed duplicate integration: ${duplicate.name} (${duplicate.id})`);
+            duplicatesRemoved++;
+          }
         }
+      }
+    }
+
+    // Also cleanup commands table if needed
+    const { error: commandsError } = await supabase
+      .from('integration_commands')
+      .select('integration_id')
+      .not('integration_id', 'in', `(${integrations.map(i => `'${i.id}'`).join(',')})`);
+
+    if (!commandsError) {
+      // Remove orphaned commands
+      const { error: deleteCommandsError } = await supabase
+        .from('integration_commands')
+        .delete()
+        .not('integration_id', 'in', `(${integrations.map(i => `'${i.id}'`).join(',')})`);
+
+      if (deleteCommandsError) {
+        console.error('❌ Error cleaning up orphaned commands:', deleteCommandsError);
+      } else {
+        console.log('🧹 Cleaned up orphaned integration commands');
       }
     }
 
     // Clear cache after cleanup
     clearIntegrationsCache();
-    
-    console.log('✅ Duplicate cleanup completed');
+
+    console.log(`✅ Cleanup completed. Removed ${duplicatesRemoved} duplicate integrations`);
+    return true;
   } catch (error) {
-    console.error('❌ Error during duplicate cleanup:', error);
+    console.error('❌ Error during cleanup:', error);
+    return false;
+  }
+};
+
+// Sync commands for an integration
+export const syncIntegrationCommands = async (integrationId: string, commands: any[]): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return false;
+    }
+
+    // First, delete existing commands for this integration
+    await supabase
+      .from('integration_commands')
+      .delete()
+      .eq('integration_id', integrationId);
+
+    // Insert new commands
+    if (commands.length > 0) {
+      const commandsData = commands.map(cmd => ({
+        integration_id: integrationId,
+        name: cmd.name,
+        description: cmd.description || null,
+        example: cmd.example || null,
+        parameters: cmd.parameters || {},
+        method: cmd.method || 'GET',
+        endpoint: cmd.endpoint || null,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
+
+      const { error } = await supabase
+        .from('integration_commands')
+        .insert(commandsData);
+
+      if (error) {
+        console.error('❌ Error syncing commands:', error);
+        return false;
+      }
+    }
+
+    return true;
+  } catch (error) {
+    console.error('❌ Error syncing integration commands:', error);
+    return false;
   }
 };

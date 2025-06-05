@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ReminderSetupGuide from "@/components/ReminderSetupGuide";
 import { isIntegrationAvailable } from "@/services/aiIntegrationHelper";
-import { syncIntegrationsToSupabase } from "@/services/supabaseIntegrationsService";
+import { syncIntegrationsToSupabase, fetchIntegrationsFromSupabase } from "@/services/supabaseIntegrationsService";
 
 const IntegrationsTab = () => {
   const [isAddIntegrationOpen, setIsAddIntegrationOpen] = useState(false);
@@ -422,6 +422,7 @@ const IntegrationsTab = () => {
     return <Globe className="h-5 w-5 text-green-600 dark:text-green-300" />;
   };
 
+  const combinedIntegrations = getCombinedIntegrations();
   const mcpIntegrations = integrations.filter(i => i.type === 'mcp');
   const apiIntegrations = integrations.filter(i => i.type === 'api');
 
