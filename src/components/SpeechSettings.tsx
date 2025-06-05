@@ -11,7 +11,6 @@ import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { PlayHTVoice, SpeechSource } from "@/services/speechService";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -22,9 +21,6 @@ interface SpeechSettingsProps {
 const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
   const { 
     availableVoices, 
-    availablePlayHTVoices,
-    selectVoice,
-    selectPlayHTVoice,
     speak, 
     stop, 
     isSpeaking, 
@@ -36,38 +32,25 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
     updateRate,
     updatePitch,
     updateVolume,
-    speechSource,
-    updateSpeechSource,
     isPlayHTAvailable
   } = useSpeech();
   
   const {
-    updateVoiceSelection,
-    updatePlayHTVoiceSelection,
     updateAutoPlay: updateAutoPlaySync,
     updateSpeechRate,
     updateSpeechPitch,
-    updateSpeechVolume,
-    updateSpeechSource: updateSpeechSourceSync
+    updateSpeechVolume
   } = useSpeechSettingsSync();
   
   const [testText, setTestText] = useState("Hello! This is a test of the text-to-speech system.");
   const [voiceFilter, setVoiceFilter] = useState("");
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
   
   const handleVoiceChange = (voiceName: string) => {
     const voice = availableVoices.find(v => v.name === voiceName);
     if (voice) {
-      selectVoice(voice);
-      updateVoiceSelection(voiceName);
-    }
-  };
-  
-  const handlePlayHTVoiceChange = (voiceId: string) => {
-    const voice = availablePlayHTVoices.find(v => v.id === voiceId);
-    if (voice) {
-      selectPlayHTVoice(voice);
-      updatePlayHTVoiceSelection(voiceId);
+      setSelectedVoice(voice);
     }
   };
   
@@ -78,11 +61,6 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
     }
     
     speak(testText);
-  };
-  
-  const handleSpeechSourceChange = (source: SpeechSource) => {
-    updateSpeechSource(source);
-    updateSpeechSourceSync(source);
   };
   
   const handleAutoPlayToggle = () => {
@@ -112,7 +90,7 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
   };
   
   // Group browser voices by language for better organization
-  const groupedVoices = availableVoices.reduce((acc, voice) => {
+  const groupedVoices = Array.isArray(availableVoices) ? availableVoices.reduce((acc, voice) => {
     const [langCode, countryCode] = voice.lang.split('-');
     const langName = new Intl.DisplayNames([navigator.language], {
       type: 'language'
@@ -125,17 +103,7 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
     }
     acc[langKey].push(voice);
     return acc;
-  }, {} as Record<string, SpeechSynthesisVoice[]>);
-  
-  const groupedPlayHTVoices = availablePlayHTVoices.reduce((acc, voice) => {
-    const langKey = voice.language || 'Unknown';
-    
-    if (!acc[langKey]) {
-      acc[langKey] = [];
-    }
-    acc[langKey].push(voice);
-    return acc;
-  }, {} as Record<string, PlayHTVoice[]>);
+  }, {} as Record<string, SpeechSynthesisVoice[]>) : {};
   
   const filteredGroupedVoices: Record<string, SpeechSynthesisVoice[]> = Object.fromEntries(
     Object.entries(groupedVoices)
@@ -149,29 +117,11 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
       .filter(([_, voices]) => voices.length > 0)
   );
   
-  const filteredGroupedPlayHTVoices: Record<string, PlayHTVoice[]> = Object.fromEntries(
-    Object.entries(groupedPlayHTVoices)
-      .map(([lang, voices]) => {
-        const filteredVoices = voices.filter(voice => 
-          voice.name.toLowerCase().includes(voiceFilter.toLowerCase()) ||
-          voice.language.toLowerCase().includes(voiceFilter.toLowerCase()) ||
-          (voice.gender && voice.gender.toLowerCase().includes(voiceFilter.toLowerCase()))
-        );
-        return [lang, filteredVoices];
-      })
-      .filter(([_, voices]) => voices.length > 0)
-  );
-  
-  const britishFemaleVoices = availableVoices.filter(v => 
+  const britishFemaleVoices = Array.isArray(availableVoices) ? availableVoices.filter(v => 
     v.lang.includes('en-GB') && 
     (v.name.toLowerCase().includes('female') || 
      /^(amy|emma|joanna|salli|kimberly|kendra|joanna|ivy|hannah|ruth|victoria|queen|elizabeth|catherine|kate|sophie|emily|lily|charlotte)/i.test(v.name))
-  );
-  
-  const playhtBritishFemaleVoices = availablePlayHTVoices.filter(v => 
-    (v.language.toLowerCase().includes('english') && v.language.toLowerCase().includes('british')) && 
-    v.gender.toLowerCase() === 'female'
-  );
+  ) : [];
   
   return (
     <div className={className}>
@@ -194,41 +144,6 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
             onCheckedChange={handleAutoPlayToggle}
           />
         </div>
-        
-        <Card className="border border-gray-200">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Speech Engine</CardTitle>
-            <CardDescription className="text-xs">
-              Choose which technology to use for generating speech
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <RadioGroup 
-              value={speechSource} 
-              onValueChange={(value) => handleSpeechSourceChange(value as SpeechSource)}
-              className="flex flex-col gap-2"
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="browser" id="browser-speech" />
-                <Label htmlFor="browser-speech" className="font-normal text-sm">
-                  Browser Speech (Default)
-                </Label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem 
-                  value="playht" 
-                  id="playht-speech" 
-                  disabled={!isPlayHTAvailable}
-                />
-                <Label htmlFor="playht-speech" className={`font-normal text-sm ${!isPlayHTAvailable ? 'text-gray-400' : ''}`}>
-                  Play.ht (Premium Quality)
-                  {!isPlayHTAvailable && <span className="ml-2 text-xs italic">Loading...</span>}
-                </Label>
-              </div>
-            </RadioGroup>
-          </CardContent>
-        </Card>
         
         <Tabs defaultValue="voices" className="w-full mt-4">
           <TabsList className="grid w-full grid-cols-2">
@@ -265,84 +180,37 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
                 </Badge>
               )}
               
-              {playhtBritishFemaleVoices.length > 0 ? (
-                <Badge variant="secondary" className="text-xs">
-                  {playhtBritishFemaleVoices.length} Play.ht British Female
-                </Badge>
-              ) : (
-                isPlayHTAvailable ? (
-                  <Badge variant="outline" className="text-xs">
-                    No Play.ht British Female
-                  </Badge>
-                ) : null
-              )}
-              
               <Badge variant="outline" className="text-xs">
                 {availableVoices.length} Browser Voices
               </Badge>
-              
-              {isPlayHTAvailable && (
-                <Badge variant="outline" className="text-xs">
-                  {availablePlayHTVoices.length} Play.ht Voices
-                </Badge>
-              )}
             </div>
             
-            {speechSource === 'browser' ? (
-              <div className="space-y-2">
-                <Label htmlFor="voice-select" className="font-medium">Browser Voice</Label>
-                <Select onValueChange={handleVoiceChange}>
-                  <SelectTrigger id="voice-select" className="w-full">
-                    <SelectValue placeholder="Select a voice" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    {Object.entries(filteredGroupedVoices)
-                      .sort(([langA], [langB]) => langA.localeCompare(langB))
-                      .map(([lang, voices]) => (
-                        <div key={`${lang}-${refreshTrigger}`}>
-                          <div className="px-2 py-1.5 text-xs font-semibold bg-muted">{lang}</div>
-                          {voices
-                            .sort((a, b) => a.name.localeCompare(b.name))
-                            .map(voice => (
-                              <SelectItem key={`${voice.name}-${refreshTrigger}`} value={voice.name}>
-                                {voice.name}
-                              </SelectItem>
-                            ))
-                          }
-                        </div>
-                      ))
-                    }
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <Label htmlFor="playht-voice-select" className="font-medium">Play.ht Voice</Label>
-                <Select onValueChange={handlePlayHTVoiceChange} disabled={!isPlayHTAvailable}>
-                  <SelectTrigger id="playht-voice-select" className="w-full">
-                    <SelectValue placeholder={isPlayHTAvailable ? "Select a voice" : "Loading Play.ht voices..."} />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    {Object.entries(filteredGroupedPlayHTVoices)
-                      .sort(([langA], [langB]) => langA.localeCompare(langB))
-                      .map(([lang, voices]) => (
-                        <div key={`playht-${lang}-${refreshTrigger}`}>
-                          <div className="px-2 py-1.5 text-xs font-semibold bg-muted">{lang}</div>
-                          {voices
-                            .sort((a, b) => a.name.localeCompare(b.name))
-                            .map(voice => (
-                              <SelectItem key={`playht-${voice.id}-${refreshTrigger}`} value={voice.id}>
-                                {voice.name} ({voice.gender})
-                              </SelectItem>
-                            ))
-                          }
-                        </div>
-                      ))
-                    }
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="voice-select" className="font-medium">Browser Voice</Label>
+              <Select onValueChange={handleVoiceChange}>
+                <SelectTrigger id="voice-select" className="w-full">
+                  <SelectValue placeholder="Select a voice" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  {Object.entries(filteredGroupedVoices)
+                    .sort(([langA], [langB]) => langA.localeCompare(langB))
+                    .map(([lang, voices]) => (
+                      <div key={`${lang}-${refreshTrigger}`}>
+                        <div className="px-2 py-1.5 text-xs font-semibold bg-muted">{lang}</div>
+                        {voices
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map(voice => (
+                            <SelectItem key={`${voice.name}-${refreshTrigger}`} value={voice.name}>
+                              {voice.name}
+                            </SelectItem>
+                          ))
+                        }
+                      </div>
+                    ))
+                  }
+                </SelectContent>
+              </Select>
+            </div>
             
             <div className="space-y-2 pt-4">
               <Label htmlFor="test-text" className="font-medium">Test Text</Label>
@@ -488,7 +356,6 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
         <div className="text-xs text-gray-400 mt-2">
           <p>Individual messages can be played by hovering over them and clicking the speaker icon.</p>
           <p className="mt-1">Speech settings are saved automatically and apply to all voice playback.</p>
-          <p className="mt-1">Play.ht provides higher quality voices but may take longer to generate speech.</p>
         </div>
       </div>
     </div>

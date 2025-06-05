@@ -94,6 +94,10 @@ class McpClient {
     return { ...this.activeConnections };
   }
 
+  isAnyServerActive(): boolean {
+    return Object.values(this.activeConnections).some(isActive => isActive);
+  }
+
   async testServerConnection(integration: Integration): Promise<{ error?: { message: string } }> {
     try {
       // Mock connection test
@@ -123,4 +127,4 @@ const getMcpClient = (): McpClient => {
 };
 
 export default getMcpClient;
-export { Integration, IntegrationCommand, ApiEndpoint };
+export type { Integration, IntegrationCommand, ApiEndpoint };

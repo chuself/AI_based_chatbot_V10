@@ -36,6 +36,14 @@ export const formatIntegrationCommands = (integrations: IntegrationCheck[]): str
   }).join('\n');
 };
 
+// Generate system prompt with available integrations
+export const generateIntegrationsSystemPrompt = (): string => {
+  const integrations = getAvailableIntegrations();
+  const commandsList = formatIntegrationCommands(integrations);
+  
+  return `Available integrations and commands:\n${commandsList}`;
+};
+
 // Helper to execute integration commands through the hook
 export const createIntegrationExecutor = () => {
   const { executeCommand } = useIntegrationCommands();
