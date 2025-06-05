@@ -5,6 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { ArrowDown } from "lucide-react";
 import { ChatMessage } from "@/hooks/useChatHistory";
+import LoadingDots from "./LoadingDots";
 
 interface MessageListProps {
   messages: ChatMessage[];

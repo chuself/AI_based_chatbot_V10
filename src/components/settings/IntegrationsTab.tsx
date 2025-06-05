@@ -8,13 +8,14 @@ import { Plus, Settings, Info, ArrowUpRight, Check, X, Zap, Database, Cloud, Tra
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getCurrentUser, useSupabaseSync } from "@/services/supabaseService";
 import { supabase } from "@/integrations/supabase/client";
-import getMcpClient, { Integration, IntegrationCommand, ApiEndpoint } from "@/services/mcpService";
+import getMcpClient from "@/services/mcpService";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ReminderSetupGuide from "@/components/ReminderSetupGuide";
 import { isIntegrationAvailable } from "@/services/aiIntegrationHelper";
 import { syncIntegrationsToSupabase, fetchIntegrationsFromSupabase } from "@/services/supabaseIntegrationsService";
+import { Integration, IntegrationCommand, ApiEndpoint, CombinedIntegration } from "@/types/integration";
 
 const IntegrationsTab = () => {
   const [isAddIntegrationOpen, setIsAddIntegrationOpen] = useState(false);
@@ -113,8 +114,8 @@ const IntegrationsTab = () => {
   }, []);
 
   // Get combined integrations list (deduplicated)
-  const getCombinedIntegrations = () => {
-    const combined = new Map<string, any>();
+  const getCombinedIntegrations = (): CombinedIntegration[] => {
+    const combined = new Map<string, CombinedIntegration>();
     
     // Add stored integrations first (they have priority)
     storedIntegrations.forEach(stored => {
@@ -902,7 +903,7 @@ const IntegrationsTab = () => {
 
 // Integration Card Component
 const IntegrationCard: React.FC<{
-  integration: any;
+  integration: CombinedIntegration;
   isActive: boolean;
   onTest: () => void;
   onEdit: () => void;

@@ -1,137 +1,168 @@
 
-import { useState, useEffect } from 'react';
-import speechService, { PlayHTVoice, SpeechSource } from '@/services/speechService';
+import { useState, useEffect, useCallback } from 'react';
 
 export const useSpeech = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [autoPlay, setAutoPlay] = useState(() => {
-    const saved = localStorage.getItem('speech-autoplay');
-    return saved ? saved === 'true' : false;
-  });
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [availablePlayHTVoices, setAvailablePlayHTVoices] = useState<PlayHTVoice[]>([]);
-  const [speechSource, setSpeechSource] = useState<SpeechSource>(
-    speechService.getCurrentSettings().speechSource || 'browser'
-  );
-  
-  const [rate, setRate] = useState(speechService.getCurrentSettings().rate || 1);
-  const [pitch, setPitch] = useState(speechService.getCurrentSettings().pitch || 1);
-  const [volume, setVolume] = useState(speechService.getCurrentSettings().volume || 1);
-  const [isPlayHTAvailable, setIsPlayHTAvailable] = useState(false);
-  
+  const [autoPlay, setAutoPlay] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
+  const [rate, setRate] = useState(1);
+  const [pitch, setPitch] = useState(1);
+  const [volume, setVolume] = useState(1);
+
+  // Check if speech synthesis is supported
+  const isVoiceSupported = 'speechSynthesis' in window;
+
+  // Load voices
   useEffect(() => {
-    // Initial load of voices
+    if (!isVoiceSupported) return;
+
     const loadVoices = () => {
-      setAvailableVoices(speechService.getAvailableVoices());
-      setAvailablePlayHTVoices(speechService.getAvailablePlayHTVoices());
-      setIsPlayHTAvailable(speechService.isPlayHTServiceAvailable());
-    };
-    
-    loadVoices();
-    
-    // Listen for voice changes
-    if (window.speechSynthesis.onvoiceschanged !== undefined) {
-      window.speechSynthesis.onvoiceschanged = loadVoices;
-    }
-    
-    // Poll for PlayHT voices to become available
-    const playhtInterval = setInterval(() => {
-      const playhtVoices = speechService.getAvailablePlayHTVoices();
-      if (playhtVoices.length > 0) {
-        setAvailablePlayHTVoices(playhtVoices);
-        setIsPlayHTAvailable(true);
-        clearInterval(playhtInterval);
+      const voices = speechSynthesis.getVoices();
+      setAvailableVoices(voices);
+      
+      // Set default voice if none selected
+      if (!selectedVoice && voices.length > 0) {
+        const englishVoice = voices.find(voice => voice.lang.startsWith('en')) || voices[0];
+        setSelectedVoice(englishVoice);
       }
-    }, 2000);
-    
-    return () => {
-      window.speechSynthesis.onvoiceschanged = null;
-      clearInterval(playhtInterval);
     };
-  }, []);
-  
-  // Update localStorage when autoPlay changes
+
+    loadVoices();
+    speechSynthesis.onvoiceschanged = loadVoices;
+
+    return () => {
+      speechSynthesis.onvoiceschanged = null;
+    };
+  }, [isVoiceSupported, selectedVoice]);
+
+  // Load settings from localStorage
   useEffect(() => {
-    localStorage.setItem('speech-autoplay', autoPlay.toString());
-  }, [autoPlay]);
-  
-  // Update the speech service when settings change
-  useEffect(() => {
-    speechService.setSpeechRate(rate);
-  }, [rate]);
-  
-  useEffect(() => {
-    speechService.setSpeechPitch(pitch);
-  }, [pitch]);
-  
-  useEffect(() => {
-    speechService.setSpeechVolume(volume);
-  }, [volume]);
-  
-  useEffect(() => {
-    speechService.setSpeechSource(speechSource);
-  }, [speechSource]);
-  
-  const speak = async (text: string) => {
-    setIsSpeaking(true);
+    const settings = localStorage.getItem('speech-settings');
+    if (settings) {
+      try {
+        const parsed = JSON.parse(settings);
+        setAutoPlay(parsed.autoPlay || false);
+        setRate(parsed.rate || 1);
+        setPitch(parsed.pitch || 1);
+        setVolume(parsed.volume || 1);
+        
+        if (parsed.selectedVoiceIndex && availableVoices.length > 0) {
+          setSelectedVoice(availableVoices[parsed.selectedVoiceIndex]);
+        }
+      } catch (error) {
+        console.error('Error loading speech settings:', error);
+      }
+    }
+  }, [availableVoices]);
+
+  // Save settings to localStorage
+  const saveSettings = useCallback(() => {
+    const settings = {
+      autoPlay,
+      rate,
+      pitch,
+      volume,
+      selectedVoiceIndex: selectedVoice ? availableVoices.indexOf(selectedVoice) : -1
+    };
+    localStorage.setItem('speech-settings', JSON.stringify(settings));
+  }, [autoPlay, rate, pitch, volume, selectedVoice, availableVoices]);
+
+  // Speak function
+  const speak = useCallback(async (text: string) => {
+    if (!isVoiceSupported || !text.trim()) {
+      console.warn('Speech synthesis not supported or empty text');
+      return;
+    }
+
+    // Stop any current speech
+    speechSynthesis.cancel();
+
     try {
-      await speechService.speak(text);
-    } finally {
+      const utterance = new SpeechSynthesisUtterance(text);
+      
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+      }
+      
+      utterance.rate = rate;
+      utterance.pitch = pitch;
+      utterance.volume = volume;
+
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+      };
+
+      utterance.onend = () => {
+        setIsSpeaking(false);
+      };
+
+      utterance.onerror = (event) => {
+        console.error('Speech synthesis error:', event);
+        setIsSpeaking(false);
+      };
+
+      speechSynthesis.speak(utterance);
+    } catch (error) {
+      console.error('Error during speech synthesis:', error);
       setIsSpeaking(false);
     }
-  };
-  
-  const stop = () => {
-    speechService.stop();
-    setIsSpeaking(false);
-  };
-  
-  const toggleAutoPlay = () => {
+  }, [isVoiceSupported, selectedVoice, rate, pitch, volume]);
+
+  // Stop function
+  const stop = useCallback(() => {
+    if (isVoiceSupported) {
+      speechSynthesis.cancel();
+      setIsSpeaking(false);
+    }
+  }, [isVoiceSupported]);
+
+  // Toggle auto play
+  const toggleAutoPlay = useCallback(() => {
     setAutoPlay(prev => !prev);
-  };
-  
-  const selectVoice = (voice: SpeechSynthesisVoice) => {
-    speechService.setPreferredVoice(voice);
-  };
-  
-  const selectPlayHTVoice = (voice: PlayHTVoice) => {
-    speechService.setPreferredPlayHTVoice(voice);
-  };
-  
-  const updateRate = (newRate: number) => {
+  }, []);
+
+  // Update voice
+  const updateVoice = useCallback((voice: SpeechSynthesisVoice) => {
+    setSelectedVoice(voice);
+  }, []);
+
+  // Update rate
+  const updateRate = useCallback((newRate: number) => {
     setRate(newRate);
-  };
-  
-  const updatePitch = (newPitch: number) => {
+  }, []);
+
+  // Update pitch
+  const updatePitch = useCallback((newPitch: number) => {
     setPitch(newPitch);
-  };
-  
-  const updateVolume = (newVolume: number) => {
+  }, []);
+
+  // Update volume
+  const updateVolume = useCallback((newVolume: number) => {
     setVolume(newVolume);
-  };
-  
-  const updateSpeechSource = (source: SpeechSource) => {
-    setSpeechSource(source);
-  };
-  
+  }, []);
+
+  // Save settings when they change
+  useEffect(() => {
+    saveSettings();
+  }, [saveSettings]);
+
   return {
     speak,
     stop,
     isSpeaking,
+    isVoiceSupported,
     autoPlay,
     toggleAutoPlay,
     availableVoices,
-    availablePlayHTVoices,
-    selectVoice,
-    selectPlayHTVoice,
+    selectedVoice,
+    updateVoice,
     rate,
-    pitch,
-    volume,
     updateRate,
+    pitch,
     updatePitch,
+    volume,
     updateVolume,
-    speechSource,
-    updateSpeechSource,
-    isPlayHTAvailable
+    isPlayHTAvailable: false // Placeholder for future PlayHT integration
   };
 };
