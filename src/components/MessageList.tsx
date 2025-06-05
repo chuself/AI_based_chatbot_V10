@@ -54,16 +54,6 @@ const MessageList: React.FC<MessageListProps> = ({
     };
   }, []);
 
-  // Convert ChatMessage to Message format for MessageItem
-  const convertToMessage = (chatMessage: ChatMessage, index: number) => ({
-    id: `${chatMessage.timestamp}-${index}`,
-    text: chatMessage.content,
-    isUser: chatMessage.role === 'user',
-    timestamp: new Date(chatMessage.timestamp),
-    isLoading: false,
-    isMcpResult: chatMessage.isMcpResult || false
-  });
-
   return (
     <div className="flex-1 relative h-full">
       <ScrollArea className="h-full" scrollHideDelay={0}>
@@ -80,20 +70,16 @@ const MessageList: React.FC<MessageListProps> = ({
             messages.map((message, index) => (
               <MessageItem 
                 key={`${message.timestamp}-${index}`} 
-                message={convertToMessage(message, index)} 
+                message={message} 
               />
             ))
           )}
           {isLoading && (
-            <MessageItem 
-              message={{
-                id: 'loading',
-                text: '',
-                isUser: false,
-                timestamp: new Date(),
-                isLoading: true
-              }}
-            />
+            <div className="flex justify-start mb-4">
+              <div className="glass-card max-w-[80%] p-3 rounded-lg border border-white/20 dark:border-slate-700/20">
+                <LoadingDots />
+              </div>
+            </div>
           )}
           <div ref={messagesEndRef} />
         </div>
@@ -101,7 +87,7 @@ const MessageList: React.FC<MessageListProps> = ({
       
       {showScrollButton && (
         <Button
-          className="absolute bottom-4 right-4 rounded-full w-10 h-10 p-0 bg-purple-600 hover:bg-purple-700"
+          className="absolute bottom-4 right-4 rounded-full w-10 h-10 p-0 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 transition-all duration-300 hover:scale-110"
           onClick={() => scrollToBottom()}
         >
           <ArrowDown size={18} />

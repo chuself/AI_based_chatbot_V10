@@ -44,47 +44,50 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, autoPlaySpeech = fal
     if (isSpeaking) {
       stop();
     } else {
-      speak(message.content);
+      speak(message.content || '');
     }
   };
 
   // Determine background based on message type and source
   const getMessageBackground = () => {
     if (isUser) {
-      return "bg-gemini-primary text-white";
+      return "bg-gradient-to-r from-pink-400 to-purple-500 text-white";
     }
     
     // For assistant messages, determine background based on source
     if (message.isMcpResult) {
-      // Integration response
-      if (message.content.includes('Error:') || message.content.includes('failed')) {
+      // Integration response - add null check for content
+      const content = message.content || '';
+      if (content.includes('Error:') || content.includes('failed')) {
         return "bg-white border-gray-200 text-gray-800"; // Normal background for failed integration
       } else {
-        return "bg-green-50 border-green-200 text-green-900 dark:bg-green-900/20 dark:border-green-700 dark:text-green-100"; // Success integration background
+        return "bg-gradient-to-r from-green-100 to-emerald-100 border-green-200 text-green-900 dark:from-green-900/20 dark:to-emerald-900/20 dark:border-green-700 dark:text-green-100"; // Success integration background
       }
     } else {
       // Direct model response
-      return "bg-blue-50 border-blue-200 text-blue-900 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-100"; // Model-generated background
+      return "bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 text-blue-900 dark:from-blue-900/20 dark:to-indigo-900/20 dark:border-blue-700 dark:text-blue-100"; // Model-generated background
     }
   };
 
   // Check if the message appears to be a JSON string from MCP result
-  const isMcpJsonResult = isAssistant && message.isMcpResult && message.content.trim().startsWith('{');
+  const isMcpJsonResult = isAssistant && message.isMcpResult && message.content?.trim().startsWith('{');
 
   // Render MCP JSON result with formatting
   const renderMcpResult = () => {
+    const content = message.content || '';
+    
     try {
       // Check if it starts with "Error:"
-      if (message.content.startsWith('Error:')) {
+      if (content.startsWith('Error:')) {
         return (
           <div className="text-red-400">
-            <p className="font-medium">{message.content}</p>
+            <p className="font-medium">{content}</p>
           </div>
         );
       }
       
       // Try to parse and pretty print the JSON
-      const jsonData = JSON.parse(message.content);
+      const jsonData = JSON.parse(content);
       
       // Determine if it looks like Gmail data
       const isGmailData = jsonData && 
@@ -128,13 +131,13 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, autoPlaySpeech = fal
       );
     } catch (e) {
       // If parsing fails, just render the text
-      return <div className="whitespace-pre-wrap">{message.content}</div>;
+      return <div className="whitespace-pre-wrap">{content}</div>;
     }
   };
 
   return (
     <div className={cn(
-      "flex w-full mb-4", 
+      "flex w-full mb-4 animate-fade-in", 
       isUser ? "justify-end" : "justify-start"
     )}>
       <div className={cn(
@@ -153,11 +156,11 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, autoPlaySpeech = fal
         
         <div>
           <Card className={cn(
-            "px-4 py-3 mb-1 relative group",
+            "px-4 py-3 mb-1 relative group glass-card transition-all duration-300 hover:scale-[1.02]",
             getMessageBackground()
           )}>
             {isMcpJsonResult ? renderMcpResult() : (
-              <div className="whitespace-pre-wrap">{message.content}</div>
+              <div className="whitespace-pre-wrap">{message.content || ''}</div>
             )}
             
             {/* Speech Controls - Only show for AI messages that aren't MCP results */}

@@ -35,11 +35,11 @@
 
     --radius: 0.75rem;
 
-    /* Light mode glassmorphism */
+    /* Light mode glassmorphism with warm colors */
     --glass-bg: rgba(255, 255, 255, 0.85);
-    --glass-border: rgba(255, 255, 255, 0.3);
-    --glass-shadow: rgba(0, 0, 0, 0.1);
-    --backdrop-blur: 20px;
+    --glass-border: rgba(255, 192, 203, 0.3);
+    --glass-shadow: rgba(255, 105, 180, 0.1);
+    --backdrop-blur: 25px;
   }
 
   .dark {
@@ -71,11 +71,11 @@
     --input: 217.2 32.6% 17.5%;
     --ring: 217 91% 60%;
 
-    /* Dark mode glassmorphism with warmer tones */
+    /* Dark mode glassmorphism with warm tones */
     --glass-bg: rgba(30, 41, 59, 0.8);
-    --glass-border: rgba(148, 163, 184, 0.2);
-    --glass-shadow: rgba(0, 0, 0, 0.4);
-    --backdrop-blur: 25px;
+    --glass-border: rgba(255, 192, 203, 0.2);
+    --glass-shadow: rgba(255, 105, 180, 0.2);
+    --backdrop-blur: 30px;
   }
 
   * {
@@ -83,14 +83,14 @@
   }
 
   body {
-    @apply bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-slate-800 dark:via-slate-900 dark:to-indigo-900 text-foreground min-h-screen;
+    @apply bg-gradient-to-br from-pink-50 via-blue-50 via-purple-50 to-green-50 dark:from-pink-900/10 dark:via-blue-900/10 dark:via-purple-900/10 dark:to-green-900/10 text-foreground min-h-screen;
     background-attachment: fixed;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
 @layer components {
-  /* Glassmorphism Components */
+  /* Enhanced Glassmorphism Components with warm colors */
   .glass {
     background: var(--glass-bg);
     backdrop-filter: blur(var(--backdrop-blur));
@@ -100,60 +100,61 @@
   }
 
   .glass-card {
-    @apply glass rounded-2xl transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/20 dark:hover:shadow-blue-400/20;
+    @apply glass rounded-2xl transition-all duration-500 hover:shadow-2xl hover:shadow-pink-500/20 dark:hover:shadow-purple-400/20 hover:scale-[1.02];
   }
 
   .glass-button {
-    @apply glass rounded-xl px-4 py-2 transition-all duration-200 hover:scale-105 hover:bg-blue-500/20 hover:border-blue-400/30 active:scale-95;
+    @apply glass rounded-xl px-4 py-2 transition-all duration-300 hover:scale-105 hover:bg-pink-500/20 hover:border-purple-400/30 active:scale-95;
   }
 
   .glass-input {
-    @apply glass rounded-lg border-0 focus:ring-2 focus:ring-primary/50 focus:border-primary/30;
+    @apply glass rounded-lg border-0 focus:ring-2 focus:ring-pink-400/50 focus:border-purple-400/30 transition-all duration-300;
   }
 
   .glass-nav {
-    @apply glass border-0 border-b border-white/20 dark:border-slate-700/50;
+    @apply glass border-0 border-b border-pink-200/30 dark:border-purple-700/50;
   }
 
-  /* Message Bubbles with Glassmorphism */
-  .message-bubble-user {
-    @apply glass text-white px-4 py-3 rounded-2xl rounded-br-md max-w-[85%] break-words;
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.9), rgba(147, 51, 234, 0.9));
-    border: 1px solid rgba(59, 130, 246, 0.3);
-  }
-  
-  .message-bubble-ai {
-    @apply glass text-gray-900 dark:text-gray-100 px-4 py-3 rounded-2xl rounded-bl-md max-w-[85%] break-words;
-    border: 1px solid var(--glass-border);
-  }
-
-  /* Enhanced animations with proper hover colors */
-  .animate-slide-up {
-    animation: slideUp 0.3s ease-out;
+  /* Enhanced animations with warm color theme */
+  .animate-gradient-x {
+    animation: gradient-x 15s ease infinite;
+    background-size: 400% 400%;
   }
 
   .animate-fade-in {
-    animation: fadeIn 0.3s ease-out;
+    animation: fadeIn 0.6s ease-out;
   }
 
   .animate-scale-in {
-    animation: scaleIn 0.2s ease-out;
+    animation: scaleIn 0.4s ease-out;
   }
 
-  @keyframes slideUp {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
+  .animate-slide-up {
+    animation: slideUp 0.5s ease-out;
+  }
+
+  .animate-pulse-soft {
+    animation: pulseSoft 3s ease-in-out infinite;
+  }
+
+  @keyframes gradient-x {
+    0%, 100% {
+      background-position: 0% 50%;
     }
-    to {
-      opacity: 1;
-      transform: translateY(0);
+    50% {
+      background-position: 100% 50%;
     }
   }
 
   @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from { 
+      opacity: 0; 
+      transform: translateY(10px);
+    }
+    to { 
+      opacity: 1; 
+      transform: translateY(0);
+    }
   }
 
   @keyframes scaleIn {
@@ -167,13 +168,35 @@
     }
   }
 
-  /* Loading animation */
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes pulseSoft {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.05);
+    }
+  }
+
+  /* Loading animation with warm colors */
   .loading-dots {
     @apply flex space-x-1;
   }
 
   .loading-dot {
-    @apply w-2 h-2 bg-current rounded-full animate-pulse;
+    @apply w-2 h-2 bg-gradient-to-r from-pink-400 to-purple-500 rounded-full animate-pulse;
   }
 
   .loading-dot:nth-child(2) {
@@ -184,24 +207,57 @@
     animation-delay: 0.4s;
   }
 
-  /* Consistent button hover effects */
+  /* Enhanced button hover effects with warm colors */
   .btn-primary {
-    @apply bg-blue-600 hover:bg-blue-700 text-white transition-colors duration-200;
+    @apply bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white transition-all duration-300 hover:scale-105;
   }
 
   .btn-secondary {
-    @apply bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 transition-colors duration-200;
+    @apply bg-gradient-to-r from-blue-100 to-purple-100 hover:from-blue-200 hover:to-purple-200 dark:from-blue-900/30 dark:to-purple-900/30 dark:hover:from-blue-800/40 dark:hover:to-purple-800/40 transition-all duration-300;
   }
 
   .btn-ghost {
-    @apply hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors duration-200;
+    @apply hover:bg-gradient-to-r hover:from-pink-100/50 hover:to-purple-100/50 dark:hover:from-pink-900/20 dark:hover:to-purple-900/20 transition-all duration-300;
+  }
+
+  /* Message bubbles with enhanced warm styling */
+  .message-bubble-user {
+    @apply glass text-white px-4 py-3 rounded-2xl rounded-br-md max-w-[85%] break-words transition-all duration-300 hover:scale-[1.02];
+    background: linear-gradient(135deg, rgba(236, 72, 153, 0.9), rgba(147, 51, 234, 0.9));
+    border: 1px solid rgba(236, 72, 153, 0.3);
+  }
+  
+  .message-bubble-ai {
+    @apply glass text-gray-900 dark:text-gray-100 px-4 py-3 rounded-2xl rounded-bl-md max-w-[85%] break-words transition-all duration-300 hover:scale-[1.02];
+    background: linear-gradient(135deg, rgba(219, 234, 254, 0.9), rgba(243, 232, 255, 0.9));
+    border: 1px solid var(--glass-border);
   }
 }
 
-/* Smooth transitions for theme switching */
+/* Smooth transitions for theme switching with warm colors */
 * {
   transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
               border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
               color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+              box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Custom scrollbar with warm colors */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 192, 203, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, rgba(236, 72, 153, 0.6), rgba(147, 51, 234, 0.6));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, rgba(236, 72, 153, 0.8), rgba(147, 51, 234, 0.8));
 }

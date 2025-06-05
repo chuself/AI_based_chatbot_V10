@@ -28,7 +28,7 @@ const Index = () => {
   const { 
     speak: togglePlayback,
     isSpeaking: isPlaying,
-    isRecognitionAvailable: isSpeechEnabled 
+    isVoiceSupported: isSpeechEnabled 
   } = useSpeech();
   const { syncData, isLoading: syncLoading, refreshSync } = useDataSync();
   const { executeCommand } = useIntegrationCommands();
@@ -72,7 +72,7 @@ const Index = () => {
       id: Date.now().toString(),
       role: 'user' as const,
       content: userMessage,
-      timestamp: new Date().getTime()
+      timestamp: Date.now()
     };
     
     addMessage([...messages, newUserMessage]);
@@ -89,7 +89,7 @@ const Index = () => {
           id: (Date.now() + 1).toString(),
           role: 'assistant' as const,
           content: response,
-          timestamp: new Date().getTime()
+          timestamp: Date.now()
         };
         addMessage([...messages, newUserMessage, aiMessage]);
       } else {
@@ -98,7 +98,7 @@ const Index = () => {
           id: (Date.now() + 1).toString(),
           role: 'assistant' as const,
           content: "I apologize, but I couldn't generate a response. Please try again.",
-          timestamp: new Date().getTime()
+          timestamp: Date.now()
         };
         addMessage([...messages, newUserMessage, errorMessage]);
       }
@@ -110,7 +110,7 @@ const Index = () => {
         id: (Date.now() + 1).toString(),
         role: 'assistant' as const,
         content: "I'm sorry, there was an error processing your message. Please try again.",
-        timestamp: new Date().getTime()
+        timestamp: Date.now()
       };
       addMessage([...messages, newUserMessage, errorMessage]);
 
@@ -163,11 +163,11 @@ const Index = () => {
   // Show loading spinner during initial sync
   if (syncLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-slate-800 dark:via-slate-900 dark:to-indigo-900">
+      <div className="min-h-screen bg-gradient-to-br from-pink-100 via-blue-50 to-purple-100 dark:from-pink-900/20 dark:via-blue-900/20 dark:to-purple-900/20">
         <Header />
         <div className="flex items-center justify-center h-screen">
           <div className="text-center space-y-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gradient-to-r from-pink-500 to-purple-500 mx-auto"></div>
             <p className="text-gray-600 dark:text-gray-300">Syncing your data...</p>
           </div>
         </div>
@@ -178,17 +178,17 @@ const Index = () => {
   const isAnyLoading = geminiLoading || isTyping;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-slate-800 dark:via-slate-900 dark:to-indigo-900">
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-blue-50 via-purple-50 to-green-50 dark:from-pink-900/10 dark:via-blue-900/10 dark:via-purple-900/10 dark:to-green-900/10 animate-gradient-x">
       <Header />
       
       <div className="pt-16">
         <div className="max-w-4xl mx-auto p-4 h-[calc(100vh-4rem)] flex flex-col">
           {/* Unobtrusive Status Bar - Hidden by default, only show on hover */}
-          <div className="group mb-4 opacity-0 hover:opacity-100 transition-opacity duration-300">
-            <div className="flex items-center justify-between p-2 bg-white/30 dark:bg-slate-800/30 backdrop-blur-sm rounded-lg border border-white/10 dark:border-slate-700/10">
+          <div className="group mb-4 opacity-0 hover:opacity-100 transition-all duration-500 ease-in-out">
+            <div className="flex items-center justify-between p-2 bg-white/40 dark:bg-slate-800/40 backdrop-blur-xl rounded-xl border border-white/20 dark:border-slate-700/20 shadow-lg">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1">
-                  <Brain className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                  <Brain className="h-3 w-3 text-purple-600 dark:text-purple-400" />
                   <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
                     {selectedModel || 'Gemini'}
                   </span>
@@ -207,7 +207,7 @@ const Index = () => {
                   variant="ghost"
                   size="sm"
                   onClick={handleRefreshSync}
-                  className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 h-6 w-6 p-0"
+                  className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 h-6 w-6 p-0 hover:bg-purple-100 dark:hover:bg-purple-900/30"
                 >
                   <RotateCcw className="h-3 w-3" />
                 </Button>
@@ -216,7 +216,7 @@ const Index = () => {
                   variant="ghost"
                   size="sm"
                   onClick={() => navigate('/settings')}
-                  className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 h-6 w-6 p-0"
+                  className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 h-6 w-6 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/30"
                 >
                   <Settings className="h-3 w-3" />
                 </Button>
@@ -225,13 +225,13 @@ const Index = () => {
           </div>
 
           {/* Chat Messages */}
-          <Card className="flex-1 mb-4 glass-card border-white/20 dark:border-slate-700/20 overflow-hidden">
+          <Card className="flex-1 mb-4 glass-card border-white/30 dark:border-slate-700/30 overflow-hidden backdrop-blur-xl bg-white/20 dark:bg-slate-800/20">
             <CardContent className="p-0 h-full flex flex-col">
               <div className="flex-1 overflow-y-auto p-4">
                 {messages.length === 0 ? (
                   <div className="flex items-center justify-center h-full">
-                    <div className="text-center space-y-4 max-w-md">
-                      <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center">
+                    <div className="text-center space-y-4 max-w-md animate-fade-in">
+                      <div className="mx-auto w-16 h-16 bg-gradient-to-br from-pink-400 via-purple-500 to-blue-500 rounded-full flex items-center justify-center animate-pulse">
                         <User className="h-8 w-8 text-white" />
                       </div>
                       <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
@@ -248,7 +248,7 @@ const Index = () => {
                     <MessageList messages={messages} />
                     {isAnyLoading && (
                       <div className="flex justify-start mb-4">
-                        <div className="glass-card max-w-[80%] p-3 rounded-lg border border-white/20 dark:border-slate-700/20">
+                        <div className="glass-card max-w-[80%] p-3 rounded-lg border border-white/20 dark:border-slate-700/20 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20">
                           <LoadingDots />
                         </div>
                       </div>
@@ -261,7 +261,7 @@ const Index = () => {
           </Card>
 
           {/* Input Area */}
-          <Card className="glass-card border-white/20 dark:border-slate-700/20">
+          <Card className="glass-card border-white/30 dark:border-slate-700/30 backdrop-blur-xl bg-white/30 dark:bg-slate-800/30">
             <CardContent className="p-4">
               <div className="flex items-end gap-2">
                 <div className="flex-1 space-y-2">
@@ -272,7 +272,7 @@ const Index = () => {
                       onChange={(e) => setInput(e.target.value)}
                       onKeyPress={handleKeyPress}
                       placeholder={isRecording ? "Listening..." : "Type your message..."}
-                      className="flex-1 glass-input border-white/20 dark:border-slate-700/20"
+                      className="flex-1 glass-input border-white/30 dark:border-slate-700/30 bg-white/50 dark:bg-slate-800/50"
                       disabled={geminiLoading || isRecording}
                     />
                     
@@ -281,7 +281,7 @@ const Index = () => {
                         variant="outline"
                         size="sm"
                         onClick={handleMicToggle}
-                        className={`glass-button ${isRecording ? 'bg-red-500/20 text-red-600 border-red-300' : ''}`}
+                        className={`glass-button transition-all duration-300 ${isRecording ? 'bg-red-500/20 text-red-600 border-red-300 animate-pulse' : 'hover:bg-green-100 dark:hover:bg-green-900/30'}`}
                       >
                         {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                       </Button>
@@ -292,7 +292,7 @@ const Index = () => {
                         variant="outline"
                         size="sm"
                         onClick={handleClearChat}
-                        className="glass-button text-gray-600 dark:text-gray-400"
+                        className="glass-button text-gray-600 dark:text-gray-400 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 transition-all duration-300"
                       >
                         <Square className="h-4 w-4" />
                       </Button>
@@ -303,7 +303,7 @@ const Index = () => {
                 <Button
                   onClick={handleSend}
                   disabled={!input.trim() || geminiLoading}
-                  className="glass-button bg-blue-500/20 hover:bg-blue-500/30 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700"
+                  className="glass-button bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white border-0 transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Send className="h-4 w-4" />
                 </Button>
