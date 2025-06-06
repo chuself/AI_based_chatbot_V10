@@ -122,6 +122,13 @@ export const saveIntegrationToSupabase = async (integrationData: any): Promise<b
     // Check if integration exists by ID
     const isUpdate = !!integrationData.id;
     
+    // Get current user for saving
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      console.error('❌ No authenticated user for saving integration', userError);
+      return false;
+    }
+    
     if (isUpdate) {
       // Update existing integration
       const { error } = await supabase
@@ -142,7 +149,7 @@ export const saveIntegrationToSupabase = async (integrationData: any): Promise<b
         return false;
       }
     } else {
-      // Create new integration
+      // Create new integration with user_id
       const { error } = await supabase
         .from('integrations')
         .insert({
@@ -151,7 +158,8 @@ export const saveIntegrationToSupabase = async (integrationData: any): Promise<b
           category: integrationData.category,
           description: integrationData.description,
           config: integrationData.config || {},
-          is_active: integrationData.isActive !== undefined ? integrationData.isActive : true
+          is_active: integrationData.isActive !== undefined ? integrationData.isActive : true,
+          user_id: user.id // Add user_id to meet the required database constraint
         });
       
       if (error) {

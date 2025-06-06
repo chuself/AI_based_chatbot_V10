@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import { useSpeech } from "@/hooks/useSpeech";
 import { useSpeechSettingsSync } from "@/hooks/useSpeechSettingsSync";
@@ -16,9 +15,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 interface SpeechSettingsProps {
   className?: string;
+  initialSettings?: {
+    selectedVoice?: string;
+    selectedPlayHTVoice?: string;
+    autoPlay?: boolean;
+    rate?: number;
+    pitch?: number;
+    volume?: number;
+    speechSource?: 'browser' | 'playht';
+    playhtApiKey?: string;
+    playhtUserId?: string;
+  };
 }
 
-const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
+const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className, initialSettings }) => {
   const { 
     availableVoices, 
     speak, 
@@ -41,6 +51,21 @@ const SpeechSettings: React.FC<SpeechSettingsProps> = ({ className }) => {
     updateSpeechPitch,
     updateSpeechVolume
   } = useSpeechSettingsSync();
+  
+  // Apply initial settings if provided
+  useEffect(() => {
+    if (initialSettings) {
+      if (initialSettings.rate !== undefined) {
+        updateRate(initialSettings.rate);
+      }
+      if (initialSettings.pitch !== undefined) {
+        updatePitch(initialSettings.pitch);
+      }
+      if (initialSettings.volume !== undefined) {
+        updateVolume(initialSettings.volume);
+      }
+    }
+  }, [initialSettings]);
   
   const [testText, setTestText] = useState("Hello! This is a test of the text-to-speech system.");
   const [voiceFilter, setVoiceFilter] = useState("");
