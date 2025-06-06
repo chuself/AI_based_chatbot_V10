@@ -1,5 +1,5 @@
 
-import { fetchIntegrationsFromSupabase, StoredIntegration } from '@/services/supabaseIntegrationsService';
+import { fetchIntegrationsFromSupabase, StoredIntegration, saveIntegrationToSupabase, deleteIntegrationFromSupabase } from '@/services/supabaseIntegrationsService';
 
 // Type definitions for integration checking
 export interface IntegrationCheck {
@@ -8,6 +8,7 @@ export interface IntegrationCheck {
   category: string;
   type: 'mcp' | 'api';
   commands?: string[];
+  id?: string; // Added ID to track integrations
 }
 
 // Cache for integrations to avoid repeated API calls
@@ -30,17 +31,17 @@ export const isIntegrationAvailable = async (integrationName: string): Promise<b
 };
 
 // Get available integrations for AI context - cached and optimized
-export const getAvailableIntegrations = async (): Promise<IntegrationCheck[]> => {
+export const getAvailableIntegrations = async (forceRefresh = false): Promise<IntegrationCheck[]> => {
   const now = Date.now();
   
-  // Return cached data if available and fresh
-  if (integrationsCache && (now - cacheTimestamp) < CACHE_DURATION) {
+  // Return cached data if available and fresh, unless force refresh is requested
+  if (!forceRefresh && integrationsCache && (now - cacheTimestamp) < CACHE_DURATION) {
     return integrationsCache;
   }
 
   try {
     console.log('🔍 Fetching available integrations...');
-    const storedIntegrations = await fetchIntegrationsFromSupabase();
+    const storedIntegrations = await fetchIntegrationsFromSupabase(true); // Force fresh data
     
     const result: IntegrationCheck[] = storedIntegrations
       .filter((integration: StoredIntegration) => integration.is_active)
@@ -49,6 +50,7 @@ export const getAvailableIntegrations = async (): Promise<IntegrationCheck[]> =>
                         integration.config?.endpoints?.map((ep: any) => ep.name) || [];
         
         return {
+          id: integration.id, // Include ID for tracking
           name: integration.name,
           isAvailable: true,
           category: integration.category,
@@ -106,10 +108,47 @@ export const generateIntegrationsSystemPrompt = async (): Promise<string> => {
   }
 };
 
+// Save an integration and update cache
+export const saveIntegration = async (integration: any): Promise<boolean> => {
+  try {
+    console.log('💾 Saving integration:', integration.name);
+    const result = await saveIntegrationToSupabase(integration);
+    
+    if (result) {
+      // Invalidate cache to force reload on next request
+      clearIntegrationsCache();
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('❌ Error saving integration:', error);
+    return false;
+  }
+};
+
+// Delete an integration and update cache
+export const deleteIntegration = async (integrationId: string): Promise<boolean> => {
+  try {
+    console.log('🗑️ Deleting integration:', integrationId);
+    const result = await deleteIntegrationFromSupabase(integrationId);
+    
+    if (result) {
+      // Invalidate cache to force reload on next request
+      clearIntegrationsCache();
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('❌ Error deleting integration:', error);
+    return false;
+  }
+};
+
 // Clear the cache manually if needed
 export const clearIntegrationsCache = () => {
   integrationsCache = null;
   cacheTimestamp = 0;
+  console.log('🗑️ Integrations cache cleared');
 };
 
 // Validate integration configuration - simplified

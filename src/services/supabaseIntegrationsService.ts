@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 
 // Types for stored integrations and commands
@@ -110,6 +111,87 @@ export const fetchCommandsFromSupabase = async (): Promise<StoredCommand[]> => {
   } catch (error) {
     console.error('❌ Error in fetchCommandsFromSupabase:', error);
     return [];
+  }
+};
+
+// Save or update an integration
+export const saveIntegrationToSupabase = async (integrationData: any): Promise<boolean> => {
+  try {
+    console.log('💾 Saving integration to Supabase:', integrationData.name);
+    
+    // Check if integration exists by ID
+    const isUpdate = !!integrationData.id;
+    
+    if (isUpdate) {
+      // Update existing integration
+      const { error } = await supabase
+        .from('integrations')
+        .update({
+          name: integrationData.name,
+          type: integrationData.type,
+          category: integrationData.category,
+          description: integrationData.description,
+          config: integrationData.config || {},
+          is_active: integrationData.isActive !== undefined ? integrationData.isActive : true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', integrationData.id);
+      
+      if (error) {
+        console.error('❌ Error updating integration:', error);
+        return false;
+      }
+    } else {
+      // Create new integration
+      const { error } = await supabase
+        .from('integrations')
+        .insert({
+          name: integrationData.name,
+          type: integrationData.type,
+          category: integrationData.category,
+          description: integrationData.description,
+          config: integrationData.config || {},
+          is_active: integrationData.isActive !== undefined ? integrationData.isActive : true
+        });
+      
+      if (error) {
+        console.error('❌ Error creating integration:', error);
+        return false;
+      }
+    }
+    
+    console.log(`✅ Integration ${isUpdate ? 'updated' : 'created'} successfully`);
+    // Clear cache to force refresh on next fetch
+    clearIntegrationsCache();
+    return true;
+  } catch (error) {
+    console.error('❌ Error in saveIntegrationToSupabase:', error);
+    return false;
+  }
+};
+
+// Delete an integration
+export const deleteIntegrationFromSupabase = async (integrationId: string): Promise<boolean> => {
+  try {
+    console.log('🗑️ Deleting integration from Supabase:', integrationId);
+    
+    const { error } = await supabase
+      .from('integrations')
+      .delete()
+      .eq('id', integrationId);
+    
+    if (error) {
+      console.error('❌ Error deleting integration:', error);
+      return false;
+    }
+    
+    console.log('✅ Integration deleted successfully');
+    // Clear cache to force refresh on next fetch
+    clearIntegrationsCache();
+    return true;
+  } catch (error) {
+    console.error('❌ Error in deleteIntegrationFromSupabase:', error);
+    return false;
   }
 };
 

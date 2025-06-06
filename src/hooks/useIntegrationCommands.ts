@@ -1,7 +1,8 @@
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { executeIntegrationCommand, fetchIntegrationsFromSupabase, clearIntegrationsCache } from '@/services/supabaseIntegrationsService';
 import { useMcpDebug } from './useMcpDebug';
+import { getAvailableIntegrations } from '@/services/aiIntegrationHelper';
 
 export const useIntegrationCommands = () => {
   const [isExecuting, setIsExecuting] = useState<string | null>(null);
@@ -9,6 +10,12 @@ export const useIntegrationCommands = () => {
   
   // Track execution to prevent duplicates
   const executingCommands = useRef(new Set<string>());
+
+  // Fetch all available integrations with a force refresh option
+  const refreshIntegrations = useCallback(async () => {
+    clearIntegrationsCache();
+    return await getAvailableIntegrations(true);
+  }, []);
 
   const executeCommand = async (
     integrationName: string,
@@ -140,7 +147,8 @@ export const useIntegrationCommands = () => {
     executeCommand,
     isExecuting,
     isCommandExecuting,
-    clearExecutionTracking
+    clearExecutionTracking,
+    refreshIntegrations
   };
 };
 

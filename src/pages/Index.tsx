@@ -98,6 +98,27 @@ const Index = () => {
     }
   };
 
+  // Format model name for display
+  const getDisplayModelName = () => {
+    if (!selectedModel) return 'No Model Selected';
+    
+    // Handle Gemini models
+    if (selectedModel.includes('gemini')) {
+      return selectedModel.includes('flash') ? 'Gemini 1.5 Flash' : 'Gemini 1.5 Pro';
+    }
+    
+    // Handle Groq models
+    if (selectedModel.includes('llama')) {
+      return 'Llama 3';
+    }
+    if (selectedModel.includes('mixtral')) {
+      return 'Mixtral';
+    }
+    
+    // Fallback: just show the model name
+    return selectedModel.split('/').pop() || selectedModel;
+  };
+
   // Show loading spinner during initial sync
   if (syncLoading) {
     return (
@@ -126,7 +147,7 @@ const Index = () => {
                 <div className="flex items-center gap-1">
                   <Brain className="h-3 w-3 text-blue-600 dark:text-blue-400" />
                   <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                    {selectedModel || 'No Model'}
+                    {getDisplayModelName()}
                   </span>
                 </div>
                 

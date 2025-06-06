@@ -1,5 +1,5 @@
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { SyncService } from '@/services/syncService';
 
 interface SpeechSettingsData {
@@ -15,7 +15,35 @@ interface SpeechSettingsData {
 }
 
 export const useSpeechSettingsSync = () => {
-  const saveSpeechSettings = useCallback((settings: Partial<SpeechSettingsData>) => {
+  const [settings, setSettings] = useState<SpeechSettingsData>({
+    autoPlay: false,
+    rate: 1.0,
+    pitch: 1.0,
+    volume: 1.0,
+    speechSource: 'browser'
+  });
+  
+  // Load settings on mount
+  useEffect(() => {
+    const loadedSettings = getSpeechSettings();
+    setSettings(loadedSettings);
+    
+    // Add storage event listener for cross-component updates
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'speech-settings') {
+        const updatedSettings = getSpeechSettings();
+        setSettings(updatedSettings);
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
+  const saveSpeechSettings = useCallback((newSettings: Partial<SpeechSettingsData>) => {
     try {
       // Get current speech settings
       const currentSettings = getSpeechSettings();
@@ -23,15 +51,21 @@ export const useSpeechSettingsSync = () => {
       // Merge with new settings
       const updatedSettings = {
         ...currentSettings,
-        ...settings
+        ...newSettings
       };
       
       // Save to localStorage
       localStorage.setItem('speech-settings', JSON.stringify(updatedSettings));
       
+      // Update local state
+      setSettings(updatedSettings);
+      
       // Update sync service with speech settings only
       const userData = { speechSettings: updatedSettings };
       SyncService.saveCloudData(userData);
+      
+      // Trigger storage event for other components
+      window.dispatchEvent(new Event('storage'));
       
       console.log('Speech settings saved:', updatedSettings);
     } catch (error) {
@@ -91,13 +125,8 @@ export const useSpeechSettingsSync = () => {
     saveSpeechSettings({ playhtApiKey: apiKey, playhtUserId: userId });
   }, [saveSpeechSettings]);
 
-  // Load settings on hook initialization
-  useEffect(() => {
-    const settings = getSpeechSettings();
-    console.log('Loaded speech settings:', settings);
-  }, [getSpeechSettings]);
-
   return {
+    settings,
     saveSpeechSettings,
     getSpeechSettings,
     updateVoiceSelection,

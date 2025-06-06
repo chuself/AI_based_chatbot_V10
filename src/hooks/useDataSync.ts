@@ -3,7 +3,7 @@ import { useState, useEffect, useContext, useCallback, useRef } from "react";
 import { SyncService, UserDataWithMeta } from "@/services/syncService";
 import { SupabaseContext } from "@/App";
 import { useToast } from "@/components/ui/use-toast";
-import { syncIntegrationsToSupabase, cleanupDuplicateIntegrations, clearIntegrationsCache } from "@/services/supabaseIntegrationsService";
+import { clearIntegrationsCache } from "@/services/supabaseIntegrationsService";
 
 export const useDataSync = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -14,7 +14,7 @@ export const useDataSync = () => {
   // Prevent duplicate sync operations with more aggressive debouncing
   const syncInProgress = useRef(false);
   const lastSyncTime = useRef(0);
-  const SYNC_COOLDOWN = 5000; // Increased to 5 seconds
+  const SYNC_COOLDOWN = 5000; // 5 seconds cooldown
   const mounted = useRef(true);
 
   // Function to force sync data - optimized
@@ -35,10 +35,10 @@ export const useDataSync = () => {
         console.log('🔄 Starting efficient sync...');
         setIsLoading(true);
         
-        // Clear cache only once
+        // Clear cache to ensure fresh data
         clearIntegrationsCache();
         
-        // Simplified sync process - avoid redundant operations
+        // Sync data from cloud
         const result = await SyncService.syncData();
         
         if (mounted.current) {
@@ -114,7 +114,7 @@ export const useDataSync = () => {
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [user?.id]); // Only depend on user ID change
+  }, [user?.id, forceSyncData]); // Include forceSyncData to ensure it's available
 
   // Listen for page visibility - throttled heavily
   useEffect(() => {
@@ -179,6 +179,9 @@ export const useDataSync = () => {
       updates.forEach(([key, value]) => {
         localStorage.setItem(key, value);
       });
+      
+      // Trigger storage event to notify other components of the change
+      window.dispatchEvent(new Event('storage'));
     } catch (error) {
       console.error('❌ Error applying data:', error);
     }
