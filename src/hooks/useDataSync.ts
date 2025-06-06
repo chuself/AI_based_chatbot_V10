@@ -3,7 +3,7 @@ import { useState, useEffect, useContext, useCallback, useRef } from "react";
 import { SyncService, UserDataWithMeta } from "@/services/syncService";
 import { SupabaseContext } from "@/App";
 import { useToast } from "@/components/ui/use-toast";
-import { clearIntegrationsCache } from "@/services/supabaseIntegrationsService";
+import { clearIntegrationsCache, forceResetAllCaches } from "@/services/supabaseIntegrationsService";
 
 export const useDataSync = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -11,10 +11,10 @@ export const useDataSync = () => {
   const { user } = useContext(SupabaseContext);
   const { toast } = useToast();
   
-  // Prevent duplicate sync operations with more aggressive debouncing
+  // Prevent duplicate sync operations
   const syncInProgress = useRef(false);
   const lastSyncTime = useRef(0);
-  const SYNC_COOLDOWN = 5000; // 5 seconds cooldown
+  const SYNC_COOLDOWN = 2000; // Reduced cooldown for better responsiveness
   const mounted = useRef(true);
 
   // Function to force sync data - optimized
@@ -35,8 +35,9 @@ export const useDataSync = () => {
         console.log('🔄 Starting efficient sync...');
         setIsLoading(true);
         
-        // Clear cache to ensure fresh data
+        // Clear all caches to ensure completely fresh data
         clearIntegrationsCache();
+        forceResetAllCaches();
         
         // Sync data from cloud
         const result = await SyncService.syncData();
@@ -114,9 +115,9 @@ export const useDataSync = () => {
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [user?.id, forceSyncData]); // Include forceSyncData to ensure it's available
+  }, [user?.id, forceSyncData]);
 
-  // Listen for page visibility - throttled heavily
+  // Listen for page visibility changes
   useEffect(() => {
     let visibilityTimeout: NodeJS.Timeout;
 
@@ -128,7 +129,7 @@ export const useDataSync = () => {
             console.log('👁️ Page visible - syncing');
             forceSyncData();
           }
-        }, 2000); // 2 second delay
+        }, 1000);
       }
     };
 
@@ -190,6 +191,11 @@ export const useDataSync = () => {
   const refreshSync = async () => {
     console.log('🔄 Manual refresh');
     lastSyncTime.current = 0; // Reset cooldown for manual refresh
+    
+    // Force clear all caches before manual refresh
+    clearIntegrationsCache();
+    forceResetAllCaches();
+    
     return await forceSyncData();
   };
 

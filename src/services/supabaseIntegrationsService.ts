@@ -32,8 +32,8 @@ export interface StoredCommand {
 let integrationsCache: StoredIntegration[] | null = null;
 let commandsCache: StoredCommand[] | null = null;
 let cacheTimestamp = 0;
-let cacheVersion = 0; // Track cache version for better invalidation
-const CACHE_DURATION = 30000; // Reduced to 30 seconds for better freshness
+let cacheVersion = 0;
+const CACHE_DURATION = 5000; // Very short cache for debugging
 
 export const clearIntegrationsCache = () => {
   integrationsCache = null;
@@ -54,10 +54,16 @@ export const forceResetAllCaches = () => {
   console.log('🔥 Force reset all caches completed');
 };
 
+// Helper function to validate UUID format
+const isValidUUID = (uuid: string): boolean => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
+};
+
 export const fetchIntegrationsFromSupabase = async (forceRefresh = false): Promise<StoredIntegration[]> => {
   const now = Date.now();
   
-  // Use cache if available and not expired, unless force refresh
+  // Always force refresh for now to debug issues
   if (!forceRefresh && integrationsCache && (now - cacheTimestamp) < CACHE_DURATION) {
     console.log('📋 Using cached integrations data (version:', cacheVersion, ')');
     return integrationsCache;
@@ -69,44 +75,50 @@ export const fetchIntegrationsFromSupabase = async (forceRefresh = false): Promi
     const { data, error } = await supabase
       .from('integrations')
       .select('*')
-      .order('updated_at', { ascending: false }); // Order by most recently updated
+      .order('updated_at', { ascending: false });
 
     if (error) {
       console.error('❌ Error fetching integrations:', error);
-      // Return cached data if available on error
       return integrationsCache || [];
     }
 
-    console.log(`✅ Fetched ${data?.length || 0} integrations from Supabase`);
+    console.log(`✅ Raw Supabase data:`, data);
     
-    // Transform and validate the data efficiently
-    const transformedData: StoredIntegration[] = (data || []).map(item => {
-      // Clean up any malformed IDs that might cause UUID errors
-      const cleanId = item.id && typeof item.id === 'string' && item.id.length > 20 ? item.id : '';
-      
-      return {
-        id: cleanId,
+    // Transform and validate the data with better type safety
+    const transformedData: StoredIntegration[] = (data || [])
+      .filter(item => {
+        // Validate required fields
+        if (!item.id || !isValidUUID(item.id)) {
+          console.warn('❌ Invalid ID for integration:', item);
+          return false;
+        }
+        if (!item.name || !item.type || !item.category) {
+          console.warn('❌ Missing required fields for integration:', item);
+          return false;
+        }
+        return true;
+      })
+      .map(item => ({
+        id: item.id,
         name: item.name || '',
         type: (item.type === 'mcp' || item.type === 'api') ? item.type : 'mcp',
         category: item.category || '',
-        description: item.description,
+        description: item.description || undefined,
         config: item.config || {},
         is_active: Boolean(item.is_active),
         created_at: item.created_at,
         updated_at: item.updated_at,
         user_id: item.user_id
-      };
-    }).filter(item => item.id); // Filter out items with invalid IDs
+      }));
     
     // Update cache
     integrationsCache = transformedData;
     cacheTimestamp = now;
     
-    console.log('💾 Updated integrations cache with', transformedData.length, 'valid items');
+    console.log('💾 Updated integrations cache with', transformedData.length, 'valid items:', transformedData);
     return transformedData;
   } catch (error) {
     console.error('❌ Error in fetchIntegrationsFromSupabase:', error);
-    // Return cached data if available on error
     return integrationsCache || [];
   }
 };
@@ -114,7 +126,6 @@ export const fetchIntegrationsFromSupabase = async (forceRefresh = false): Promi
 export const fetchCommandsFromSupabase = async (forceRefresh = false): Promise<StoredCommand[]> => {
   const now = Date.now();
   
-  // Use cache if available and not expired, unless force refresh
   if (!forceRefresh && commandsCache && (now - cacheTimestamp) < CACHE_DURATION) {
     console.log('📋 Using cached commands data (version:', cacheVersion, ')');
     return commandsCache;
@@ -126,7 +137,7 @@ export const fetchCommandsFromSupabase = async (forceRefresh = false): Promise<S
     const { data, error } = await supabase
       .from('integration_commands')
       .select('*')
-      .eq('is_active', true) // Only fetch active commands
+      .eq('is_active', true)
       .order('updated_at', { ascending: false });
 
     if (error) {
@@ -134,12 +145,19 @@ export const fetchCommandsFromSupabase = async (forceRefresh = false): Promise<S
       return commandsCache || [];
     }
 
-    console.log(`✅ Fetched ${data?.length || 0} commands from Supabase`);
+    console.log(`✅ Raw commands data:`, data);
     
     // Clean and validate command data
     const cleanedData: StoredCommand[] = (data || []).filter(item => {
-      // Filter out items with malformed IDs
-      return item.id && typeof item.id === 'string' && item.id.length > 20;
+      if (!item.id || !isValidUUID(item.id)) {
+        console.warn('❌ Invalid command ID:', item);
+        return false;
+      }
+      if (!item.integration_id || !isValidUUID(item.integration_id)) {
+        console.warn('❌ Invalid integration_id for command:', item);
+        return false;
+      }
+      return true;
     });
     
     commandsCache = cleanedData;
@@ -153,63 +171,79 @@ export const fetchCommandsFromSupabase = async (forceRefresh = false): Promise<S
   }
 };
 
-// Save or update an integration
+// Save or update an integration with better error handling
 export const saveIntegrationToSupabase = async (integrationData: any): Promise<boolean> => {
   try {
-    console.log('💾 Saving integration to Supabase:', integrationData.name);
+    console.log('💾 Attempting to save integration to Supabase:', integrationData);
     
-    // Check if integration exists by ID
-    const isUpdate = !!integrationData.id;
-    
-    // Get current user for saving
+    // Get current user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
       console.error('❌ No authenticated user for saving integration', userError);
       return false;
     }
+
+    console.log('👤 Current user ID:', user.id);
+    
+    // Check if integration exists by ID
+    const isUpdate = !!integrationData.id && isValidUUID(integrationData.id);
+    
+    // Prepare the data object
+    const saveData = {
+      name: integrationData.name,
+      type: integrationData.type,
+      category: integrationData.category,
+      description: integrationData.description || null,
+      config: integrationData.config || {},
+      is_active: integrationData.isActive !== undefined ? integrationData.isActive : true,
+      user_id: user.id
+    };
+
+    console.log('📝 Save data prepared:', saveData);
     
     if (isUpdate) {
       // Update existing integration
-      const { error } = await supabase
+      console.log('🔄 Updating existing integration with ID:', integrationData.id);
+      const { data, error } = await supabase
         .from('integrations')
         .update({
-          name: integrationData.name,
-          type: integrationData.type,
-          category: integrationData.category,
-          description: integrationData.description,
-          config: integrationData.config || {},
-          is_active: integrationData.isActive !== undefined ? integrationData.isActive : true,
+          ...saveData,
           updated_at: new Date().toISOString()
         })
-        .eq('id', integrationData.id);
+        .eq('id', integrationData.id)
+        .select();
       
       if (error) {
         console.error('❌ Error updating integration:', error);
         return false;
       }
+      
+      console.log('✅ Integration updated successfully:', data);
     } else {
-      // Create new integration with user_id
-      const { error } = await supabase
+      // Create new integration
+      console.log('➕ Creating new integration');
+      const { data, error } = await supabase
         .from('integrations')
-        .insert({
-          name: integrationData.name,
-          type: integrationData.type,
-          category: integrationData.category,
-          description: integrationData.description,
-          config: integrationData.config || {},
-          is_active: integrationData.isActive !== undefined ? integrationData.isActive : true,
-          user_id: user.id // Add user_id to meet the required database constraint
-        });
+        .insert(saveData)
+        .select();
       
       if (error) {
         console.error('❌ Error creating integration:', error);
         return false;
       }
+      
+      console.log('✅ Integration created successfully:', data);
     }
     
-    console.log(`✅ Integration ${isUpdate ? 'updated' : 'created'} successfully`);
     // Force clear all caches to ensure fresh data
     forceResetAllCaches();
+    
+    // Immediately verify the save by fetching fresh data
+    setTimeout(async () => {
+      const freshData = await fetchIntegrationsFromSupabase(true);
+      console.log('🔍 Verification - Fresh integrations after save:', freshData);
+    }, 1000);
+    
     return true;
   } catch (error) {
     console.error('❌ Error in saveIntegrationToSupabase:', error);
@@ -217,10 +251,15 @@ export const saveIntegrationToSupabase = async (integrationData: any): Promise<b
   }
 };
 
-// Delete an integration
+// Delete an integration with better verification
 export const deleteIntegrationFromSupabase = async (integrationId: string): Promise<boolean> => {
   try {
     console.log('🗑️ Deleting integration from Supabase:', integrationId);
+    
+    if (!isValidUUID(integrationId)) {
+      console.error('❌ Invalid UUID for deletion:', integrationId);
+      return false;
+    }
     
     const { error } = await supabase
       .from('integrations')
@@ -233,8 +272,10 @@ export const deleteIntegrationFromSupabase = async (integrationId: string): Prom
     }
     
     console.log('✅ Integration deleted successfully');
+    
     // Force clear all caches to ensure fresh data
     forceResetAllCaches();
+    
     return true;
   } catch (error) {
     console.error('❌ Error in deleteIntegrationFromSupabase:', error);
@@ -256,6 +297,10 @@ export const saveIntegrationCommand = async (
   try {
     console.log('💾 Saving integration command...');
     
+    if (!isValidUUID(integrationId)) {
+      return { success: false, error: 'Invalid integration ID' };
+    }
+    
     const { data, error } = await supabase
       .from('integration_commands')
       .insert({
@@ -270,7 +315,6 @@ export const saveIntegrationCommand = async (
     }
 
     console.log('✅ Command saved successfully');
-    // Force clear all caches to ensure fresh data
     forceResetAllCaches();
     return { success: true };
   } catch (error) {
@@ -283,6 +327,10 @@ export const deleteIntegrationCommand = async (commandId: string): Promise<{ suc
   try {
     console.log('🗑️ Deleting integration command...');
     
+    if (!isValidUUID(commandId)) {
+      return { success: false, error: 'Invalid command ID' };
+    }
+    
     const { error } = await supabase
       .from('integration_commands')
       .delete()
@@ -294,7 +342,6 @@ export const deleteIntegrationCommand = async (commandId: string): Promise<{ suc
     }
 
     console.log('✅ Command deleted successfully');
-    // Force clear all caches to ensure fresh data
     forceResetAllCaches();
     return { success: true };
   } catch (error) {
@@ -333,22 +380,29 @@ export const executeIntegrationCommand = async (
   try {
     console.log(`🚀 Executing command ${commandName} on integration ${integrationId}`);
     
-    // Always fetch fresh data for command execution to avoid stale results
+    if (!isValidUUID(integrationId)) {
+      return { error: { message: 'Invalid integration ID format' } };
+    }
+    
+    // Always fetch fresh data for command execution
     console.log('🔄 Fetching fresh integration data for command execution...');
-    const integrations = await fetchIntegrationsFromSupabase(true); // Force fresh data
-    const commands = await fetchCommandsFromSupabase(true); // Force fresh commands
+    const integrations = await fetchIntegrationsFromSupabase(true);
+    const commands = await fetchCommandsFromSupabase(true);
+    
+    console.log('📊 Available integrations for execution:', integrations);
+    console.log('📊 Available commands for execution:', commands);
     
     const integration = integrations.find(i => i.id === integrationId);
     
     if (!integration) {
-      return { error: { message: 'Integration not found' } };
+      return { error: { message: `Integration with ID ${integrationId} not found` } };
     }
 
     if (!integration.is_active) {
       return { error: { message: 'Integration is not active' } };
     }
 
-    // Check if command still exists in current configuration
+    // Check if command exists in current configuration
     const availableCommands = commands.filter(c => c.integration_id === integrationId);
     const commandExists = availableCommands.some(c => c.name.toLowerCase() === commandName.toLowerCase());
     
@@ -373,10 +427,7 @@ export const executeIntegrationCommand = async (
 export const cleanupDuplicateIntegrations = async (): Promise<boolean> => {
   try {
     console.log('🧹 Cleaning up duplicate integrations...');
-    
-    // Also clear caches during cleanup
     forceResetAllCaches();
-    
     console.log('✅ Duplicate cleanup completed');
     return true;
   } catch (error) {

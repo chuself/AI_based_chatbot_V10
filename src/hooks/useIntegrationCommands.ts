@@ -13,8 +13,11 @@ export const useIntegrationCommands = () => {
 
   // Fetch all available integrations with a force refresh option
   const refreshIntegrations = useCallback(async () => {
+    console.log('🔄 Refreshing integrations via hook...');
     clearIntegrationsCache();
-    return await getAvailableIntegrations(true);
+    const result = await getAvailableIntegrations(true);
+    console.log('🔄 Refreshed integrations result:', result);
+    return result;
   }, []);
 
   const executeCommand = async (
@@ -24,6 +27,8 @@ export const useIntegrationCommands = () => {
   ): Promise<{ result?: any; error?: { message: string } }> => {
     // Create unique execution key to prevent duplicates
     const executionKey = `${integrationName}.${commandName}.${JSON.stringify(parameters)}`;
+    
+    console.log(`🚀 Starting command execution: ${executionKey}`);
     
     // Check if this exact command is already executing
     if (executingCommands.current.has(executionKey)) {
@@ -39,11 +44,11 @@ export const useIntegrationCommands = () => {
       console.log(`🔍 Looking for integration with name: "${integrationName}"`);
       
       // Force fresh integrations fetch to avoid stale data
-      console.log('🔄 Forcing fresh integration data fetch...');
+      console.log('🔄 Forcing completely fresh integration data fetch...');
       clearIntegrationsCache(); // Clear any existing cache
       const integrations = await fetchIntegrationsFromSupabase(true); // Force bypass cache
       
-      console.log('📊 Available integrations:', integrations.map(i => ({ 
+      console.log('📊 Available integrations for command execution:', integrations.map(i => ({ 
         name: i.name, 
         category: i.category, 
         id: i.id,
@@ -54,7 +59,7 @@ export const useIntegrationCommands = () => {
       if (integrations.length === 0) {
         const errorResult = { 
           error: { 
-            message: 'No integrations found. Please check your integration configuration and sync status.' 
+            message: 'No integrations found in database. Please check your integration configuration and save status.' 
           } 
         };
         logResponse(integrationName, commandName, errorResult);
@@ -69,7 +74,7 @@ export const useIntegrationCommands = () => {
           integrations.map(i => `${i.name} (${i.category})`));
         const errorResult = { 
           error: { 
-            message: `Integration "${integrationName}" not found. Available integrations: ${integrations.map(i => i.name).join(', ') || 'none'}` 
+            message: `Integration "${integrationName}" not found in database. Available integrations: ${integrations.map(i => i.name).join(', ') || 'none'}. Please ensure your integration is saved in the cloud.` 
           } 
         };
         logResponse(integrationName, commandName, errorResult);
@@ -156,6 +161,9 @@ export const useIntegrationCommands = () => {
 const findIntegrationByName = (integrations: any[], integrationName: string) => {
   const searchName = integrationName.toLowerCase();
   
+  console.log(`🔍 Searching for integration: "${searchName}"`);
+  console.log('🔍 Available integrations:', integrations.map(i => `"${i.name.toLowerCase()}" (${i.category.toLowerCase()})`));
+  
   // Strategy 1: Exact name match
   let integration = integrations.find(i => i.name.toLowerCase() === searchName);
   if (integration) {
@@ -205,6 +213,7 @@ const findIntegrationByName = (integrations: any[], integrationName: string) => 
     }
   }
   
+  console.log(`❌ No integration found for: "${searchName}"`);
   return null;
 };
 
