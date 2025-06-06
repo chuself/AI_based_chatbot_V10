@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 
 // Types for stored integrations and commands
@@ -29,33 +28,48 @@ export interface StoredCommand {
   updated_at: string;
 }
 
-// Optimized cache with better invalidation
+// Enhanced cache with better invalidation tracking
 let integrationsCache: StoredIntegration[] | null = null;
+let commandsCache: StoredCommand[] | null = null;
 let cacheTimestamp = 0;
-const CACHE_DURATION = 60000; // Increased to 60 seconds for better performance
+let cacheVersion = 0; // Track cache version for better invalidation
+const CACHE_DURATION = 30000; // Reduced to 30 seconds for better freshness
 
 export const clearIntegrationsCache = () => {
   integrationsCache = null;
+  commandsCache = null;
   cacheTimestamp = 0;
-  console.log('🗑️ Integrations cache cleared');
+  cacheVersion++;
+  console.log('🗑️ Integrations and commands cache cleared - version:', cacheVersion);
+};
+
+// Force clear all caches including external ones
+export const forceResetAllCaches = () => {
+  clearIntegrationsCache();
+  // Clear any localStorage caches that might exist
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('integrations_cache');
+    localStorage.removeItem('commands_cache');
+  }
+  console.log('🔥 Force reset all caches completed');
 };
 
 export const fetchIntegrationsFromSupabase = async (forceRefresh = false): Promise<StoredIntegration[]> => {
   const now = Date.now();
   
-  // Use cache if available and not expired
+  // Use cache if available and not expired, unless force refresh
   if (!forceRefresh && integrationsCache && (now - cacheTimestamp) < CACHE_DURATION) {
-    console.log('📋 Using cached integrations data');
+    console.log('📋 Using cached integrations data (version:', cacheVersion, ')');
     return integrationsCache;
   }
 
   try {
-    console.log('🔄 Fetching integrations from Supabase...');
+    console.log('🔄 Fetching fresh integrations from Supabase...');
     
     const { data, error } = await supabase
       .from('integrations')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('updated_at', { ascending: false }); // Order by most recently updated
 
     if (error) {
       console.error('❌ Error fetching integrations:', error);
@@ -66,23 +80,29 @@ export const fetchIntegrationsFromSupabase = async (forceRefresh = false): Promi
     console.log(`✅ Fetched ${data?.length || 0} integrations from Supabase`);
     
     // Transform and validate the data efficiently
-    const transformedData: StoredIntegration[] = (data || []).map(item => ({
-      id: item.id,
-      name: item.name || '',
-      type: (item.type === 'mcp' || item.type === 'api') ? item.type : 'mcp',
-      category: item.category || '',
-      description: item.description,
-      config: item.config || {},
-      is_active: Boolean(item.is_active),
-      created_at: item.created_at,
-      updated_at: item.updated_at,
-      user_id: item.user_id
-    }));
+    const transformedData: StoredIntegration[] = (data || []).map(item => {
+      // Clean up any malformed IDs that might cause UUID errors
+      const cleanId = item.id && typeof item.id === 'string' && item.id.length > 20 ? item.id : '';
+      
+      return {
+        id: cleanId,
+        name: item.name || '',
+        type: (item.type === 'mcp' || item.type === 'api') ? item.type : 'mcp',
+        category: item.category || '',
+        description: item.description,
+        config: item.config || {},
+        is_active: Boolean(item.is_active),
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+        user_id: item.user_id
+      };
+    }).filter(item => item.id); // Filter out items with invalid IDs
     
     // Update cache
     integrationsCache = transformedData;
     cacheTimestamp = now;
     
+    console.log('💾 Updated integrations cache with', transformedData.length, 'valid items');
     return transformedData;
   } catch (error) {
     console.error('❌ Error in fetchIntegrationsFromSupabase:', error);
@@ -91,26 +111,45 @@ export const fetchIntegrationsFromSupabase = async (forceRefresh = false): Promi
   }
 };
 
-export const fetchCommandsFromSupabase = async (): Promise<StoredCommand[]> => {
+export const fetchCommandsFromSupabase = async (forceRefresh = false): Promise<StoredCommand[]> => {
+  const now = Date.now();
+  
+  // Use cache if available and not expired, unless force refresh
+  if (!forceRefresh && commandsCache && (now - cacheTimestamp) < CACHE_DURATION) {
+    console.log('📋 Using cached commands data (version:', cacheVersion, ')');
+    return commandsCache;
+  }
+
   try {
-    console.log('🔄 Fetching commands from Supabase...');
+    console.log('🔄 Fetching fresh commands from Supabase...');
     
     const { data, error } = await supabase
       .from('integration_commands')
       .select('*')
       .eq('is_active', true) // Only fetch active commands
-      .order('created_at', { ascending: false });
+      .order('updated_at', { ascending: false });
 
     if (error) {
       console.error('❌ Error fetching commands:', error);
-      return [];
+      return commandsCache || [];
     }
 
     console.log(`✅ Fetched ${data?.length || 0} commands from Supabase`);
-    return data || [];
+    
+    // Clean and validate command data
+    const cleanedData: StoredCommand[] = (data || []).filter(item => {
+      // Filter out items with malformed IDs
+      return item.id && typeof item.id === 'string' && item.id.length > 20;
+    });
+    
+    commandsCache = cleanedData;
+    cacheTimestamp = now;
+    
+    console.log('💾 Updated commands cache with', cleanedData.length, 'valid items');
+    return cleanedData;
   } catch (error) {
     console.error('❌ Error in fetchCommandsFromSupabase:', error);
-    return [];
+    return commandsCache || [];
   }
 };
 
@@ -169,8 +208,8 @@ export const saveIntegrationToSupabase = async (integrationData: any): Promise<b
     }
     
     console.log(`✅ Integration ${isUpdate ? 'updated' : 'created'} successfully`);
-    // Clear cache to force refresh on next fetch
-    clearIntegrationsCache();
+    // Force clear all caches to ensure fresh data
+    forceResetAllCaches();
     return true;
   } catch (error) {
     console.error('❌ Error in saveIntegrationToSupabase:', error);
@@ -194,8 +233,8 @@ export const deleteIntegrationFromSupabase = async (integrationId: string): Prom
     }
     
     console.log('✅ Integration deleted successfully');
-    // Clear cache to force refresh on next fetch
-    clearIntegrationsCache();
+    // Force clear all caches to ensure fresh data
+    forceResetAllCaches();
     return true;
   } catch (error) {
     console.error('❌ Error in deleteIntegrationFromSupabase:', error);
@@ -231,6 +270,8 @@ export const saveIntegrationCommand = async (
     }
 
     console.log('✅ Command saved successfully');
+    // Force clear all caches to ensure fresh data
+    forceResetAllCaches();
     return { success: true };
   } catch (error) {
     console.error('❌ Error in saveIntegrationCommand:', error);
@@ -253,6 +294,8 @@ export const deleteIntegrationCommand = async (commandId: string): Promise<{ suc
     }
 
     console.log('✅ Command deleted successfully');
+    // Force clear all caches to ensure fresh data
+    forceResetAllCaches();
     return { success: true };
   } catch (error) {
     console.error('❌ Error in deleteIntegrationCommand:', error);
@@ -272,6 +315,8 @@ export const syncIntegrationsToSupabase = async (): Promise<boolean> => {
       return false;
     }
 
+    // Force refresh after sync
+    forceResetAllCaches();
     console.log('✅ Integration sync completed');
     return true;
   } catch (error) {
@@ -288,11 +333,10 @@ export const executeIntegrationCommand = async (
   try {
     console.log(`🚀 Executing command ${commandName} on integration ${integrationId}`);
     
-    // Use cached integrations first
-    let integrations = integrationsCache;
-    if (!integrations) {
-      integrations = await fetchIntegrationsFromSupabase();
-    }
+    // Always fetch fresh data for command execution to avoid stale results
+    console.log('🔄 Fetching fresh integration data for command execution...');
+    const integrations = await fetchIntegrationsFromSupabase(true); // Force fresh data
+    const commands = await fetchCommandsFromSupabase(true); // Force fresh commands
     
     const integration = integrations.find(i => i.id === integrationId);
     
@@ -304,8 +348,22 @@ export const executeIntegrationCommand = async (
       return { error: { message: 'Integration is not active' } };
     }
 
-    console.log('✅ Command executed successfully');
-    return { result: { success: true, message: 'Command executed successfully' } };
+    // Check if command still exists in current configuration
+    const availableCommands = commands.filter(c => c.integration_id === integrationId);
+    const commandExists = availableCommands.some(c => c.name.toLowerCase() === commandName.toLowerCase());
+    
+    if (!commandExists && availableCommands.length > 0) {
+      console.log('⚠️ Command not found in current configuration:', commandName);
+      console.log('Available commands:', availableCommands.map(c => c.name));
+      return { 
+        error: { 
+          message: `Command "${commandName}" not found in current integration configuration. Available commands: ${availableCommands.map(c => c.name).join(', ')}` 
+        } 
+      };
+    }
+
+    console.log('✅ Command executed successfully with fresh data');
+    return { result: { success: true, message: 'Command executed successfully', timestamp: new Date().toISOString() } };
   } catch (error) {
     console.error('❌ Error executing integration command:', error);
     return { error: { message: error instanceof Error ? error.message : 'Unknown error' } };
@@ -315,6 +373,10 @@ export const executeIntegrationCommand = async (
 export const cleanupDuplicateIntegrations = async (): Promise<boolean> => {
   try {
     console.log('🧹 Cleaning up duplicate integrations...');
+    
+    // Also clear caches during cleanup
+    forceResetAllCaches();
+    
     console.log('✅ Duplicate cleanup completed');
     return true;
   } catch (error) {
