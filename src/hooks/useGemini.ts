@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { ModelConfig, useGeminiConfig } from "./useGeminiConfig";
 import { useChatHistory, ChatMessage, MAX_HISTORY_LENGTH } from "./useChatHistory";
@@ -16,7 +17,7 @@ export const useGemini = () => {
     customInstructions?: string,
     backgroundHistory?: ChatMessage[]
   ): Promise<string> => {
-    console.log('sendMessage called with:', { message, modelConfig, isValidated });
+    console.log('🚀 Sending message:', message);
     
     if (!isValidated) {
       const errorMsg = "Model configuration not validated. Please check your API key and model settings.";
@@ -43,12 +44,18 @@ export const useGemini = () => {
       // Use background history if provided, otherwise use current chat history
       const historyToUse = backgroundHistory || chatHistory;
       
-      // Combine current chat history with new message
+      // Create user message
       const userMessage: ChatMessage = {
         role: "user",
         content: message,
         timestamp: Date.now(),
       };
+
+      // Add user message to history immediately (only if not using background history)
+      if (!backgroundHistory) {
+        const newHistory = [...historyToUse, userMessage];
+        setChatHistory(newHistory);
+      }
 
       const updatedHistory = [...historyToUse, userMessage];
 
@@ -58,54 +65,35 @@ export const useGemini = () => {
         content: msg.content
       }));
 
-      // Build comprehensive system instructions - ONLY ONCE
+      // Build system instructions efficiently
       let systemInstructions = "You are a helpful AI assistant.";
       
-      // Add personality and instructions from normal commands first
+      // Add commands context
       if (commands && commands.length > 0) {
         const personalityCommands = commands.filter(cmd => 
           cmd.type !== 'mcp' && 
           (cmd.instruction || cmd.prompt) &&
           (cmd.name.toLowerCase().includes('personality') || 
            cmd.name.toLowerCase().includes('behavior') ||
-           cmd.name.toLowerCase().includes('instructions') ||
            cmd.instruction?.toLowerCase().includes('you are') ||
            cmd.prompt?.toLowerCase().includes('you are'))
         );
         
         if (personalityCommands.length > 0) {
-          systemInstructions += "\n\n## Personality and Behavior Instructions:\n";
+          systemInstructions += "\n\nPersonality: ";
           personalityCommands.forEach(cmd => {
             const instruction = cmd.instruction || cmd.prompt;
             if (instruction) {
-              systemInstructions += `\n- ${cmd.name}: ${instruction}`;
-            }
-          });
-        }
-        
-        // Add other general commands as context
-        const otherCommands = commands.filter(cmd => 
-          cmd.type !== 'mcp' && 
-          !personalityCommands.includes(cmd) &&
-          (cmd.instruction || cmd.prompt)
-        );
-        
-        if (otherCommands.length > 0) {
-          systemInstructions += "\n\n## Available Commands and Instructions:\n";
-          otherCommands.forEach(cmd => {
-            const instruction = cmd.instruction || cmd.prompt;
-            if (instruction) {
-              systemInstructions += `\n- ${cmd.name}: ${instruction}`;
+              systemInstructions += instruction + " ";
             }
           });
         }
       }
       
-      // Add integration context to help AI understand available services
+      // Add integrations context
       const integrationsPrompt = await generateIntegrationsSystemPrompt();
       if (integrationsPrompt && integrationsPrompt.length > 0) {
         systemInstructions += integrationsPrompt;
-        console.log('Added integrations context to system prompt');
       }
       
       // Add custom instructions if provided
@@ -113,7 +101,7 @@ export const useGemini = () => {
         systemInstructions += "\n\n" + customInstructions;
       }
 
-      // IMPORTANT: Add system message ONLY ONCE at the beginning
+      // Add system message once at the beginning
       if (systemInstructions.length > "You are a helpful AI assistant.".length) {
         messages.unshift({
           role: "system",
@@ -121,10 +109,7 @@ export const useGemini = () => {
         });
       }
 
-      console.log('Sending request to:', modelConfig.provider);
-      console.log('Using model:', modelConfig.modelName);
-      console.log('Message count:', messages.length);
-      console.log('System prompt length:', systemInstructions.length);
+      console.log('📡 Calling API with', messages.length, 'messages');
 
       let response;
       
@@ -138,7 +123,7 @@ export const useGemini = () => {
         throw new Error(`Unsupported provider: ${modelConfig.provider}`);
       }
 
-      console.log('Received response:', response);
+      console.log('✅ Received response');
 
       // Add assistant response to history (only if not using background history)
       if (!backgroundHistory) {
@@ -148,13 +133,13 @@ export const useGemini = () => {
           timestamp: Date.now(),
         };
 
-        const newHistory = [...chatHistory, userMessage, assistantMessage];
-        setChatHistory(newHistory);
+        const finalHistory = [...updatedHistory, assistantMessage];
+        setChatHistory(finalHistory);
       }
 
       return response;
     } catch (err) {
-      console.error('Error in sendMessage:', err);
+      console.error('❌ Error in sendMessage:', err);
       const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred";
       setError(errorMessage);
       throw new Error(errorMessage);
@@ -165,7 +150,6 @@ export const useGemini = () => {
 
   const sendGeminiRequest = async (messages: { role: string; content: string; }[], modelConfig: ModelConfig): Promise<string> => {
     try {
-      // Format messages for Gemini API - filter out system messages for now
       const formattedMessages = messages
         .filter(msg => msg.role !== "system")
         .map(msg => ({
@@ -173,7 +157,6 @@ export const useGemini = () => {
           parts: [{ text: msg.content }]
         }));
 
-      // Add system message as context if present
       const systemMessage = messages.find(msg => msg.role === "system");
       if (systemMessage) {
         formattedMessages.unshift({
@@ -185,9 +168,6 @@ export const useGemini = () => {
       const modelName = modelConfig.modelName.includes('/') ? modelConfig.modelName : `models/${modelConfig.modelName}`;
       const geminiURL = `https://generativelanguage.googleapis.com/v1beta/${modelName}:generateContent?key=${modelConfig.apiKey}`;
       
-      console.log('Gemini API URL:', geminiURL);
-      console.log('Formatted messages count:', formattedMessages.length);
-
       const requestBody = {
         contents: formattedMessages,
         generationConfig: {
@@ -206,20 +186,14 @@ export const useGemini = () => {
         body: JSON.stringify(requestBody),
       });
 
-      console.log('Gemini response status:', response.status);
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Gemini API error:', response.status, response.statusText, errorText);
         throw new Error(`Gemini API request failed with status ${response.status}: ${errorText}`);
       }
 
       const json = await response.json();
-      console.log('Gemini response data:', json);
-      
       const responseText = json.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!responseText) {
-        console.error('No response content from Gemini API:', json);
         throw new Error('No response content from Gemini API');
       }
       
@@ -238,16 +212,8 @@ export const useGemini = () => {
         model: modelConfig.modelName,
         messages: messages,
         temperature: 0.7,
-        top_p: 1,
-        n: 1,
-        stream: false,
         max_tokens: 1024,
-        presence_penalty: 0,
-        frequency_penalty: 0,
-        stop: null
       };
-
-      console.log('Groq request data:', data);
 
       const response = await fetch(groqURL, {
         method: 'POST',
@@ -260,7 +226,6 @@ export const useGemini = () => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Groq API error:', response.status, response.statusText, errorText);
         throw new Error(`Groq API request failed with status ${response.status}: ${errorText}`);
       }
 
@@ -286,13 +251,7 @@ export const useGemini = () => {
         model: modelConfig.modelName,
         messages: messages,
         temperature: 0.7,
-        top_p: 1,
-        n: 1,
-        stream: false,
         max_tokens: 1024,
-        presence_penalty: 0,
-        frequency_penalty: 0,
-        stop: null
       };
 
       const response = await fetch(openRouterURL, {
@@ -308,7 +267,6 @@ export const useGemini = () => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('OpenRouter API error:', response.status, response.statusText, errorText);
         throw new Error(`OpenRouter API request failed with status ${response.status}: ${errorText}`);
       }
 

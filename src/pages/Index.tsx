@@ -10,33 +10,23 @@ import MessageList from "@/components/MessageList";
 import { useGemini } from "@/hooks/useGemini";
 import { useSpeech } from "@/hooks/useSpeech";
 import { useDataSync } from "@/hooks/useDataSync";
-import { useIntegrationCommands } from "@/hooks/useIntegrationCommands";
 import Header from "@/components/Header";
-import LoadingDots from "@/components/LoadingDots";
-import { useChatHistory } from "@/hooks/useChatHistory";
 
 const Index = () => {
   const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Hooks
-  const { sendMessage, isLoading: geminiLoading, selectedModel } = useGemini();
+  // Hooks - simplified to avoid duplicate calls
+  const { sendMessage, isLoading: geminiLoading, selectedModel, chatHistory, clearChatHistory } = useGemini();
   const { 
     speak: togglePlayback,
     isSpeaking: isPlaying,
     isVoiceSupported: isSpeechEnabled 
   } = useSpeech();
   const { syncData, isLoading: syncLoading, refreshSync } = useDataSync();
-  const { executeCommand } = useIntegrationCommands();
-  const { 
-    chatHistory: messages, 
-    setChatHistory: addMessage, 
-    clearChatHistory: clearMessages
-  } = useChatHistory();
 
   // Voice recognition state (simplified)
   const [isRecording, setIsRecording] = useState(false);
@@ -44,8 +34,8 @@ const Index = () => {
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+  }, [chatHistory]);
 
   // Update input when transcript changes
   useEffect(() => {
@@ -54,73 +44,22 @@ const Index = () => {
     }
   }, [transcript]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
   const handleSend = async () => {
     if (!input.trim() || geminiLoading) return;
 
     const userMessage = input.trim();
     setInput("");
-    setIsTyping(true);
-
-    console.log('📤 Sending message:', userMessage);
-
-    // Add user message to chat
-    const newUserMessage = {
-      id: Date.now().toString(),
-      role: 'user' as const,
-      content: userMessage,
-      timestamp: Date.now()
-    };
-    
-    addMessage([...messages, newUserMessage]);
 
     try {
-      // Send message to Gemini and get response
-      const response = await sendMessage(userMessage);
-      
-      console.log('📥 Received response:', response);
-
-      if (response) {
-        // Add AI response to chat
-        const aiMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant' as const,
-          content: response,
-          timestamp: Date.now()
-        };
-        addMessage([...messages, newUserMessage, aiMessage]);
-      } else {
-        // Handle empty response
-        const errorMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant' as const,
-          content: "I apologize, but I couldn't generate a response. Please try again.",
-          timestamp: Date.now()
-        };
-        addMessage([...messages, newUserMessage, errorMessage]);
-      }
+      // Send message directly to Gemini - it handles chat history internally
+      await sendMessage(userMessage);
     } catch (error) {
       console.error('❌ Error sending message:', error);
-      
-      // Add error message to chat
-      const errorMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant' as const,
-        content: "I'm sorry, there was an error processing your message. Please try again.",
-        timestamp: Date.now()
-      };
-      addMessage([...messages, newUserMessage, errorMessage]);
-
       toast({
         title: "Error",
         description: "Failed to send message. Please try again.",
         variant: "destructive",
       });
-    } finally {
-      setIsTyping(false);
     }
   };
 
@@ -132,7 +71,7 @@ const Index = () => {
   };
 
   const handleClearChat = () => {
-    clearMessages();
+    clearChatHistory();
     toast({
       title: "Chat Cleared",
       description: "All messages have been removed from this session.",
@@ -141,7 +80,6 @@ const Index = () => {
 
   const handleMicToggle = () => {
     setIsRecording(!isRecording);
-    // Note: Actual speech recognition implementation would go here
   };
 
   const handleRefreshSync = async () => {
@@ -163,11 +101,11 @@ const Index = () => {
   // Show loading spinner during initial sync
   if (syncLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-100 via-blue-50 to-purple-100 dark:from-pink-900/20 dark:via-blue-900/20 dark:to-purple-900/20">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
         <Header />
         <div className="flex items-center justify-center h-screen">
           <div className="text-center space-y-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gradient-to-r from-pink-500 to-purple-500 mx-auto"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
             <p className="text-gray-600 dark:text-gray-300">Syncing your data...</p>
           </div>
         </div>
@@ -175,22 +113,20 @@ const Index = () => {
     );
   }
 
-  const isAnyLoading = geminiLoading || isTyping;
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-blue-50 via-purple-50 to-green-50 dark:from-pink-900/10 dark:via-blue-900/10 dark:via-purple-900/10 dark:to-green-900/10 animate-gradient-x">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
       <Header />
       
       <div className="pt-16">
         <div className="max-w-4xl mx-auto p-4 h-[calc(100vh-4rem)] flex flex-col">
-          {/* Unobtrusive Status Bar - Hidden by default, only show on hover */}
-          <div className="group mb-4 opacity-0 hover:opacity-100 transition-all duration-500 ease-in-out">
-            <div className="flex items-center justify-between p-2 bg-white/40 dark:bg-slate-800/40 backdrop-blur-xl rounded-xl border border-white/20 dark:border-slate-700/20 shadow-lg">
+          {/* Status Bar - Clean and minimal */}
+          <div className="mb-2 opacity-60 hover:opacity-100 transition-opacity duration-200">
+            <div className="flex items-center justify-between p-2 bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm rounded-lg border border-slate-200/50 dark:border-slate-700/50">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1">
-                  <Brain className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                  <Brain className="h-3 w-3 text-blue-600 dark:text-blue-400" />
                   <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                    {selectedModel || 'Gemini'}
+                    {selectedModel || 'No Model'}
                   </span>
                 </div>
                 
@@ -207,7 +143,7 @@ const Index = () => {
                   variant="ghost"
                   size="sm"
                   onClick={handleRefreshSync}
-                  className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 h-6 w-6 p-0 hover:bg-purple-100 dark:hover:bg-purple-900/30"
+                  className="h-6 w-6 p-0"
                 >
                   <RotateCcw className="h-3 w-3" />
                 </Button>
@@ -216,7 +152,7 @@ const Index = () => {
                   variant="ghost"
                   size="sm"
                   onClick={() => navigate('/settings')}
-                  className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 h-6 w-6 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                  className="h-6 w-6 p-0"
                 >
                   <Settings className="h-3 w-3" />
                 </Button>
@@ -224,86 +160,72 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Chat Messages */}
-          <Card className="flex-1 mb-4 glass-card border-white/30 dark:border-slate-700/30 overflow-hidden backdrop-blur-xl bg-white/20 dark:bg-slate-800/20">
+          {/* Chat Messages - Minimal design */}
+          <Card className="flex-1 mb-4 border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
             <CardContent className="p-0 h-full flex flex-col">
-              <div className="flex-1 overflow-y-auto p-4">
-                {messages.length === 0 ? (
+              <div className="flex-1 overflow-y-auto">
+                {chatHistory.length === 0 ? (
                   <div className="flex items-center justify-center h-full">
-                    <div className="text-center space-y-4 max-w-md animate-fade-in">
-                      <div className="mx-auto w-16 h-16 bg-gradient-to-br from-pink-400 via-purple-500 to-blue-500 rounded-full flex items-center justify-center animate-pulse">
-                        <User className="h-8 w-8 text-white" />
+                    <div className="text-center space-y-4 max-w-md p-8">
+                      <div className="mx-auto w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                        <User className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                       </div>
-                      <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                        Welcome to Your AI Assistant
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                        Start a conversation
                       </h3>
-                      <p className="text-gray-600 dark:text-gray-400">
-                        Start a conversation by typing a message or using voice input. 
-                        I can help with tasks, answer questions, and work with your integrations.
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Type a message to begin chatting with your AI assistant.
                       </p>
                     </div>
                   </div>
                 ) : (
-                  <>
-                    <MessageList messages={messages} />
-                    {isAnyLoading && (
-                      <div className="flex justify-start mb-4">
-                        <div className="glass-card max-w-[80%] p-3 rounded-lg border border-white/20 dark:border-slate-700/20 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20">
-                          <LoadingDots />
-                        </div>
-                      </div>
-                    )}
-                  </>
+                  <MessageList messages={chatHistory} isLoading={geminiLoading} />
                 )}
                 <div ref={messagesEndRef} />
               </div>
             </CardContent>
           </Card>
 
-          {/* Input Area */}
-          <Card className="glass-card border-white/30 dark:border-slate-700/30 backdrop-blur-xl bg-white/30 dark:bg-slate-800/30">
-            <CardContent className="p-4">
-              <div className="flex items-end gap-2">
-                <div className="flex-1 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Input
-                      ref={inputRef}
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyPress={handleKeyPress}
-                      placeholder={isRecording ? "Listening..." : "Type your message..."}
-                      className="flex-1 glass-input border-white/30 dark:border-slate-700/30 bg-white/50 dark:bg-slate-800/50"
-                      disabled={geminiLoading || isRecording}
-                    />
-                    
-                    {isSpeechEnabled && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleMicToggle}
-                        className={`glass-button transition-all duration-300 ${isRecording ? 'bg-red-500/20 text-red-600 border-red-300 animate-pulse' : 'hover:bg-green-100 dark:hover:bg-green-900/30'}`}
-                      >
-                        {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                      </Button>
-                    )}
-                    
-                    {messages.length > 0 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleClearChat}
-                        className="glass-button text-gray-600 dark:text-gray-400 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 transition-all duration-300"
-                      >
-                        <Square className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
+          {/* Input Area - Clean design */}
+          <Card className="border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm">
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2">
+                <Input
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder={isRecording ? "Listening..." : "Type your message..."}
+                  className="flex-1 border-slate-200 dark:border-slate-600"
+                  disabled={geminiLoading || isRecording}
+                />
+                
+                {isSpeechEnabled && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleMicToggle}
+                    className={isRecording ? 'bg-red-50 text-red-600 border-red-200' : ''}
+                  >
+                    {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                  </Button>
+                )}
+                
+                {chatHistory.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleClearChat}
+                    className="text-gray-600 dark:text-gray-400"
+                  >
+                    <Square className="h-4 w-4" />
+                  </Button>
+                )}
 
                 <Button
                   onClick={handleSend}
                   disabled={!input.trim() || geminiLoading}
-                  className="glass-button bg-gradient-to-r from-pink-400 to-purple-500 hover:from-pink-500 hover:to-purple-600 text-white border-0 transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <Send className="h-4 w-4" />
                 </Button>

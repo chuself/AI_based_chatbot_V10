@@ -5,7 +5,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { ArrowDown } from "lucide-react";
 import { ChatMessage } from "@/hooks/useChatHistory";
-import LoadingDots from "./LoadingDots";
 
 interface MessageListProps {
   messages: ChatMessage[];
@@ -26,32 +25,36 @@ const MessageList: React.FC<MessageListProps> = ({
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
 
-  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+  const scrollToBottom = (behavior: ScrollBehavior = "auto") => {
     messagesEndRef.current?.scrollIntoView({ behavior });
   };
 
-  // Scroll to bottom when new messages arrive
+  // Scroll to bottom when new messages arrive - optimized
   useEffect(() => {
     if (messages.length > 0) {
       scrollToBottom();
     }
-  }, [messages]);
+  }, [messages.length]); // Only trigger on length change, not content change
 
-  // Setup scroll event listener to detect when user has scrolled up
+  // Setup scroll event listener - debounced
   useEffect(() => {
     const scrollArea = scrollAreaRef.current;
     if (!scrollArea) return;
 
+    let timeoutId: NodeJS.Timeout;
     const handleScroll = () => {
-      const { scrollHeight, scrollTop, clientHeight } = scrollArea;
-      // Show button if not at bottom (with small tolerance for rounding errors)
-      const isAtBottom = scrollHeight - scrollTop - clientHeight < 20;
-      setShowScrollButton(!isAtBottom);
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        const { scrollHeight, scrollTop, clientHeight } = scrollArea;
+        const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+        setShowScrollButton(!isAtBottom);
+      }, 100);
     };
 
-    scrollArea.addEventListener("scroll", handleScroll);
+    scrollArea.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
       scrollArea.removeEventListener("scroll", handleScroll);
+      clearTimeout(timeoutId);
     };
   }, []);
 
@@ -59,7 +62,7 @@ const MessageList: React.FC<MessageListProps> = ({
     <div className="flex-1 relative h-full">
       <ScrollArea className="h-full" scrollHideDelay={0}>
         <div 
-          className="px-4 py-4 space-y-2" 
+          className="px-4 py-4 space-y-3" 
           ref={scrollAreaRef}
           style={{ minHeight: "100%" }}
         >
@@ -77,8 +80,12 @@ const MessageList: React.FC<MessageListProps> = ({
           )}
           {isLoading && (
             <div className="flex justify-start mb-4">
-              <div className="glass-card max-w-[80%] p-3 rounded-lg border border-white/20 dark:border-slate-700/20">
-                <LoadingDots />
+              <div className="max-w-[80%] p-3 rounded-lg border bg-gray-50 dark:bg-gray-800">
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                </div>
               </div>
             </div>
           )}
@@ -88,10 +95,10 @@ const MessageList: React.FC<MessageListProps> = ({
       
       {showScrollButton && (
         <Button
-          className="absolute bottom-4 right-4 rounded-full w-10 h-10 p-0 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 transition-all duration-300 hover:scale-110"
+          className="absolute bottom-4 right-4 rounded-full w-8 h-8 p-0 bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
           onClick={() => scrollToBottom()}
         >
-          <ArrowDown size={18} />
+          <ArrowDown size={16} />
         </Button>
       )}
     </div>

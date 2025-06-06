@@ -1,5 +1,5 @@
 
-import { useIntegrationCommands } from '@/hooks/useIntegrationCommands';
+import { fetchIntegrationsFromSupabase, StoredIntegration } from '@/services/supabaseIntegrationsService';
 
 // Type definitions for integration checking
 export interface IntegrationCheck {
@@ -10,74 +10,118 @@ export interface IntegrationCheck {
   commands?: string[];
 }
 
-// Check if specific integrations are available
-export const isIntegrationAvailable = (integrationName: string): boolean => {
-  // This would normally check against configured integrations
-  // For now, we'll return false as a safe default
-  return false;
-};
+// Cache for integrations to avoid repeated API calls
+let integrationsCache: IntegrationCheck[] | null = null;
+let cacheTimestamp = 0;
+const CACHE_DURATION = 30000; // 30 seconds
 
-// Get available integrations for AI context
-export const getAvailableIntegrations = (): IntegrationCheck[] => {
-  // This would normally fetch from the integration service
-  // For now, return empty array as safe default
-  return [];
-};
-
-// Format integration commands for AI context
-export const formatIntegrationCommands = (integrations: IntegrationCheck[]): string => {
-  if (integrations.length === 0) {
-    return "No external integrations are currently configured.";
-  }
-
-  return integrations.map(integration => {
-    const commands = integration.commands?.join(', ') || 'No commands defined';
-    return `${integration.name} (${integration.category}): ${commands}`;
-  }).join('\n');
-};
-
-// Generate system prompt with available integrations
-export const generateIntegrationsSystemPrompt = (): string => {
-  const integrations = getAvailableIntegrations();
-  const commandsList = formatIntegrationCommands(integrations);
-  
-  return `Available integrations and commands:\n${commandsList}`;
-};
-
-// Helper to execute integration commands through the hook
-export const createIntegrationExecutor = () => {
-  const { executeCommand } = useIntegrationCommands();
-  
-  return {
-    execute: async (integrationName: string, commandName: string, parameters: Record<string, any> = {}) => {
-      try {
-        const result = await executeCommand(integrationName, commandName, parameters);
-        return result;
-      } catch (error) {
-        console.error('Integration execution error:', error);
-        return { error: { message: error instanceof Error ? error.message : 'Unknown error' } };
-      }
-    }
-  };
-};
-
-// Validate integration configuration
-export const validateIntegrationConfig = (config: any): boolean => {
-  if (!config || typeof config !== 'object') {
+// Check if specific integrations are available - cached
+export const isIntegrationAvailable = async (integrationName: string): Promise<boolean> => {
+  try {
+    const integrations = await getAvailableIntegrations();
+    return integrations.some(i => 
+      i.name.toLowerCase() === integrationName.toLowerCase() || 
+      i.category.toLowerCase() === integrationName.toLowerCase()
+    );
+  } catch (error) {
+    console.error('Error checking integration availability:', error);
     return false;
   }
-
-  // Basic validation - ensure required fields exist
-  return !!(config.name && config.url && config.type);
 };
 
-// Get integration status
+// Get available integrations for AI context - cached and optimized
+export const getAvailableIntegrations = async (): Promise<IntegrationCheck[]> => {
+  const now = Date.now();
+  
+  // Return cached data if available and fresh
+  if (integrationsCache && (now - cacheTimestamp) < CACHE_DURATION) {
+    return integrationsCache;
+  }
+
+  try {
+    console.log('🔍 Fetching available integrations...');
+    const storedIntegrations = await fetchIntegrationsFromSupabase();
+    
+    const result: IntegrationCheck[] = storedIntegrations
+      .filter((integration: StoredIntegration) => integration.is_active)
+      .map((integration: StoredIntegration) => {
+        const commands = integration.config?.commands?.map((cmd: any) => cmd.name) || 
+                        integration.config?.endpoints?.map((ep: any) => ep.name) || [];
+        
+        return {
+          name: integration.name,
+          isAvailable: true,
+          category: integration.category,
+          type: integration.type,
+          commands
+        };
+      });
+    
+    // Cache the result
+    integrationsCache = result;
+    cacheTimestamp = now;
+    
+    console.log(`✅ Found ${result.length} active integrations`);
+    return result;
+  } catch (error) {
+    console.error('❌ Error fetching integrations:', error);
+    return [];
+  }
+};
+
+// Format integration commands for AI context - optimized
+export const formatIntegrationCommands = (integrations: IntegrationCheck[]): string => {
+  if (integrations.length === 0) {
+    return "";
+  }
+
+  return integrations
+    .filter(integration => integration.commands && integration.commands.length > 0)
+    .map(integration => {
+      const commands = integration.commands!.join(', ');
+      return `${integration.name} (${integration.category}): ${commands}`;
+    })
+    .join('\n');
+};
+
+// Generate system prompt with available integrations - efficient
+export const generateIntegrationsSystemPrompt = async (): Promise<string> => {
+  try {
+    const integrations = await getAvailableIntegrations();
+    
+    if (integrations.length === 0) {
+      return "";
+    }
+    
+    const commandsList = formatIntegrationCommands(integrations);
+    
+    if (!commandsList) {
+      return "";
+    }
+    
+    return `\n\nAvailable integrations:\n${commandsList}`;
+  } catch (error) {
+    console.error('❌ Error generating integrations prompt:', error);
+    return "";
+  }
+};
+
+// Clear the cache manually if needed
+export const clearIntegrationsCache = () => {
+  integrationsCache = null;
+  cacheTimestamp = 0;
+};
+
+// Validate integration configuration - simplified
+export const validateIntegrationConfig = (config: any): boolean => {
+  return !!(config && typeof config === 'object' && config.name);
+};
+
+// Get integration status - simplified
 export const getIntegrationStatus = (integration: any): 'active' | 'inactive' | 'error' => {
   try {
     if (!integration) return 'error';
-    if (integration.is_active === true) return 'active';
-    if (integration.is_active === false) return 'inactive';
-    return 'error';
+    return integration.is_active === true ? 'active' : 'inactive';
   } catch {
     return 'error';
   }

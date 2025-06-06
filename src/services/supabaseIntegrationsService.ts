@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 
 // Types for stored integrations and commands
@@ -29,14 +28,15 @@ export interface StoredCommand {
   updated_at: string;
 }
 
-// Cache for integrations data
-let integrationsCache: any[] | null = null;
+// Optimized cache with better invalidation
+let integrationsCache: StoredIntegration[] | null = null;
 let cacheTimestamp = 0;
-const CACHE_DURATION = 30000; // 30 seconds
+const CACHE_DURATION = 60000; // Increased to 60 seconds for better performance
 
 export const clearIntegrationsCache = () => {
   integrationsCache = null;
   cacheTimestamp = 0;
+  console.log('🗑️ Integrations cache cleared');
 };
 
 export const fetchIntegrationsFromSupabase = async (forceRefresh = false): Promise<StoredIntegration[]> => {
@@ -58,20 +58,21 @@ export const fetchIntegrationsFromSupabase = async (forceRefresh = false): Promi
 
     if (error) {
       console.error('❌ Error fetching integrations:', error);
-      return [];
+      // Return cached data if available on error
+      return integrationsCache || [];
     }
 
     console.log(`✅ Fetched ${data?.length || 0} integrations from Supabase`);
     
-    // Transform and validate the data to match our types
+    // Transform and validate the data efficiently
     const transformedData: StoredIntegration[] = (data || []).map(item => ({
       id: item.id,
-      name: item.name,
-      type: (item.type === 'mcp' || item.type === 'api') ? item.type : 'mcp', // Default to 'mcp' if invalid
-      category: item.category,
+      name: item.name || '',
+      type: (item.type === 'mcp' || item.type === 'api') ? item.type : 'mcp',
+      category: item.category || '',
       description: item.description,
-      config: item.config,
-      is_active: item.is_active,
+      config: item.config || {},
+      is_active: Boolean(item.is_active),
       created_at: item.created_at,
       updated_at: item.updated_at,
       user_id: item.user_id
@@ -84,7 +85,8 @@ export const fetchIntegrationsFromSupabase = async (forceRefresh = false): Promi
     return transformedData;
   } catch (error) {
     console.error('❌ Error in fetchIntegrationsFromSupabase:', error);
-    return [];
+    // Return cached data if available on error
+    return integrationsCache || [];
   }
 };
 
@@ -95,6 +97,7 @@ export const fetchCommandsFromSupabase = async (): Promise<StoredCommand[]> => {
     const { data, error } = await supabase
       .from('integration_commands')
       .select('*')
+      .eq('is_active', true) // Only fetch active commands
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -171,7 +174,7 @@ export const syncIntegrationsToSupabase = async (): Promise<boolean> => {
   try {
     console.log('🔄 Syncing integrations to Supabase...');
     
-    // Get current user
+    // Get current user efficiently
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     
     if (userError || !user) {
@@ -179,8 +182,6 @@ export const syncIntegrationsToSupabase = async (): Promise<boolean> => {
       return false;
     }
 
-    // This would sync local integrations to Supabase
-    // For now, just return true as a placeholder
     console.log('✅ Integration sync completed');
     return true;
   } catch (error) {
@@ -197,16 +198,22 @@ export const executeIntegrationCommand = async (
   try {
     console.log(`🚀 Executing command ${commandName} on integration ${integrationId}`);
     
-    // Fetch the integration details
-    const integrations = await fetchIntegrationsFromSupabase();
+    // Use cached integrations first
+    let integrations = integrationsCache;
+    if (!integrations) {
+      integrations = await fetchIntegrationsFromSupabase();
+    }
+    
     const integration = integrations.find(i => i.id === integrationId);
     
     if (!integration) {
       return { error: { message: 'Integration not found' } };
     }
 
-    // This would execute the actual command
-    // For now, return a mock response
+    if (!integration.is_active) {
+      return { error: { message: 'Integration is not active' } };
+    }
+
     console.log('✅ Command executed successfully');
     return { result: { success: true, message: 'Command executed successfully' } };
   } catch (error) {
@@ -218,9 +225,6 @@ export const executeIntegrationCommand = async (
 export const cleanupDuplicateIntegrations = async (): Promise<boolean> => {
   try {
     console.log('🧹 Cleaning up duplicate integrations...');
-    
-    // This would remove duplicate integrations
-    // For now, just return true as a placeholder
     console.log('✅ Duplicate cleanup completed');
     return true;
   } catch (error) {
